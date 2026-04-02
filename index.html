@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Раздельный учет — версия 1</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f7fb;
+      color: #1f2937;
+    }
+
+    .container {
+      max-width: 1450px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    h1, h2 {
+      margin: 0 0 12px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+    }
+
+    .top-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+
+    .period-row {
+      display: flex;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .field label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: #4b5563;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .field input.global-num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-size: 15px;
+    }
+
+    button {
+      border: none;
+      background: #2563eb;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+
+    button.secondary {
+      background: #6b7280;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1800px;
+    }
+
+    #ordersTable {
+      width: 100%;
+      min-width: 2400px;
+      table-layout: auto;
+    }
+
+    #ordersTable th:first-child,
+    #ordersTable td:first-child {
+      position: sticky;
+      left: 0;
+      background: #fff;
+      z-index: 2;
+      box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+    }
+
+    #ordersTable th:first-child {
+      z-index: 3;
+    }
+
+    #ordersTable tfoot td {
+      font-weight: 600;
+    }
+
+    #ordersTable tfoot td:not(:first-child) {
+      background: #f9fafb;
+    }
+
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 8px;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 13px;
+    }
+
+    th {
+      background: #f9fafb;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    td input {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      text-align: right;
+      background: #fff;
+    }
+
+    td input.text {
+      text-align: left;
+    }
+
+    td.readonly {
+      background: #f8fafc;
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .totals {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+      position: sticky;
+      bottom: 0;
+      background: #fff;
+      z-index: 5;
+      border-top: 2px solid #e5e7eb;
+    }
+
+    .total-box {
+      background: #eef6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .total-box .label {
+      font-size: 13px;
+      color: #4b5563;
+      margin-bottom: 4px;
+    }
+
+    .total-box .value {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .danger {
+      color: #b91c1c;
+      font-weight: bold;
+    }
+
+    /* Таблица заказов: шире колонки и крупнее цифры (иначе width:100% даёт «узкие» поля) */
+    #ordersTable th,
+    #ordersTable td {
+      padding: 10px 10px;
+      font-size: 14px;
+    }
+
+    #ordersTable th {
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    /* Мин. ширина ячеек — таблица растягивается, поля реально становятся шире */
+    #ordersTable thead th:nth-child(1),
+    #ordersTable tbody td:nth-child(1) {
+      min-width: 200px;
+    }
+
+    #ordersTable thead th:nth-child(2),
+    #ordersTable thead th:nth-child(5),
+    #ordersTable thead th:nth-child(6),
+    #ordersTable thead th:nth-child(7),
+    #ordersTable thead th:nth-child(8),
+    #ordersTable thead th:nth-child(18),
+    #ordersTable tbody td:nth-child(2),
+    #ordersTable tbody td:nth-child(5),
+    #ordersTable tbody td:nth-child(6),
+    #ordersTable tbody td:nth-child(7),
+    #ordersTable tbody td:nth-child(8),
+    #ordersTable tbody td:nth-child(18) {
+      min-width: 140px;
+    }
+
+    #ordersTable thead th:nth-child(9),
+    #ordersTable tbody td:nth-child(9) {
+      min-width: 260px;
+    }
+
+    #ordersTable thead th:nth-child(19),
+    #ordersTable tbody td:nth-child(19) {
+      min-width: 180px;
+    }
+
+    #ordersTable thead th:nth-child(3),
+    #ordersTable thead th:nth-child(4),
+    #ordersTable thead th:nth-child(10),
+    #ordersTable thead th:nth-child(11),
+    #ordersTable thead th:nth-child(12),
+    #ordersTable thead th:nth-child(13),
+    #ordersTable thead th:nth-child(14),
+    #ordersTable thead th:nth-child(15),
+    #ordersTable thead th:nth-child(16),
+    #ordersTable thead th:nth-child(17),
+    #ordersTable thead th:nth-child(20),
+    #ordersTable thead th:nth-child(21),
+    #ordersTable thead th:nth-child(22),
+    #ordersTable thead th:nth-child(23),
+    #ordersTable thead th:nth-child(24),
+    #ordersTable thead th:nth-child(25),
+    #ordersTable tbody td:nth-child(3),
+    #ordersTable tbody td:nth-child(4),
+    #ordersTable tbody td:nth-child(10),
+    #ordersTable tbody td:nth-child(11),
+    #ordersTable tbody td:nth-child(12),
+    #ordersTable tbody td:nth-child(13),
+    #ordersTable tbody td:nth-child(14),
+    #ordersTable tbody td:nth-child(15),
+    #ordersTable tbody td:nth-child(16),
+    #ordersTable tbody td:nth-child(17),
+    #ordersTable tbody td:nth-child(20),
+    #ordersTable tbody td:nth-child(21),
+    #ordersTable tbody td:nth-child(22),
+    #ordersTable tbody td:nth-child(23),
+    #ordersTable tbody td:nth-child(24),
+    #ordersTable tbody td:nth-child(25) {
+      min-width: 120px;
+    }
+
+    #ordersTable td input.table-num {
+      width: 100%;
+      min-width: 0;
+      min-height: 42px;
+      padding: 10px 12px;
+      font-size: 15px;
+      line-height: 1.35;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #ordersTable td input.order-name {
+      width: 100%;
+      min-height: 42px;
+      padding: 10px 12px;
+      font-size: 15px;
+    }
+
+    #ordersTable td.readonly {
+      font-size: 15px;
+      padding: 10px 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .orders-block-table tbody tr:hover {
+      background: #f1f5f9;
+    }
+
+    #ordersTable.orders-block-table tbody tr:hover td {
+      background: #f1f5f9;
+    }
+
+    #ordersTable input.cell-validate-hi,
+    #ordersTable td.cell-validate-hi {
+      border-color: #dc2626 !important;
+      box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.45);
+    }
+
+    #ordersTable td.cell-validate-hi {
+      box-shadow: inset 0 0 0 2px #dc2626;
+    }
+
+    #ordersTable input.cell-validate-zero {
+      border-color: #ca8a04 !important;
+      box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.5);
+      background: #fffbeb !important;
+    }
+
+    #ordersTable tr.row-validate-writeoff td {
+      background: #fecaca !important;
+    }
+
+    #ordersTable tr.row-negative-margin td {
+      background: #fecaca !important;
+    }
+
+    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td {
+      background: #fca5a5 !important;
+    }
+
+    #ordersTable tr.row-negative-profit-with26 td {
+      background: #fecaca !important;
+    }
+
+    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td {
+      background: #fca5a5 !important;
+    }
+
+    #ordersTable td.cell-validate-negative {
+      box-shadow: inset 0 0 0 2px #b91c1c;
+      background: #fef2f2 !important;
+    }
+
+    #orderReportBox {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      background: #ffffff;
+    }
+
+    #orderReportBox table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    #orderReportBox th, #orderReportBox td {
+      border-bottom: 1px solid #f1f5f9;
+      padding: 8px;
+      text-align: right;
+    }
+
+    #orderReportBox th:first-child,
+    #orderReportBox td:first-child {
+      text-align: left;
+    }
+
+    .order-total {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+
+    @media (max-width: 900px) {
+      .top-grid,
+      .totals {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Раздельный учет — версия 1</h1>
+
+    <div class="card">
+      <h2>Период и общие данные</h2>
+
+      <div class="period-row">
+        <div class="field" style="width: 180px;">
+          <label for="periodInput">Период (YYYY-MM)</label>
+          <input id="periodInput" type="text" placeholder="2025-03" autocomplete="off">
+        </div>
+
+        <div class="field" style="width: 180px;">
+          <label for="periodSelect">Сохранённые периоды</label>
+          <select id="periodSelect">
+            <option value="">—</option>
+          </select>
+        </div>
+
+        <button id="saveBtn" type="button">Сохранить</button>
+        <button id="deletePeriodBtn" type="button">Удалить период</button>
+        <button id="loadBtn" type="button" class="secondary">Загрузить</button>
+      </div>
+
+      <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+
+      <div class="top-grid">
+        <div class="field">
+          <label for="vatRate">НДС, %</label>
+          <input class="global-num" type="text" inputmode="decimal" id="vatRate" value="22">
+        </div>
+        <div class="field">
+          <label for="totalInsurance">Общие взносы</label>
+          <input class="global-num" type="text" inputmode="decimal" id="totalInsurance" value="0">
+        </div>
+        <div class="field">
+          <label for="totalSick">Общие больничные</label>
+          <input class="global-num" type="text" inputmode="decimal" id="totalSick" value="0">
+        </div>
+        <div class="field">
+          <label for="total25">Общий 25 счет</label>
+          <input class="global-num" type="text" inputmode="decimal" id="total25" value="0">
+        </div>
+        <div class="field">
+          <label for="total26">Общий 26 счет</label>
+          <input class="global-num" type="text" inputmode="decimal" id="total26" value="0">
+        </div>
+        <div class="field">
+          <label for="total44">Общие транспортные 44</label>
+          <input class="global-num" type="text" inputmode="decimal" id="total44" value="0">
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+        <select id="orderSelect">
+          <option value="">Выбери заказ</option>
+        </select>
+        <button id="orderReportBtn" type="button">Отчет по заказу</button>
+      </div>
+
+      <div style="margin-top: 14px;">
+        <button id="addRowBtn">Добавить заказ</button>
+        <button id="clearBtn" class="secondary">Очистить всё</button>
+        <button id="checkDataBtn" class="secondary">Проверить данные</button>
+        <button id="import1cBtn" class="secondary" type="button">Загрузить из 1С</button>
+        <button id="exportBtn" type="button">Выгрузить в Excel</button>
+        <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none;">
+      </div>
+      <div class="hint" id="import1cStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+
+      <div class="hint">
+        В этой версии:
+        44 распределяется по % отгрузки без НДС, а взносы, больничные, 25 и 26 — по доле ЗП.
+        НЗП на начало вводится вручную, НЗП на конец считается автоматически.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Таблица заказов</h2>
+
+      <div class="table-wrap">
+        <table id="ordersTable" class="orders-block-table">
+          <thead>
+            <tr>
+              <th>Заказ</th>
+              <th>Отгрузка с НДС</th>
+              <th>Отгрузка без НДС</th>
+              <th>% отгрузки</th>
+              <th>НЗП нач.</th>
+              <th>Материалы</th>
+              <th>Обработка</th>
+              <th>Прочее</th>
+              <th>ЗП</th>
+              <th>Доля ЗП</th>
+              <th>Взносы</th>
+              <th>Больничные</th>
+              <th>25 сч.</th>
+              <th>26 сч.</th>
+              <th>44 сч.</th>
+              <th>Всего затрат</th>
+              <th>Затраты периода</th>
+              <th>% списания</th>
+              <th>Ручное списание</th>
+              <th>Списано</th>
+              <th>НЗП конец</th>
+              <th>Прибыль, руб.</th>
+              <th>Прибыль с 26</th>
+              <th>Маржа, %</th>
+              <th>Маржа с 26, %</th>
+              <th>Удалить</th>
+            </tr>
+          </thead>
+          <tbody id="ordersBody"></tbody>
+          <tfoot>
+            <tr>
+              <td class="readonly">Итого</td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly" id="ordersFootMaterials">0.00</td>
+              <td class="readonly" id="ordersFootProcessing">0.00</td>
+              <td class="readonly" id="ordersFootOther">0.00</td>
+              <td class="readonly" id="ordersFootSalary">0.00</td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly" id="ordersFootAcc25">0.00</td>
+              <td class="readonly" id="ordersFootAcc26">0.00</td>
+              <td class="readonly" id="ordersFootAcc44">0.00</td>
+              <td class="readonly" id="ordersFootTotalCost">0.00</td>
+              <td class="readonly" id="ordersFootPeriodCost">0.00</td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly" id="ordersFootWriteOff">0.00</td>
+              <td class="readonly"></td>
+              <td class="readonly" id="ordersFootProfit">0.00</td>
+              <td class="readonly" id="ordersFootProfitWith26">0.00</td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+              <td class="readonly"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="totals">
+        <div class="total-box">
+          <div class="label">Общая отгрузка без НДС</div>
+          <div class="value" id="totalShipmentNoVat">0.00</div>
+        </div>
+        <div class="total-box">
+          <div class="label">Общая ЗП</div>
+          <div class="value" id="totalSalaryValue">0.00</div>
+        </div>
+        <div class="total-box">
+          <div class="label">Всего списано</div>
+          <div class="value" id="totalWrittenOff">0.00</div>
+        </div>
+        <div class="total-box">
+          <div class="label">Общий НЗП конец</div>
+          <div class="value" id="totalEndingWIP">0.00</div>
+        </div>
+      </div>
+
+      <div class="hint" id="warningBox"></div>
+    </div>
+
+    <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
+      <h3 id="orderReportTitle">Карточка заказа</h3>
+      <div id="orderReportContent"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script>
+    const ordersBody = document.getElementById('ordersBody');
+    const topGridEl = document.querySelector('.top-grid');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function num(value) {
+      if (value === null || value === undefined) return 0;
+      const s = String(value).replace(/\s/g, '').replace(/,/g, '.');
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    }
+
+    function isManualWriteoffInput(el) {
+      return el && el.classList && el.classList.contains('manual-writeoff');
+    }
+
+    function formatTableNumWithSpaces(str) {
+      let s = String(str).replace(/\s/g, '').replace(',', '.');
+      const neg = s.startsWith('-');
+      if (neg) s = s.slice(1);
+      s = s.replace(/[^\d.]/g, '');
+      if (s === '' || s === '.') return '0';
+      const dot = s.indexOf('.');
+      let intRaw = dot === -1 ? s : s.slice(0, dot);
+      let decRaw = dot === -1 ? '' : s.slice(dot + 1).replace(/\./g, '');
+      intRaw = intRaw.replace(/\D/g, '');
+      if (intRaw === '') intRaw = '0';
+      else intRaw = intRaw.replace(/^0+(?=\d)/, '') || '0';
+      const intFormatted = intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+      let out = (neg ? '-' : '') + intFormatted;
+      if (decRaw !== '') out += '.' + decRaw.slice(0, 12);
+      return out;
+    }
+
+    function sanitizeTableNumInput(el) {
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      let s = el.value.replace(/\s/g, '').replace(',', '.');
+      s = s.replace(/[^\d.]/g, '');
+      const d = s.indexOf('.');
+      if (d !== -1) {
+        s = s.slice(0, d + 1) + s.slice(d + 1).replace(/\./g, '');
+      }
+      if (el.value.replace(/\s/g, '') !== s) {
+        el.value = s;
+        if (start != null && typeof el.setSelectionRange === 'function') {
+          const pos = Math.min(Math.max(0, start), s.length);
+          el.setSelectionRange(pos, pos);
+        }
+      }
+    }
+
+    function initTableNumDisplay(el) {
+      const raw = el.value.replace(/\s/g, '').replace(',', '.');
+      if (isManualWriteoffInput(el)) {
+        if (raw === '' || raw === '.') {
+          el.value = '';
+          return;
+        }
+        el.value = formatTableNumWithSpaces(el.value);
+        return;
+      }
+      if (raw === '' || raw === '.') {
+        el.value = '0';
+        return;
+      }
+      el.value = formatTableNumWithSpaces(el.value);
+    }
+
+    function onTableNumFocus(el) {
+      if (isManualWriteoffInput(el)) return;
+      const r = el.value.replace(/\s/g, '').replace(',', '.');
+      if (r === '' || r === '.') return;
+      if (r.endsWith('.')) return;
+      if (num(el.value) === 0) el.value = '';
+    }
+
+    function onTableNumBlur(el) {
+      const raw = el.value.replace(/\s/g, '').replace(',', '.');
+      if (isManualWriteoffInput(el)) {
+        if (raw === '' || raw === '.') {
+          el.value = '';
+          return;
+        }
+        el.value = formatTableNumWithSpaces(el.value);
+        return;
+      }
+      if (raw === '' || raw === '.') {
+        el.value = '0';
+        return;
+      }
+      el.value = formatTableNumWithSpaces(el.value);
+    }
+
+    function manualWriteoffHasValue(el) {
+      if (!el) return false;
+      const t = el.value.replace(/\s/g, '').replace(',', '.');
+      return t !== '' && t !== '.';
+    }
+
+    function initGlobalNumDisplay(el) {
+      const raw = el.value.replace(/\s/g, '').replace(',', '.');
+      if (raw === '' || raw === '.') {
+        el.value = '0';
+        return;
+      }
+      el.value = formatTableNumWithSpaces(el.value);
+    }
+
+    function onGlobalNumFocus(el) {
+      const r = el.value.replace(/\s/g, '').replace(',', '.');
+      if (r === '' || r === '.') return;
+      if (r.endsWith('.')) return;
+      if (num(el.value) === 0) el.value = '';
+    }
+
+    function onGlobalNumBlur(el) {
+      const raw = el.value.replace(/\s/g, '').replace(',', '.');
+      if (raw === '' || raw === '.') {
+        el.value = '0';
+        return;
+      }
+      el.value = formatTableNumWithSpaces(el.value);
+    }
+
+    function refreshAllGlobalNums() {
+      document.querySelectorAll('input.global-num').forEach(initGlobalNumDisplay);
+    }
+
+    function fmt(value) {
+      return num(value).toFixed(2);
+    }
+
+    function getRows() {
+      return Array.from(ordersBody.querySelectorAll('tr.order-item'));
+    }
+
+    ordersBody.addEventListener('input', (e) => {
+      const t = e.target;
+      if (t.matches && t.matches('input.table-num')) {
+        sanitizeTableNumInput(t);
+        calculateAll();
+        autoSave();
+      }
+    });
+
+    ordersBody.addEventListener('focusin', (e) => {
+      const t = e.target;
+      if (t.matches && t.matches('input.table-num')) onTableNumFocus(t);
+    });
+
+    ordersBody.addEventListener('focusout', (e) => {
+      const t = e.target;
+      if (t.matches && t.matches('input.table-num')) {
+        onTableNumBlur(t);
+        calculateAll();
+        autoSave();
+      }
+    });
+
+    ordersBody.addEventListener('paste', (e) => {
+      const t = e.target;
+      if (!t.matches || !t.matches('input.table-num')) return;
+      e.preventDefault();
+      const paste = (e.clipboardData || window.clipboardData).getData('text');
+      const clean = paste.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+      const vis = t.value;
+      const start = t.selectionStart ?? 0;
+      const end = t.selectionEnd ?? 0;
+      const before = vis.slice(0, start).replace(/\s/g, '');
+      const after = vis.slice(end).replace(/\s/g, '');
+      t.value = before + clean + after;
+      sanitizeTableNumInput(t);
+      calculateAll();
+      autoSave();
+    });
+
+    topGridEl.addEventListener('input', (e) => {
+      const t = e.target;
+      if (t.matches && t.matches('input.global-num')) {
+        sanitizeTableNumInput(t);
+        calculateAll();
+        autoSave();
+      }
+    });
+
+    topGridEl.addEventListener('focusin', (e) => {
+      const t = e.target;
+      if (t.matches && t.matches('input.global-num')) onGlobalNumFocus(t);
+    });
+
+    topGridEl.addEventListener('focusout', (e) => {
+      const t = e.target;
+      if (t.matches && t.matches('input.global-num')) {
+        onGlobalNumBlur(t);
+        calculateAll();
+        autoSave();
+      }
+    });
+
+    topGridEl.addEventListener('paste', (e) => {
+      const t = e.target;
+      if (!t.matches || !t.matches('input.global-num')) return;
+      e.preventDefault();
+      const paste = (e.clipboardData || window.clipboardData).getData('text');
+      const clean = paste.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+      const vis = t.value;
+      const start = t.selectionStart ?? 0;
+      const end = t.selectionEnd ?? 0;
+      const before = vis.slice(0, start).replace(/\s/g, '');
+      const after = vis.slice(end).replace(/\s/g, '');
+      t.value = before + clean + after;
+      sanitizeTableNumInput(t);
+      calculateAll();
+      autoSave();
+    });
+
+    function createRow(data = {}) {
+      const tr = document.createElement('tr');
+      tr.className = 'order-item';
+
+      tr.innerHTML = `
+        <td><input class="text order-name" type="text" placeholder="Заказ"></td>
+        <td><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly shipment-no-vat">0.00</td>
+        <td class="readonly shipment-percent">0.00%</td>
+        <td><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
+        <td><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
+        <td><input class="processing table-num" type="text" inputmode="decimal" value="0"></td>
+        <td><input class="other-direct table-num" type="text" inputmode="decimal" value="0"></td>
+        <td><input class="salary table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly salary-share">0.00%</td>
+        <td class="readonly insurance">0.00</td>
+        <td class="readonly sick">0.00</td>
+        <td class="readonly acc25">0.00</td>
+        <td class="readonly acc26">0.00</td>
+        <td class="readonly acc44">0.00</td>
+        <td class="readonly total-cost">0.00</td>
+        <td class="readonly period-cost">0.00</td>
+        <td><input class="profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
+        <td><input class="manual-writeoff table-num" type="text" inputmode="decimal"></td>
+        <td class="readonly write-off">0.00</td>
+        <td class="readonly wip-end">0.00</td>
+        <td class="readonly profit-rub">0.00</td>
+        <td class="readonly profit-with-26">0.00</td>
+        <td class="readonly profit-margin">0.0%</td>
+        <td class="readonly margin-with-26">0.0%</td>
+        <td><button type="button" class="secondary delete-row">X</button></td>
+      `;
+
+      if (data.order) tr.querySelector('.order-name').value = data.order;
+      if (data.shipmentVat) tr.querySelector('.shipment-vat').value = data.shipmentVat;
+      if (data.wipStart) tr.querySelector('.wip-start').value = data.wipStart;
+      if (data.materials) tr.querySelector('.materials').value = data.materials;
+      if (data.processing) tr.querySelector('.processing').value = data.processing;
+      if (data.other) tr.querySelector('.other-direct').value = data.other;
+      if (data.salary) tr.querySelector('.salary').value = data.salary;
+      if (data.profitPercent) tr.querySelector('.profit-percent').value = data.profitPercent;
+      if ('manualWriteoff' in data) tr.querySelector('.manual-writeoff').value = data.manualWriteoff;
+
+      tr.querySelectorAll('input.table-num').forEach(initTableNumDisplay);
+
+      tr.querySelector('.order-name').addEventListener('input', () => {
+        calculateAll();
+        autoSave();
+      });
+
+      tr.querySelector('.delete-row').addEventListener('click', () => {
+        tr.remove();
+        calculateAll();
+        autoSave();
+      });
+
+      ordersBody.appendChild(tr);
+    }
+
+    function is1cCsvHeaderRow(parts) {
+      const a = (parts[0] || '').trim().toLowerCase();
+      const b = (parts[1] || '').trim().toLowerCase();
+      const c = (parts[2] || '').trim().toLowerCase();
+      const d = (parts[3] || '').trim().toLowerCase();
+      return (
+        a === 'заказ' &&
+        (b === 'материалы' || b.startsWith('материал')) &&
+        (c === 'обработка' || c.startsWith('обработк')) &&
+        (d === 'прочее' || d.startsWith('проч'))
+      );
+    }
+
+    function findRowByOrderName(orderName) {
+      const key = orderName.trim();
+      if (!key) return null;
+      return getRows().find(r => (r.querySelector('.order-name').value || '').trim() === key) || null;
+    }
+
+    function apply1cRowValues(row, materialsStr, processingStr, otherStr) {
+      const setNum = (sel, raw) => {
+        const el = row.querySelector(sel);
+        el.value = String(num(raw));
+        initTableNumDisplay(el);
+      };
+      setNum('.materials', materialsStr);
+      setNum('.processing', processingStr);
+      setNum('.other-direct', otherStr);
+    }
+
+    function apply1cParts(parts) {
+      if (parts.length < 4) return;
+      if (is1cCsvHeaderRow(parts)) return;
+
+      const orderName = parts[0];
+      if (!orderName.trim()) return;
+
+      let row = findRowByOrderName(orderName);
+      if (!row) {
+        createRow({ order: orderName });
+        row = findRowByOrderName(orderName);
+      }
+      if (row) apply1cRowValues(row, parts[1], parts[2], parts[3]);
+    }
+
+    function loadFrom1cCsv(text) {
+      const raw = text.replace(/^\uFEFF/, '');
+      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+      for (let i = 0; i < lines.length; i++) {
+        const parts = lines[i].split(';').map(c => c.trim());
+        apply1cParts(parts);
+      }
+    }
+
+    function normalize1cSheetRow(row) {
+      if (!row || !row.length) return [];
+      return row.map(c => (c == null ? '' : String(c)).trim());
+    }
+
+    function is1cDogovorOrderRow(parts) {
+      return parts.length > 0 && /^договор/i.test(parts[0]);
+    }
+
+    function is1cMaterialsWriteoffRow(parts) {
+      return parts.some(p => String(p).toLowerCase().includes('списание материалов'));
+    }
+
+    function indexOfDogovorCell(parts) {
+      for (let i = 0; i < parts.length; i++) {
+        if (/^договор/i.test(parts[i])) return i;
+      }
+      return -1;
+    }
+
+    function indexOfMaterialsWriteoffLabel(parts) {
+      for (let i = 0; i < parts.length; i++) {
+        if (String(parts[i]).toLowerCase().includes('списание материалов')) return i;
+      }
+      return -1;
+    }
+
+    function pickRightmostAmount(parts, excludeIdx) {
+      const ex = excludeIdx instanceof Set ? excludeIdx : new Set(excludeIdx);
+      for (let j = parts.length - 1; j >= 0; j--) {
+        if (ex.has(j)) continue;
+        const n = num(parts[j]);
+        if (n !== 0) return n;
+      }
+      return 0;
+    }
+
+    function apply1cDogovorRow(parts) {
+      const orderName = parts[0];
+      if (!orderName.trim()) return;
+      const wipVal = parts[1];
+      let tr = findRowByOrderName(orderName);
+      if (!tr) {
+        createRow({ order: orderName });
+        tr = findRowByOrderName(orderName);
+      }
+      if (!tr) return;
+      const wipEl = tr.querySelector('.wip-start');
+      wipEl.value = String(num(wipVal));
+      initTableNumDisplay(wipEl);
+      const matEl = tr.querySelector('.materials');
+      matEl.value = String(0);
+      initTableNumDisplay(matEl);
+    }
+
+    function apply1cMaterialsWriteoffRow(parts) {
+      const labelIdx = indexOfMaterialsWriteoffLabel(parts);
+      const dogovorIdx = indexOfDogovorCell(parts);
+      const exclude = new Set();
+      if (labelIdx >= 0) exclude.add(labelIdx);
+
+      let orderName = '';
+      let amount = 0;
+
+      if (dogovorIdx >= 0) {
+        orderName = parts[dogovorIdx].trim();
+        exclude.add(dogovorIdx);
+        amount = pickRightmostAmount(parts, exclude);
+      } else {
+        orderName = (parts[1] || '').trim();
+        exclude.add(0);
+        amount = pickRightmostAmount(parts, exclude);
+      }
+
+      if (!orderName || amount === 0) return;
+
+      let tr = findRowByOrderName(orderName);
+      if (!tr) {
+        createRow({ order: orderName });
+        tr = findRowByOrderName(orderName);
+      }
+      if (!tr) return;
+      const mel = tr.querySelector('.materials');
+      mel.value = String(num(mel.value) + amount);
+      initTableNumDisplay(mel);
+    }
+
+    function loadFrom1cRows(rowArrays) {
+      const dogovorRows = [];
+      const materialRows = [];
+      const fallbackRows = [];
+
+      for (let i = 0; i < rowArrays.length; i++) {
+        const parts = normalize1cSheetRow(rowArrays[i]);
+        if (!parts.length) continue;
+
+        if (is1cDogovorOrderRow(parts)) {
+          dogovorRows.push(parts);
+        } else if (is1cMaterialsWriteoffRow(parts)) {
+          materialRows.push(parts);
+        } else {
+          while (parts.length < 4) parts.push('');
+          fallbackRows.push(parts);
+        }
+      }
+
+      dogovorRows.forEach(apply1cDogovorRow);
+      materialRows.forEach(apply1cMaterialsWriteoffRow);
+      fallbackRows.forEach(apply1cParts);
+    }
+
+    function clearOrderRowValidation(row) {
+      row.classList.remove('row-validate-writeoff', 'row-negative-margin', 'row-negative-profit-with26');
+      row.querySelectorAll('input, td').forEach(el => {
+        el.classList.remove('cell-validate-hi', 'cell-validate-zero', 'cell-validate-negative');
+      });
+    }
+
+    function checkData() {
+      calculateAll();
+
+      const vatRate = num(document.getElementById('vatRate').value);
+      const totalInsurance = num(document.getElementById('totalInsurance').value);
+      const totalSick = num(document.getElementById('totalSick').value);
+      const total25 = num(document.getElementById('total25').value);
+      const total26 = num(document.getElementById('total26').value);
+      const total44 = num(document.getElementById('total44').value);
+
+      const rows = getRows();
+      let totalShipmentNoVat = 0;
+      let totalSalary = 0;
+
+      rows.forEach(row => {
+        const shipmentVat = num(row.querySelector('.shipment-vat').value);
+        const salary = num(row.querySelector('.salary').value);
+        const shipmentNoVat = shipmentVat / (1 + vatRate / 100);
+        totalShipmentNoVat += shipmentNoVat;
+        totalSalary += salary;
+      });
+
+      const warnings = [];
+
+      rows.forEach(row => {
+        const orderName = row.querySelector('.order-name').value || 'Без названия';
+        const shipmentNoVat = num(row.querySelector('.shipment-no-vat').textContent);
+        const shipmentVat = num(row.querySelector('.shipment-vat').value);
+        const wipStart = num(row.querySelector('.wip-start').value);
+        const materials = num(row.querySelector('.materials').value);
+        const processing = num(row.querySelector('.processing').value);
+        const otherDirect = num(row.querySelector('.other-direct').value);
+        const salary = num(row.querySelector('.salary').value);
+        const profitPercent = num(row.querySelector('.profit-percent').value);
+
+        const shipmentShare = totalShipmentNoVat ? shipmentNoVat / totalShipmentNoVat : 0;
+        const salaryShare = totalSalary ? salary / totalSalary : 0;
+
+        const insurance = totalInsurance * salaryShare;
+        const sick = totalSick * salaryShare;
+        const acc25 = total25 * salaryShare;
+        const acc26 = total26 * salaryShare;
+        const acc44 = total44 * shipmentShare;
+
+        const totalCost =
+          wipStart +
+          materials +
+          processing +
+          otherDirect +
+          salary +
+          insurance +
+          sick +
+          acc25 +
+          acc26 +
+          acc44;
+
+        const manualInput = row.querySelector('.manual-writeoff');
+
+        let writeOffRaw;
+        if (manualInput && manualWriteoffHasValue(manualInput)) {
+          writeOffRaw = num(manualInput.value);
+        } else {
+          writeOffRaw = shipmentNoVat * (profitPercent / 100);
+        }
+
+        let writeOff = writeOffRaw;
+        if (writeOff > totalCost) writeOff = totalCost;
+        if (writeOff < 0) writeOff = 0;
+
+        const profitRub = shipmentNoVat - writeOff;
+        const hasShipment = shipmentNoVat > 0 || shipmentVat > 0;
+
+        if (hasShipment && writeOff === 0) {
+          warnings.push(`Заказ "${orderName}": нет списания`);
+        }
+
+        if (writeOff > shipmentNoVat) {
+          warnings.push(`Заказ "${orderName}": списание больше отгрузки`);
+        }
+
+        if (profitRub < 0) {
+          warnings.push(`Заказ "${orderName}": убыточный заказ`);
+        }
+
+        if (!hasShipment) {
+          warnings.push(`Заказ "${orderName}": нет отгрузки`);
+        }
+      });
+
+      const warningBox = document.getElementById('warningBox');
+      if (warnings.length) {
+        warningBox.innerHTML = '<span class="danger">' + warnings.join('<br>') + '</span>';
+      } else {
+        warningBox.textContent = 'Все проверки пройдены';
+      }
+    }
+
+    function calculateAll() {
+      const vatRate = num(document.getElementById('vatRate').value);
+      const totalInsurance = num(document.getElementById('totalInsurance').value);
+      const totalSick = num(document.getElementById('totalSick').value);
+      const total25 = num(document.getElementById('total25').value);
+      const total26 = num(document.getElementById('total26').value);
+      const total44 = num(document.getElementById('total44').value);
+
+      const rows = getRows();
+      const VALIDATE_HI = 10000000;
+
+      rows.forEach(clearOrderRowValidation);
+
+      let totalShipmentNoVat = 0;
+      let totalSalary = 0;
+
+      // 1. Считаем общую отгрузку без НДС и общую ЗП
+      rows.forEach(row => {
+        const shipmentVat = num(row.querySelector('.shipment-vat').value);
+        const salary = num(row.querySelector('.salary').value);
+
+        const shipmentNoVat = shipmentVat / (1 + vatRate / 100);
+        row.querySelector('.shipment-no-vat').textContent = fmt(shipmentNoVat);
+
+        totalShipmentNoVat += shipmentNoVat;
+        totalSalary += salary;
+      });
+
+      let totalWrittenOff = 0;
+      let totalEndingWIP = 0;
+      let warnings = [];
+
+      let sumFootMaterials = 0;
+      let sumFootProcessing = 0;
+      let sumFootOther = 0;
+      let sumFootSalary = 0;
+      let sumFootAcc25 = 0;
+      let sumFootAcc26 = 0;
+      let sumFootAcc44 = 0;
+      let sumFootTotalCost = 0;
+      let sumFootPeriodCost = 0;
+      let sumFootWriteOff = 0;
+      let sumFootProfit = 0;
+      let sumFootProfitWith26 = 0;
+
+      // 2. Расчёты по строкам
+      rows.forEach(row => {
+        const orderName = row.querySelector('.order-name').value || 'Без названия';
+        const shipmentNoVat = num(row.querySelector('.shipment-no-vat').textContent);
+        const wipStart = num(row.querySelector('.wip-start').value);
+        const materials = num(row.querySelector('.materials').value);
+        const processing = num(row.querySelector('.processing').value);
+        const otherDirect = num(row.querySelector('.other-direct').value);
+        const salary = num(row.querySelector('.salary').value);
+        const profitPercent = num(row.querySelector('.profit-percent').value);
+
+        const shipmentShare = totalShipmentNoVat ? shipmentNoVat / totalShipmentNoVat : 0;
+        const salaryShare = totalSalary ? salary / totalSalary : 0;
+
+        const insurance = totalInsurance * salaryShare;
+        const sick = totalSick * salaryShare;
+        const acc25 = total25 * salaryShare;
+        const acc26 = total26 * salaryShare;
+        const acc44 = total44 * shipmentShare;
+
+        const totalCost =
+          wipStart +
+          materials +
+          processing +
+          otherDirect +
+          salary +
+          insurance +
+          sick +
+          acc25 +
+          acc26 +
+          acc44;
+
+        const periodCost =
+          materials +
+          processing +
+          otherDirect +
+          salary +
+          insurance +
+          acc25 +
+          acc26 +
+          acc44;
+
+        const manualInput = row.querySelector('.manual-writeoff');
+
+        let writeOffRaw;
+        if (manualInput && manualWriteoffHasValue(manualInput)) {
+          writeOffRaw = num(manualInput.value);
+        } else {
+          writeOffRaw = shipmentNoVat * (profitPercent / 100);
+        }
+
+        let writeOff = writeOffRaw;
+
+        if (writeOff > totalCost) {
+          writeOff = totalCost;
+          warnings.push(`Заказ "${orderName}": списание ограничено суммой затрат.`);
+        }
+
+        if (writeOff < 0) {
+          writeOff = 0;
+          warnings.push(`Заказ "${orderName}": списание не может быть отрицательным.`);
+        }
+
+        const wipEnd = totalCost - writeOff;
+
+        const profitRub = shipmentNoVat - writeOff;
+        const marginPct = shipmentNoVat > 0 ? (profitRub / shipmentNoVat) * 100 : 0;
+        const profitWith26 = profitRub - acc26;
+        const marginWith26Pct = shipmentNoVat > 0 ? (profitWith26 / shipmentNoVat) * 100 : 0;
+
+        row.querySelector('.shipment-percent').textContent = (shipmentShare * 100).toFixed(2) + '%';
+        row.querySelector('.salary-share').textContent = (salaryShare * 100).toFixed(2) + '%';
+        row.querySelector('.insurance').textContent = fmt(insurance);
+        row.querySelector('.sick').textContent = fmt(sick);
+        row.querySelector('.acc25').textContent = fmt(acc25);
+        row.querySelector('.acc26').textContent = fmt(acc26);
+        row.querySelector('.acc44').textContent = fmt(acc44);
+        row.querySelector('.total-cost').textContent = fmt(totalCost);
+        row.querySelector('.period-cost').textContent = fmt(periodCost);
+        row.querySelector('.profit-rub').textContent = fmt(profitRub);
+        row.querySelector('.profit-with-26').textContent = fmt(profitWith26);
+        row.querySelector('.profit-margin').textContent = marginPct.toFixed(1) + '%';
+        row.querySelector('.margin-with-26').textContent = marginWith26Pct.toFixed(1) + '%';
+        row.querySelector('.write-off').textContent = fmt(writeOff);
+        row.querySelector('.wip-end').textContent = fmt(wipEnd);
+
+        if (marginPct < 0) {
+          row.classList.add('row-negative-margin');
+        }
+
+        if (profitWith26 < 0) {
+          row.classList.add('row-negative-profit-with26');
+        }
+
+        const rowHasOtherSums = totalCost > 0 || shipmentNoVat > 0;
+
+        row.querySelectorAll('input.table-num').forEach(el => {
+          if (el.classList.contains('manual-writeoff') && !manualWriteoffHasValue(el)) return;
+          const v = num(el.value);
+          if (v > VALIDATE_HI) el.classList.add('cell-validate-hi');
+          if (v === 0 && rowHasOtherSums) el.classList.add('cell-validate-zero');
+        });
+
+        [
+          '.shipment-no-vat',
+          '.shipment-percent',
+          '.salary-share',
+          '.insurance',
+          '.sick',
+          '.acc25',
+          '.acc26',
+          '.acc44',
+          '.total-cost',
+          '.period-cost',
+          '.profit-rub',
+          '.profit-with-26',
+          '.profit-margin',
+          '.margin-with-26',
+          '.write-off',
+          '.wip-end'
+        ].forEach(sel => {
+          const cell = row.querySelector(sel);
+          if (!cell) return;
+          if (num(cell.textContent) > VALIDATE_HI) cell.classList.add('cell-validate-hi');
+        });
+
+        if (writeOffRaw > totalCost) {
+          row.classList.add('row-validate-writeoff');
+          warnings.push(
+            `Заказ "${orderName}": списание (${fmt(writeOffRaw)}) больше, чем всего затрат (${fmt(totalCost)}).`
+          );
+        }
+
+        if (wipEnd < 0) {
+          row.querySelector('.wip-end').classList.add('cell-validate-negative');
+        }
+
+        sumFootMaterials += materials;
+        sumFootProcessing += processing;
+        sumFootOther += otherDirect;
+        sumFootSalary += salary;
+        sumFootAcc25 += acc25;
+        sumFootAcc26 += acc26;
+        sumFootAcc44 += acc44;
+        sumFootTotalCost += totalCost;
+        sumFootPeriodCost += periodCost;
+        sumFootWriteOff += writeOff;
+        sumFootProfit += profitRub;
+        sumFootProfitWith26 += profitWith26;
+
+        totalWrittenOff += writeOff;
+        totalEndingWIP += wipEnd;
+      });
+
+      const setFoot = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = fmt(v);
+      };
+      setFoot('ordersFootMaterials', sumFootMaterials);
+      setFoot('ordersFootProcessing', sumFootProcessing);
+      setFoot('ordersFootOther', sumFootOther);
+      setFoot('ordersFootSalary', sumFootSalary);
+      setFoot('ordersFootAcc25', sumFootAcc25);
+      setFoot('ordersFootAcc26', sumFootAcc26);
+      setFoot('ordersFootAcc44', sumFootAcc44);
+      setFoot('ordersFootTotalCost', sumFootTotalCost);
+      setFoot('ordersFootPeriodCost', sumFootPeriodCost);
+      setFoot('ordersFootWriteOff', sumFootWriteOff);
+      setFoot('ordersFootProfit', sumFootProfit);
+      setFoot('ordersFootProfitWith26', sumFootProfitWith26);
+
+      document.getElementById('totalShipmentNoVat').textContent = fmt(totalShipmentNoVat);
+      document.getElementById('totalSalaryValue').textContent = fmt(totalSalary);
+      document.getElementById('totalWrittenOff').textContent = fmt(totalWrittenOff);
+      document.getElementById('totalEndingWIP').textContent = fmt(totalEndingWIP);
+
+      const warningBox = document.getElementById('warningBox');
+      if (warnings.length) {
+        warningBox.innerHTML = '<span class="danger">' + warnings.join('<br>') + '</span>';
+      } else {
+        warningBox.textContent = 'Ограничения не сработали. Расчёт выполнен.';
+      }
+    }
+
+    // =====================
+    // ХРАНЕНИЕ ПО ПЕРИОДАМ
+    // =====================
+
+    function querySelectorDeep(root, selector) {
+      if (!root || typeof root.querySelector !== 'function') return null;
+      let el;
+      try {
+        el = root.querySelector(selector);
+      } catch (e) {
+        return null;
+      }
+      if (el) return el;
+      const all = root.querySelectorAll('*');
+      for (let i = 0; i < all.length; i++) {
+        const node = all[i];
+        if (node.shadowRoot) {
+          const inner = querySelectorDeep(node.shadowRoot, selector);
+          if (inner) return inner;
+        }
+      }
+      return null;
+    }
+
+    function getElementByIdDeep(id) {
+      const direct = document.getElementById(id);
+      if (direct) return direct;
+      const sel =
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? '#' + CSS.escape(id) : '#' + id;
+      return querySelectorDeep(document, sel);
+    }
+
+    function normalizePeriodStr(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/\u00a0/g, ' ')
+        .replace(/\ufeff/g, '')
+        .trim();
+    }
+
+    function getCurrentPeriod() {
+      const inputEl = getElementByIdDeep('periodInput');
+      const selectEl = getElementByIdDeep('periodSelect');
+
+      let periodInput = '';
+      const ae = document.activeElement;
+      if (ae && ae.id === 'periodInput' && typeof ae.value === 'string') {
+        periodInput = normalizePeriodStr(ae.value);
+      }
+      if (!periodInput && inputEl) {
+        periodInput = normalizePeriodStr(inputEl.value);
+      }
+
+      let periodSelect = '';
+      if (selectEl) {
+        periodSelect = normalizePeriodStr(selectEl.value);
+        if (!periodSelect && selectEl.selectedIndex > 0) {
+          const opt = selectEl.options[selectEl.selectedIndex];
+          if (opt) periodSelect = normalizePeriodStr(opt.value);
+        }
+      }
+
+      const period = periodInput || periodSelect || '';
+      if (period && inputEl && !normalizePeriodStr(inputEl.value) && periodSelect) {
+        inputEl.value = period;
+      }
+      return period;
+    }
+
+    function getStorageKey(period) {
+      return 'razdelny_uchet_' + period;
+    }
+
+    function collectData() {
+      const rows = getRows().map(row => {
+        return {
+          order: row.querySelector('.order-name').value,
+          shipmentVat: row.querySelector('.shipment-vat').value,
+          wipStart: row.querySelector('.wip-start').value,
+          materials: row.querySelector('.materials').value,
+          processing: row.querySelector('.processing').value,
+          other: row.querySelector('.other-direct').value,
+          salary: row.querySelector('.salary').value,
+          profitPercent: row.querySelector('.profit-percent').value,
+          manualWriteoff: row.querySelector('.manual-writeoff').value
+        };
+      });
+
+      return {
+        globals: {
+          vatRate: document.getElementById('vatRate').value,
+          totalInsurance: document.getElementById('totalInsurance').value,
+          totalSick: document.getElementById('totalSick').value,
+          total25: document.getElementById('total25').value,
+          total26: document.getElementById('total26').value,
+          total44: document.getElementById('total44').value
+        },
+        rows
+      };
+    }
+
+    function applyData(data) {
+      if (!data) return;
+
+      Object.keys(data.globals).forEach(key => {
+        if (document.getElementById(key)) {
+          document.getElementById(key).value = data.globals[key];
+        }
+      });
+
+      ordersBody.innerHTML = '';
+
+      if (data.rows && data.rows.length) {
+        data.rows.forEach(r => createRow(r));
+      } else {
+        createRow();
+      }
+
+      refreshAllGlobalNums();
+      calculateAll();
+    }
+
+    function savePeriod(showAlert = true) {
+      const period = getCurrentPeriod();
+
+      if (!period) {
+        if (showAlert) {
+          alert(
+            'Укажите период: введите в поле «Период» дату в формате YYYY-MM (серый текст в поле — только подсказка, его нужно заменить вводом) или выберите сохранённый период в списке.'
+          );
+        }
+        return;
+      }
+
+      if (showAlert) {
+        const key = 'razdelny_uchet_' + period;
+        if (localStorage.getItem(key)) {
+          const ok = confirm('Период уже существует. Перезаписать?');
+          if (!ok) return;
+        }
+      }
+
+      const data = collectData();
+      localStorage.setItem(getStorageKey(period), JSON.stringify(data));
+      updatePeriodList();
+      populateOrderSelect();
+
+      if (showAlert) {
+        alert('Сохранено');
+      }
+    }
+
+    function loadPeriod(showAlert = true) {
+      const period = getCurrentPeriod();
+
+      if (!period) {
+        if (showAlert) {
+          alert(
+            'Укажите период: введите в поле «Период» дату в формате YYYY-MM (серый текст в поле — только подсказка, его нужно заменить вводом) или выберите сохранённый период в списке.'
+          );
+        }
+        return;
+      }
+
+      const raw = localStorage.getItem(getStorageKey(period));
+
+      if (!raw) {
+        if (showAlert) alert('Нет данных за этот период');
+        return;
+      }
+
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        if (showAlert) alert('Повреждённые данные в хранилище за период ' + period);
+        return;
+      }
+
+      applyData(data);
+
+      const inputEl = getElementByIdDeep('periodInput');
+      const selectEl = getElementByIdDeep('periodSelect');
+      if (inputEl) inputEl.value = period;
+      updatePeriodList();
+      if (selectEl) selectEl.value = period;
+    }
+
+    function updatePeriodList() {
+      const select = getElementByIdDeep('periodSelect');
+      const inputEl = getElementByIdDeep('periodInput');
+      if (!select) return;
+
+      const fromInput = inputEl ? normalizePeriodStr(inputEl.value) : '';
+      const currentValue = normalizePeriodStr(select.value) || fromInput;
+
+      select.innerHTML = '<option value="">—</option>';
+
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('razdelny_uchet_'))
+        .sort()
+        .forEach(key => {
+          const p = key.replace('razdelny_uchet_', '');
+          const option = document.createElement('option');
+          option.value = p;
+          option.textContent = p;
+          select.appendChild(option);
+        });
+
+      function ensureOption(val) {
+        if (!val) return;
+        let found = false;
+        for (let i = 0; i < select.options.length; i++) {
+          if (select.options[i].value === val) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          const option = document.createElement('option');
+          option.value = val;
+          option.textContent = val;
+          select.appendChild(option);
+        }
+      }
+
+      ensureOption(currentValue);
+      if (currentValue) {
+        select.value = currentValue;
+      }
+    }
+
+    function fillPeriodsSelect() {
+      updatePeriodList();
+    }
+
+    function clearAll(skipAutoSave) {
+      ordersBody.innerHTML = '';
+
+      document.getElementById('vatRate').value = '22';
+      document.getElementById('totalInsurance').value = '0';
+      document.getElementById('totalSick').value = '0';
+      document.getElementById('total25').value = '0';
+      document.getElementById('total26').value = '0';
+      document.getElementById('total44').value = '0';
+
+      refreshAllGlobalNums();
+      createRow();
+      calculateAll();
+      if (!skipAutoSave) autoSave();
+    }
+
+    function populateOrderSelect() {
+      const sel = document.getElementById('orderSelect');
+      if (!sel) return;
+
+      const prev = sel.value;
+      const names = new Set();
+
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('razdelny_uchet_'))
+        .forEach(key => {
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (!data || !Array.isArray(data.rows)) return;
+            data.rows.forEach(r => {
+              const name = (r && r.order != null ? String(r.order) : '').trim();
+              if (name) names.add(name);
+            });
+          } catch (e) {
+            /* пропуск повреждённых записей */
+          }
+        });
+
+      sel.innerHTML = '<option value="">Выбери заказ</option>';
+      Array.from(names)
+        .sort((a, b) => a.localeCompare(b, 'ru'))
+        .forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          sel.appendChild(opt);
+        });
+
+      if (prev && names.has(prev)) {
+        sel.value = prev;
+      }
+    }
+
+    function manualWriteoffSavedHasValue(s) {
+      const t = String(s ?? '')
+        .replace(/\s/g, '')
+        .replace(',', '.');
+      return t !== '' && t !== '.';
+    }
+
+    function deriveMetricsFromSavedRow(row, globals, totalShipmentNoVat, totalSalary) {
+      const vatRate = num(globals.vatRate);
+      const totalInsurance = num(globals.totalInsurance);
+      const totalSick = num(globals.totalSick);
+      const total25 = num(globals.total25);
+      const total26 = num(globals.total26);
+      const total44 = num(globals.total44);
+
+      const shipmentVat = num(row.shipmentVat);
+      const shipmentNoVat = shipmentVat / (1 + vatRate / 100);
+      const wipStart = num(row.wipStart);
+      const materials = num(row.materials);
+      const processing = num(row.processing);
+      const otherDirect = num(row.other);
+      const salary = num(row.salary);
+      const profitPercent = num(row.profitPercent);
+
+      const shipmentShare = totalShipmentNoVat ? shipmentNoVat / totalShipmentNoVat : 0;
+      const salaryShare = totalSalary ? salary / totalSalary : 0;
+
+      const insurance = totalInsurance * salaryShare;
+      const sick = totalSick * salaryShare;
+      const acc25 = total25 * salaryShare;
+      const acc26 = total26 * salaryShare;
+      const acc44 = total44 * shipmentShare;
+
+      const totalCost =
+        wipStart +
+        materials +
+        processing +
+        otherDirect +
+        salary +
+        insurance +
+        sick +
+        acc25 +
+        acc26 +
+        acc44;
+
+      let writeOffRaw;
+      if (manualWriteoffSavedHasValue(row.manualWriteoff)) {
+        writeOffRaw = num(row.manualWriteoff);
+      } else {
+        writeOffRaw = shipmentNoVat * (profitPercent / 100);
+      }
+
+      let writeOff = writeOffRaw;
+      if (writeOff > totalCost) writeOff = totalCost;
+      if (writeOff < 0) writeOff = 0;
+
+      const profitRub = shipmentNoVat - writeOff;
+
+      return { shipmentNoVat, shipmentVat, writeOff, profitRub };
+    }
+
+    function buildOrderReport() {
+      const orderName = document.getElementById('orderSelect').value;
+      const box = document.getElementById('orderReportBox');
+      const title = document.getElementById('orderReportTitle');
+      const content = document.getElementById('orderReportContent');
+
+      if (!orderName || !String(orderName).trim()) {
+        if (box) box.style.display = 'none';
+        return;
+      }
+
+      const target = String(orderName).trim();
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('razdelny_uchet_'));
+      keys.sort();
+
+      const rows = [];
+      let totalShipment = 0;
+      let totalWriteoff = 0;
+      let totalProfit = 0;
+
+      keys.forEach(key => {
+        const period = key.slice('razdelny_uchet_'.length);
+        let data;
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) return;
+          data = JSON.parse(raw);
+        } catch (e) {
+          return;
+        }
+        if (!data || !Array.isArray(data.rows) || !data.globals) return;
+
+        const g = data.globals;
+        const vatRate = num(g.vatRate);
+        let totalShipmentNoVat = 0;
+        let totalSalary = 0;
+        data.rows.forEach(r => {
+          const sv = num(r.shipmentVat);
+          totalShipmentNoVat += sv / (1 + vatRate / 100);
+          totalSalary += num(r.salary);
+        });
+
+        let pShipment = 0;
+        let pWriteoff = 0;
+        let pProfit = 0;
+        let matchedInPeriod = 0;
+
+        data.rows.forEach(r => {
+          const name = (r && r.order != null ? String(r.order) : '').trim();
+          if (name !== target) return;
+          matchedInPeriod++;
+          const m = deriveMetricsFromSavedRow(r, g, totalShipmentNoVat, totalSalary);
+          pShipment += m.shipmentVat;
+          pWriteoff += m.writeOff;
+          pProfit += m.profitRub;
+        });
+
+        if (matchedInPeriod > 0) {
+          rows.push({
+            period,
+            shipment: pShipment,
+            writeoff: pWriteoff,
+            profit: pProfit
+          });
+          totalShipment += pShipment;
+          totalWriteoff += pWriteoff;
+          totalProfit += pProfit;
+        }
+      });
+
+      let html = `
+<table>
+<tr>
+<th>Месяц</th>
+<th>Отгрузка</th>
+<th>Списано</th>
+<th>Прибыль</th>
+</tr>
+`;
+
+      rows.forEach(r => {
+        html += `
+  <tr>
+    <td>${r.period}</td>
+    <td>${fmt(r.shipment)}</td>
+    <td>${fmt(r.writeoff)}</td>
+    <td>${fmt(r.profit)}</td>
+  </tr>
+  `;
+      });
+
+      html += `</table>`;
+
+      html += `
+<div class="order-total">
+ИТОГО:<br>
+Отгрузка: ${fmt(totalShipment)}<br>
+Списано: ${fmt(totalWriteoff)}<br>
+Прибыль: ${fmt(totalProfit)}
+</div>
+`;
+
+      if (box) box.style.display = 'block';
+      if (title) title.textContent = 'Карточка заказа: ' + orderName;
+      if (content) content.innerHTML = html;
+    }
+
+    function autoSave() {
+      const period = getCurrentPeriod();
+      if (!period) return;
+      savePeriod(false);
+    }
+
+    // =====================
+    // СОБЫТИЯ
+    // =====================
+
+    addRowBtn.addEventListener('click', () => {
+      createRow();
+      calculateAll();
+      autoSave();
+    });
+
+    document.getElementById('checkDataBtn').addEventListener('click', () => checkData());
+
+    document.getElementById('orderReportBtn')
+      .addEventListener('click', buildOrderReport);
+
+    document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+
+    function handleFile(e) {
+      const input = e.target;
+      const file = input.files[0];
+      if (!file) return;
+
+      const statusEl = document.getElementById('import1cStatus');
+      if (statusEl) statusEl.textContent = 'Читаю файл…';
+
+      if (typeof XLSX === 'undefined') {
+        if (statusEl) statusEl.textContent = '';
+        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
+        input.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          loadFrom1cRows(rows);
+          calculateAll();
+          autoSave();
+
+          if (statusEl) {
+            statusEl.textContent =
+              'Загружено: «' +
+              file.name +
+              '», лист «' +
+              sheetName +
+              '», строк в файле: ' +
+              rows.length +
+              ' (данные по заказам перенесены в таблицу).';
+          }
+          console.log('Загруженные данные:', rows);
+        } catch (err) {
+          if (statusEl) statusEl.textContent = '';
+          alert('Ошибка при разборе файла: ' + (err && err.message ? err.message : String(err)));
+        }
+        input.value = '';
+      };
+
+      reader.onerror = function() {
+        if (statusEl) statusEl.textContent = '';
+        alert('Не удалось прочитать файл с диска.');
+        input.value = '';
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function exportOrdersToExcel() {
+      if (typeof XLSX === 'undefined') {
+        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
+        return;
+      }
+
+      calculateAll();
+
+      const header = [
+        'Заказ',
+        'Отгрузка',
+        'Материалы',
+        'Обработка',
+        'Прочее',
+        'ЗП',
+        '25',
+        '26',
+        '44',
+        'Всего затрат',
+        'Списано',
+        'НЗП',
+        'Прибыль',
+        'Маржа'
+      ];
+
+      const body = getRows().map(tr => {
+        return [
+          (tr.querySelector('.order-name').value || '').trim(),
+          num(tr.querySelector('.shipment-vat').value),
+          num(tr.querySelector('.materials').value),
+          num(tr.querySelector('.processing').value),
+          num(tr.querySelector('.other-direct').value),
+          num(tr.querySelector('.salary').value),
+          num(tr.querySelector('.acc25').textContent),
+          num(tr.querySelector('.acc26').textContent),
+          num(tr.querySelector('.acc44').textContent),
+          num(tr.querySelector('.total-cost').textContent),
+          num(tr.querySelector('.write-off').textContent),
+          num(tr.querySelector('.wip-end').textContent),
+          num(tr.querySelector('.profit-rub').textContent),
+          num(tr.querySelector('.profit-margin').textContent)
+        ];
+      });
+
+      const data = [header, ...body];
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Отчет');
+      XLSX.writeFile(wb, 'Отчет.xlsx');
+    }
+
+    document.getElementById('fileInput').addEventListener('change', handleFile);
+
+    document.getElementById('exportBtn').addEventListener('click', () => exportOrdersToExcel());
+
+    clearBtn.addEventListener('click', () => {
+      clearAll(false);
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', () => {
+      const inp = getElementByIdDeep('periodInput');
+      if (inp && document.activeElement === inp) {
+        inp.blur();
+      }
+      requestAnimationFrame(() => savePeriod(true));
+    });
+    document.getElementById('loadBtn').addEventListener('click', () => {
+      const inp = getElementByIdDeep('periodInput');
+      if (inp && document.activeElement === inp) {
+        inp.blur();
+      }
+      requestAnimationFrame(() => loadPeriod(true));
+    });
+
+    document.getElementById('deletePeriodBtn').addEventListener('click', function() {
+      const period = getCurrentPeriod();
+
+      if (!period) {
+        alert('Выбери период');
+        return;
+      }
+
+      const ok = confirm('Удалить период ' + period + '?');
+
+      if (!ok) return;
+
+      localStorage.removeItem('razdelny_uchet_' + period);
+
+      clearAll(true);
+
+      document.getElementById('periodInput').value = '';
+      const periodSelectAfterDel = document.getElementById('periodSelect');
+      if (periodSelectAfterDel) periodSelectAfterDel.value = '';
+
+      fillPeriodsSelect();
+      populateOrderSelect();
+
+      const periodStatusEl = document.getElementById('periodActionStatus');
+      if (periodStatusEl) periodStatusEl.textContent = 'Период удалён';
+    });
+
+    const periodSelectEl = getElementByIdDeep('periodSelect');
+    const periodInputEl = getElementByIdDeep('periodInput');
+    if (periodSelectEl) {
+      periodSelectEl.addEventListener('change', e => {
+        const inputEl = getElementByIdDeep('periodInput');
+        if (inputEl) inputEl.value = e.target.value;
+        loadPeriod(false);
+      });
+    }
+    if (periodInputEl) {
+      periodInputEl.addEventListener('input', () => {
+        updatePeriodList();
+      });
+    }
+
+    // =====================
+    // СТАРТ
+    // =====================
+
+    refreshAllGlobalNums();
+    createRow();
+    calculateAll();
+    updatePeriodList();
+    populateOrderSelect();
+  </script>
+</body>
+</html>

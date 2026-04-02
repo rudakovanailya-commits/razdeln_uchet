@@ -1586,8 +1586,9 @@
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
-        const res = await fetch(CLOUD_SAVE_URL, {
+        await fetch(CLOUD_SAVE_URL, {
           method: 'POST',
+          mode: 'no-cors',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             period,
@@ -1595,11 +1596,9 @@
           })
         });
 
-        const text = await res.text();
         if (statusEl) {
-          statusEl.textContent = res.ok
-            ? 'Сохранено в облако'
-            : 'Ошибка облака (' + res.status + '): ' + text.slice(0, 240);
+          statusEl.textContent =
+            'Запрос отправлен в облако (no-cors: ответ сервера недоступен)';
         }
       } catch (err) {
         if (statusEl) {

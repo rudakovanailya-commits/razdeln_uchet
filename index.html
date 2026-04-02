@@ -404,6 +404,7 @@
         </div>
 
         <button id="saveBtn" type="button">Сохранить</button>
+        <button id="saveCloudBtn" type="button" class="secondary">Сохранить в облако</button>
         <button id="deletePeriodBtn" type="button">Удалить период</button>
         <button id="loadBtn" type="button" class="secondary">Загрузить</button>
       </div>
@@ -1571,6 +1572,43 @@
       updatePeriodList();
     }
 
+    const CLOUD_SAVE_URL =
+      'https://script.google.com/macros/s/AKfycbye1am4i-ptP-kryZqPzgZRBs8pVLdxSB5nBQtf--UBTc0PTUdzj7Bd4tlnOPzngxkR2w/exec';
+
+    async function saveToCloud() {
+      const period = getCurrentPeriod();
+      if (!period) {
+        alert('Укажите период');
+        return;
+      }
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) statusEl.textContent = 'Отправка в облако…';
+
+      try {
+        const res = await fetch(CLOUD_SAVE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            period,
+            data: collectData()
+          })
+        });
+
+        const text = await res.text();
+        if (statusEl) {
+          statusEl.textContent = res.ok
+            ? 'Сохранено в облако'
+            : 'Ошибка облака (' + res.status + '): ' + text.slice(0, 240);
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent =
+            'Ошибка сети: ' + (err && err.message ? err.message : String(err));
+        }
+      }
+    }
+
     function clearAll(skipAutoSave) {
       ordersBody.innerHTML = '';
 
@@ -1939,6 +1977,15 @@
       }
       requestAnimationFrame(() => savePeriod(true));
     });
+
+    document.getElementById('saveCloudBtn').addEventListener('click', () => {
+      const inp = getElementByIdDeep('periodInput');
+      if (inp && document.activeElement === inp) {
+        inp.blur();
+      }
+      requestAnimationFrame(() => saveToCloud());
+    });
+
     document.getElementById('loadBtn').addEventListener('click', () => {
       const inp = getElementByIdDeep('periodInput');
       if (inp && document.activeElement === inp) {

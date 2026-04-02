@@ -1586,14 +1586,17 @@
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
+        const data = {
+          period,
+          data: collectData()
+        };
         await fetch(CLOUD_SAVE_URL, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            period,
-            data: collectData()
-          })
+          headers: {
+            'Content-Type': 'text/plain'
+          },
+          body: JSON.stringify(data)
         });
 
         if (statusEl) {

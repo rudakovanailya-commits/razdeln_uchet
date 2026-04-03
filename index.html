@@ -856,7 +856,6 @@
 
     function normalizeOrder(str) {
       if (!str) return '';
-
       return String(str)
         .toLowerCase()
         .replace(/от\s+\d{2}\.\d{2}\.\d{4}/g, '')
@@ -864,30 +863,48 @@
         .trim();
     }
 
-    function findRowByOrderName(orderName) {
-      const norm = normalizeOrder(orderName);
-      if (!norm) return null;
+    function findRowByOrderName(orderRaw) {
+      const raw = String(orderRaw == null ? '' : orderRaw).trim();
+      if (!raw) return null;
+      const orderNorm = normalizeOrder(raw);
+      const list = [...document.querySelectorAll('#ordersTable tbody tr')];
+      if (orderNorm) {
+        return (
+          list.find(tr => {
+            const input = tr.querySelector('.order-name');
+            if (!input) return false;
+            return normalizeOrder(input.value) === orderNorm;
+          }) || null
+        );
+      }
       return (
-        getRows().find(
-          r => normalizeOrder(r.querySelector('.order-name').value) === norm
-        ) || null
+        list.find(tr => {
+          const input = tr.querySelector('.order-name');
+          return input && (input.value || '').trim() === raw;
+        }) || null
       );
     }
 
-    function ensure1cExpenseRowForOrder(orderName) {
-      const key = String(orderName == null ? '' : orderName).trim();
-      if (!key) return null;
-      if (!/\d/.test(normalizeOrder(key))) return null;
-      let row = findRowByOrderName(key);
-      if (row) return row;
-      createRow({ order: key });
-      row = findRowByOrderName(key);
+    function addOrderRow(opts) {
+      const orderRaw =
+        opts && opts.order != null ? String(opts.order).trim() : '';
+      if (!orderRaw) return null;
+      createRow({ order: orderRaw });
+      const row = findRowByOrderName(orderRaw);
       if (row) {
         const sh = row.querySelector('.shipment-vat');
         sh.value = '0';
         initTableNumDisplay(sh);
       }
       return row;
+    }
+
+    function ensure1cExpenseRowForOrder(orderRaw) {
+      const key = String(orderRaw == null ? '' : orderRaw).trim();
+      if (!key) return null;
+      let row = findRowByOrderName(key);
+      if (row) return row;
+      return addOrderRow({ order: key, shipment: 0 });
     }
 
     function apply1cExpenseMerge(row, materialsStr, processingStr, otherStr, salaryStr) {
@@ -911,7 +928,6 @@
 
       const orderName = String(parts[0] == null ? '' : parts[0]).trim();
       if (!orderName) return;
-      if (!/\d/.test(normalizeOrder(orderName))) return;
 
       const salaryStr = parts.length > 4 ? parts[4] : undefined;
 
@@ -985,7 +1001,6 @@
     function apply1cDogovorRow(parts) {
       const orderName = String(parts[0] == null ? '' : parts[0]).trim();
       if (!orderName) return;
-      if (!/\d/.test(normalizeOrder(orderName))) return;
       ensure1cExpenseRowForOrder(orderName);
     }
 
@@ -1009,7 +1024,6 @@
       }
 
       if (!orderName || amount === 0) return;
-      if (!/\d/.test(normalizeOrder(orderName))) return;
 
       const tr = ensure1cExpenseRowForOrder(orderName);
       if (!tr) return;

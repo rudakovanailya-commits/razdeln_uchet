@@ -1573,7 +1573,7 @@
     }
 
     const CLOUD_SAVE_URL =
-      'https://script.google.com/macros/s/AKfycbwG-Cn6Kf59yj-Or9RYZH5AqzzUh84vmAcG4dbD7owGGuyPFY9DuGYO7YzGR66ft349AQ/exec';
+      'https://script.google.com/macros/s/AKfycbwsgT3sbIvxkhjmYNqVPfMpD_BdwPo_fEt755v8a_aB842AvIqqmvaV6p48tvoi_0SYAA/exec';
 
     async function saveToCloud() {
       const period = getCurrentPeriod();
@@ -1586,7 +1586,7 @@
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
-        const payload = getRows().map(tr => ({
+        const rows = getRows().map(tr => ({
           period,
           order: (tr.querySelector('.order-name').value || '').trim(),
           shipment: num(tr.querySelector('.shipment-vat').value),
@@ -1594,18 +1594,17 @@
           profit: num(tr.querySelector('.profit-rub').textContent)
         }));
 
+        const formData = new FormData();
+
+        formData.append('data', JSON.stringify(rows));
+
         await fetch(CLOUD_SAVE_URL, {
           method: 'POST',
-          mode: 'no-cors',
-          headers: {
-            'Content-Type': 'text/plain'
-          },
-          body: JSON.stringify(payload)
+          body: formData
         });
 
         if (statusEl) {
-          statusEl.textContent =
-            'Запрос отправлен в облако (no-cors: ответ сервера недоступен)';
+          statusEl.textContent = 'Данные отправлены в облако';
         }
       } catch (err) {
         if (statusEl) {

@@ -854,12 +854,22 @@
       return e === '' || e.startsWith('зп') || e.includes('зарплат');
     }
 
+    function normalizeOrder(str) {
+      if (!str) return '';
+
+      return String(str)
+        .toLowerCase()
+        .replace(/от\s+\d{2}\.\d{2}\.\d{4}/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     function findRowByOrderName(orderName) {
-      const key = String(orderName == null ? '' : orderName).trim();
-      if (!key) return null;
+      const norm = normalizeOrder(orderName);
+      if (!norm) return null;
       return (
         getRows().find(
-          r => (r.querySelector('.order-name').value || '').trim() === key
+          r => normalizeOrder(r.querySelector('.order-name').value) === norm
         ) || null
       );
     }
@@ -867,6 +877,7 @@
     function ensure1cExpenseRowForOrder(orderName) {
       const key = String(orderName == null ? '' : orderName).trim();
       if (!key) return null;
+      if (!/\d/.test(normalizeOrder(key))) return null;
       let row = findRowByOrderName(key);
       if (row) return row;
       createRow({ order: key });
@@ -900,6 +911,7 @@
 
       const orderName = String(parts[0] == null ? '' : parts[0]).trim();
       if (!orderName) return;
+      if (!/\d/.test(normalizeOrder(orderName))) return;
 
       const salaryStr = parts.length > 4 ? parts[4] : undefined;
 
@@ -973,6 +985,7 @@
     function apply1cDogovorRow(parts) {
       const orderName = String(parts[0] == null ? '' : parts[0]).trim();
       if (!orderName) return;
+      if (!/\d/.test(normalizeOrder(orderName))) return;
       ensure1cExpenseRowForOrder(orderName);
     }
 
@@ -996,6 +1009,7 @@
       }
 
       if (!orderName || amount === 0) return;
+      if (!/\d/.test(normalizeOrder(orderName))) return;
 
       const tr = ensure1cExpenseRowForOrder(orderName);
       if (!tr) return;

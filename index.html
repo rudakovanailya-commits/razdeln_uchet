@@ -1573,7 +1573,7 @@
     }
 
     const CLOUD_SAVE_URL =
-      'https://script.google.com/macros/s/AKfycbye1am4i-ptP-kryZqPzgZRBs8pVLdxSB5nBQtf--UBTc0PTUdzj7Bd4tlnOPzngxkR2w/exec';
+      'https://script.google.com/macros/s/AKfycbwG-Cn6Kf59yj-Or9RYZH5AqzzUh84vmAcG4dbD7owGGuyPFY9DuGYO7YzGR66ft349AQ/exec';
 
     async function saveToCloud() {
       const period = getCurrentPeriod();
@@ -1586,17 +1586,21 @@
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
-        const data = {
+        const payload = getRows().map(tr => ({
           period,
-          data: collectData()
-        };
+          order: (tr.querySelector('.order-name').value || '').trim(),
+          shipment: num(tr.querySelector('.shipment-vat').value),
+          writeoff: num(tr.querySelector('.write-off').textContent),
+          profit: num(tr.querySelector('.profit-rub').textContent)
+        }));
+
         await fetch(CLOUD_SAVE_URL, {
           method: 'POST',
           mode: 'no-cors',
           headers: {
             'Content-Type': 'text/plain'
           },
-          body: JSON.stringify(data)
+          body: JSON.stringify(payload)
         });
 
         if (statusEl) {

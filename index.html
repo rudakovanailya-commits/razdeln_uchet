@@ -838,48 +838,89 @@
     }
 
     function is1cCsvHeaderRow(parts) {
+      if (parts.length < 4) return false;
       const a = (parts[0] || '').trim().toLowerCase();
       const b = (parts[1] || '').trim().toLowerCase();
       const c = (parts[2] || '').trim().toLowerCase();
       const d = (parts[3] || '').trim().toLowerCase();
-      return (
+      const base =
         a === 'заказ' &&
         (b === 'материалы' || b.startsWith('материал')) &&
         (c === 'обработка' || c.startsWith('обработк')) &&
-        (d === 'прочее' || d.startsWith('проч'))
-      );
+        (d === 'прочее' || d.startsWith('проч'));
+      if (!base) return false;
+      if (parts.length < 5) return true;
+      const e = (parts[4] || '').trim().toLowerCase();
+      return e === '' || e.startsWith('зп') || e.includes('зарплат');
     }
 
     function findRowByOrderName(orderName) {
-      const key = orderName.trim();
+      const key = String(orderName == null ? '' : orderName).trim();
       if (!key) return null;
-      return getRows().find(r => (r.querySelector('.order-name').value || '').trim() === key) || null;
+      return (
+        getRows().find(
+          r => (r.querySelector('.order-name').value || '').trim() === key
+        ) || null
+      );
     }
 
-    function apply1cRowValues(row, materialsStr, processingStr, otherStr) {
-      const setNum = (sel, raw) => {
+    function ensure1cExpenseRowForOrder(orderName) {
+      const key = String(orderName == null ? '' : orderName).trim();
+      if (!key) return null;
+      let row = findRowByOrderName(key);
+      if (row) return row;
+      createRow({ order: key });
+      row = findRowByOrderName(key);
+      if (row) {
+        const sh = row.querySelector('.shipment-vat');
+        sh.value = '0';
+        initTableNumDisplay(sh);
+      }
+      return row;
+    }
+
+    function apply1cExpenseMerge(row, materialsStr, processingStr, otherStr, salaryStr) {
+      const addNum = (sel, raw) => {
         const el = row.querySelector(sel);
-        el.value = String(num(raw));
+        const next = num(el.value) + num(raw);
+        el.value = String(next);
         initTableNumDisplay(el);
       };
-      setNum('.materials', materialsStr);
-      setNum('.processing', processingStr);
-      setNum('.other-direct', otherStr);
+      addNum('.materials', materialsStr);
+      addNum('.processing', processingStr);
+      addNum('.other-direct', otherStr);
+      if (salaryStr !== undefined && salaryStr !== null && String(salaryStr).trim() !== '') {
+        addNum('.salary', salaryStr);
+      }
     }
 
     function apply1cParts(parts) {
       if (parts.length < 4) return;
       if (is1cCsvHeaderRow(parts)) return;
 
-      const orderName = parts[0];
-      if (!orderName.trim()) return;
+      const orderName = String(parts[0] == null ? '' : parts[0]).trim();
+      if (!orderName) return;
+
+      const salaryStr = parts.length > 4 ? parts[4] : undefined;
 
       let row = findRowByOrderName(orderName);
-      if (!row) {
-        createRow({ order: orderName });
-        row = findRowByOrderName(orderName);
+      if (row) {
+        apply1cExpenseMerge(row, parts[1], parts[2], parts[3], salaryStr);
+        return;
       }
-      if (row) apply1cRowValues(row, parts[1], parts[2], parts[3]);
+
+      row = ensure1cExpenseRowForOrder(orderName);
+      if (!row) return;
+
+      const setNum = (sel, raw) => {
+        const el = row.querySelector(sel);
+        el.value = String(num(raw));
+        initTableNumDisplay(el);
+      };
+      setNum('.materials', parts[1]);
+      setNum('.processing', parts[2]);
+      setNum('.other-direct', parts[3]);
+      if (parts.length > 4) setNum('.salary', parts[4]);
     }
 
     function loadFrom1cCsv(text) {
@@ -930,21 +971,9 @@
     }
 
     function apply1cDogovorRow(parts) {
-      const orderName = parts[0];
-      if (!orderName.trim()) return;
-      const wipVal = parts[1];
-      let tr = findRowByOrderName(orderName);
-      if (!tr) {
-        createRow({ order: orderName });
-        tr = findRowByOrderName(orderName);
-      }
-      if (!tr) return;
-      const wipEl = tr.querySelector('.wip-start');
-      wipEl.value = String(num(wipVal));
-      initTableNumDisplay(wipEl);
-      const matEl = tr.querySelector('.materials');
-      matEl.value = String(0);
-      initTableNumDisplay(matEl);
+      const orderName = String(parts[0] == null ? '' : parts[0]).trim();
+      if (!orderName) return;
+      ensure1cExpenseRowForOrder(orderName);
     }
 
     function apply1cMaterialsWriteoffRow(parts) {
@@ -957,22 +986,18 @@
       let amount = 0;
 
       if (dogovorIdx >= 0) {
-        orderName = parts[dogovorIdx].trim();
+        orderName = String(parts[dogovorIdx] == null ? '' : parts[dogovorIdx]).trim();
         exclude.add(dogovorIdx);
         amount = pickRightmostAmount(parts, exclude);
       } else {
-        orderName = (parts[1] || '').trim();
+        orderName = String(parts[1] == null ? '' : parts[1]).trim();
         exclude.add(0);
         amount = pickRightmostAmount(parts, exclude);
       }
 
       if (!orderName || amount === 0) return;
 
-      let tr = findRowByOrderName(orderName);
-      if (!tr) {
-        createRow({ order: orderName });
-        tr = findRowByOrderName(orderName);
-      }
+      const tr = ensure1cExpenseRowForOrder(orderName);
       if (!tr) return;
       const mel = tr.querySelector('.materials');
       mel.value = String(num(mel.value) + amount);

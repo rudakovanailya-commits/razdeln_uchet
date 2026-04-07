@@ -70,8 +70,8 @@
 
     button {
       border: none;
-      background: #2563eb;
-      color: white;
+      background: #2f855a;
+      color: #f0fdf4;
       padding: 10px 14px;
       border-radius: 8px;
       cursor: pointer;
@@ -79,7 +79,8 @@
     }
 
     button.secondary {
-      background: #6b7280;
+      background: #5a7d65;
+      color: #f0fdf4;
     }
 
     .table-wrap {
@@ -102,9 +103,9 @@
     #ordersTable td:first-child {
       position: sticky;
       left: 0;
-      background: #fff;
+      background: #f5fbf7;
       z-index: 2;
-      box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+      box-shadow: 2px 0 4px rgba(20, 83, 45, 0.08);
     }
 
     #ordersTable th:first-child {
@@ -116,11 +117,11 @@
     }
 
     #ordersTable tfoot td:not(:first-child) {
-      background: #f9fafb;
+      background: #e8f5ec;
     }
 
     th, td {
-      border: 1px solid #e5e7eb;
+      border: 1px solid #c8e6d1;
       padding: 8px;
       text-align: center;
       vertical-align: middle;
@@ -128,19 +129,21 @@
     }
 
     th {
-      background: #f9fafb;
+      background: #e0f2e8;
       position: sticky;
       top: 0;
       z-index: 1;
+      color: #14532d;
     }
 
     td input {
       width: 100%;
       padding: 7px 8px;
-      border: 1px solid #d1d5db;
+      border: 1px solid #9dcea8;
       border-radius: 6px;
       text-align: right;
-      background: #fff;
+      background: #fdfffe;
+      color: #1a2e22;
     }
 
     td input.text {
@@ -148,8 +151,8 @@
     }
 
     td.readonly {
-      background: #f8fafc;
-      color: #111827;
+      background: #ecf8f0;
+      color: #14532d;
       font-weight: 600;
     }
 
@@ -160,21 +163,21 @@
       margin-top: 14px;
       position: sticky;
       bottom: 0;
-      background: #fff;
+      background: #f5fbf7;
       z-index: 5;
-      border-top: 2px solid #e5e7eb;
+      border-top: 2px solid #c8e6d1;
     }
 
     .total-box {
-      background: #eef6ff;
-      border: 1px solid #bfdbfe;
+      background: #e6faf0;
+      border: 1px solid #86efac;
       border-radius: 10px;
       padding: 12px;
     }
 
     .total-box .label {
       font-size: 13px;
-      color: #4b5563;
+      color: #3f5d4a;
       margin-bottom: 4px;
     }
 
@@ -185,7 +188,7 @@
 
     .hint {
       font-size: 13px;
-      color: #6b7280;
+      color: #4a6b58;
       margin-top: 8px;
       line-height: 1.5;
     }
@@ -298,11 +301,11 @@
     }
 
     .orders-block-table tbody tr:hover {
-      background: #f1f5f9;
+      background: #daf5e4;
     }
 
     #ordersTable.orders-block-table tbody tr:hover td {
-      background: #f1f5f9;
+      background: #daf5e4;
     }
 
     #ordersTable input.cell-validate-hi,
@@ -347,10 +350,10 @@
     }
 
     #orderReportBox {
-      border: 1px solid #e5e7eb;
+      border: 1px solid #c5e4cf;
       border-radius: 12px;
       padding: 16px;
-      background: #ffffff;
+      background: #f5fbf7;
     }
 
     #orderReportBox table {
@@ -360,7 +363,7 @@
     }
 
     #orderReportBox th, #orderReportBox td {
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid #d1f0db;
       padding: 8px;
       text-align: right;
     }
@@ -922,33 +925,167 @@
       }
     }
 
-    function apply1cParts(parts) {
-      if (parts.length < 4) return;
-      if (is1cCsvHeaderRow(parts)) return;
+    function is1cSkippedServiceRow(orderRaw) {
+      const t = String(orderRaw == null ? '' : orderRaw).trim();
+      if (!t) return true;
+      const u = t
+        .toLowerCase()
+        .replace(/\u0451/g, '\u0435');
+      if (u === 'итого') return true;
+      if (u === 'счет' || u === 'счёт') return true;
+      if (u === 'ооо') return true;
+      if (u.includes('номенклатурные группы')) return true;
+      if (u.includes('оборот')) return true;
+      return false;
+    }
 
-      const orderName = String(parts[0] == null ? '' : parts[0]).trim();
-      if (!orderName) return;
+    function importSetVal(existingRow, selector, value) {
+      const el = existingRow.querySelector(selector);
+      console.log('SET', selector, 'found=', !!el, 'value=', value);
+      if (el && value !== undefined && value !== null && value !== '') {
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
 
-      const salaryStr = parts.length > 4 ? parts[4] : undefined;
+    function logImportRowInputs(row, tag) {
+      if (!row) {
+        console.log(tag, 'row=null, inputs skip');
+        return;
+      }
+      console.log(tag, {
+        'materials': !!row.querySelector('.materials input, input.materials'),
+        'processing': !!row.querySelector('.processing input, input.processing'),
+        'other': !!row.querySelector(
+          '.other input, input.other, input.other-direct'
+        ),
+        'salary': !!row.querySelector('.salary input, input.salary'),
+        'wip-start': !!row.querySelector('.wip-start input, input.wip-start')
+      });
+    }
 
-      let row = findRowByOrderName(orderName);
-      if (row) {
-        apply1cExpenseMerge(row, parts[1], parts[2], parts[3], salaryStr);
+    function apply1cExpenseFieldsToRow(targetRow, materials, processing, other, salary, wipStart) {
+      if (!targetRow) return;
+
+      importSetVal(
+        targetRow,
+        '.materials input, input.materials',
+        materials
+      );
+      importSetVal(
+        targetRow,
+        '.processing input, input.processing',
+        processing
+      );
+      importSetVal(
+        targetRow,
+        '.other input, input.other, input.other-direct',
+        other
+      );
+      importSetVal(targetRow, '.salary input, input.salary', salary);
+
+      const wipEl = targetRow.querySelector(
+        '.wip-start input, input.wip-start'
+      );
+      if (
+        wipEl &&
+        (!wipEl.value ||
+          Number(String(wipEl.value).replace(/\s/g, '').replace(',', '.')) ===
+            0) &&
+        wipStart !== undefined &&
+        wipStart !== null &&
+        String(wipStart).trim() !== ''
+      ) {
+        console.log(
+          'SET wip-start found=',
+          !!wipEl,
+          'value=',
+          wipStart,
+          '(site was empty/0)'
+        );
+        wipEl.value = String(wipStart);
+        wipEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+
+    function apply1cParts(parts, sourceExcelRow) {
+      const p = parts.slice();
+      while (p.length < 4) p.push('');
+      while (p.length < 6) p.push('');
+
+      if (is1cCsvHeaderRow(p)) return;
+
+      const orderRaw = String(p[0] == null ? '' : p[0]).trim();
+      if (is1cSkippedServiceRow(orderRaw)) return;
+
+      const orderNorm = normalizeOrder(orderRaw);
+      const materials =
+        p[1] !== undefined && p[1] !== null ? String(p[1]).trim() : '';
+      const processing =
+        p[2] !== undefined && p[2] !== null ? String(p[2]).trim() : '';
+      const other =
+        p[3] !== undefined && p[3] !== null ? String(p[3]).trim() : '';
+      const salary =
+        p[4] !== undefined && p[4] !== null ? String(p[4]).trim() : '';
+      const wipStart =
+        p[5] !== undefined && p[5] !== null ? String(p[5]).trim() : '';
+
+      console.log(
+        '[1C import] исходная строка',
+        sourceExcelRow != null ? sourceExcelRow : p
+      );
+      console.log('PARSED EXCEL ROW', sourceExcelRow != null ? sourceExcelRow : p);
+      console.log('[1C import] orderRaw=', orderRaw, 'orderNorm=', orderNorm);
+      console.log('[1C import] расходы из файла', {
+        materials,
+        processing,
+        other,
+        salary,
+        wipStart
+      });
+
+      let existingRow = findRowByOrderName(orderRaw);
+      console.log('[1C import] existingRow найден=', !!existingRow);
+
+      if (existingRow) {
+        logImportRowInputs(existingRow, '[1C import] inputs в строке');
+      }
+
+      console.log('IMPORT ROW', {
+        orderRaw,
+        orderNorm,
+        materials,
+        processing,
+        other,
+        salary,
+        wipStart,
+        foundExisting: !!existingRow
+      });
+
+      if (existingRow) {
+        apply1cExpenseFieldsToRow(
+          existingRow,
+          materials,
+          processing,
+          other,
+          salary,
+          wipStart
+        );
         return;
       }
 
-      row = ensure1cExpenseRowForOrder(orderName);
-      if (!row) return;
-
-      const setNum = (sel, raw) => {
-        const el = row.querySelector(sel);
-        el.value = String(num(raw));
-        initTableNumDisplay(el);
-      };
-      setNum('.materials', parts[1]);
-      setNum('.processing', parts[2]);
-      setNum('.other-direct', parts[3]);
-      if (parts.length > 4) setNum('.salary', parts[4]);
+      addOrderRow({ order: orderRaw, shipment: 0 });
+      const newRow = findRowByOrderName(orderRaw);
+      console.log('NEW ROW FOUND', !!newRow);
+      if (newRow) logImportRowInputs(newRow, '[1C import] inputs в новой строке');
+      apply1cExpenseFieldsToRow(
+        newRow,
+        materials,
+        processing,
+        other,
+        salary,
+        wipStart
+      );
     }
 
     function loadFrom1cCsv(text) {
@@ -1027,9 +1164,13 @@
 
       const tr = ensure1cExpenseRowForOrder(orderName);
       if (!tr) return;
-      const mel = tr.querySelector('.materials');
+      const mel =
+        tr.querySelector('.materials input, input.materials') ||
+        tr.querySelector('.materials');
+      if (!mel) return;
       mel.value = String(num(mel.value) + amount);
       initTableNumDisplay(mel);
+      mel.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function loadFrom1cRows(rowArrays) {
@@ -1047,13 +1188,17 @@
           materialRows.push(parts);
         } else {
           while (parts.length < 4) parts.push('');
-          fallbackRows.push(parts);
+          fallbackRows.push({ raw: rowArrays[i], parts: parts.slice() });
         }
       }
 
       dogovorRows.forEach(apply1cDogovorRow);
       materialRows.forEach(apply1cMaterialsWriteoffRow);
-      fallbackRows.forEach(apply1cParts);
+      fallbackRows.forEach(entry => {
+        apply1cParts(entry.parts, entry.raw);
+      });
+
+      calculateAll();
     }
 
     function clearOrderRowValidation(row) {

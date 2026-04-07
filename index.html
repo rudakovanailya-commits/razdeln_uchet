@@ -1127,130 +1127,90 @@
       return false;
     }
 
-    function isNumericAmountCellFor1c(str) {
-      const t = String(str == null ? '' : str)
-        .replace(/\u00a0/g, ' ')
-        .trim()
-        .replace(/\s/g, '')
-        .replace(',', '.');
-      if (t === '' || t === '.' || t === '-' || t === '-.') return false;
-      return /^-?\d+(\.\d+)?$/.test(t);
-    }
-
-    function sumAmountCellsIn1cRow(parts, contractColumnIndex) {
-      let sum = 0;
-      for (let i = 0; i < parts.length; i++) {
-        if (i === contractColumnIndex) continue;
-        const raw = parts[i];
-        if (raw == null || String(raw).trim() === '') continue;
-        if (/договор\s*№/i.test(String(raw))) continue;
-        if (isNumericAmountCellFor1c(raw)) {
-          sum += num(raw);
-        }
-      }
-      return sum;
-    }
-
     const SEL_1C_WIP = '.wip-start input, input.wip-start';
     const SEL_1C_MAT = '.materials input, input.materials';
     const SEL_1C_PROC = '.processing input, input.processing';
     const SEL_1C_OTHER = '.other input, input.other-direct';
 
-    function addTo1cField(tr, selectorCsv, delta, type, orderForLog) {
-      if (!tr) return;
-      const value = num(delta);
-      if (value === 0) return;
-      const el =
-        tr.querySelector(selectorCsv) ||
-        tr.querySelector(selectorCsv.split(',')[0].trim());
+    function build1cInitialFieldGuard() {
+      const guard = new Set();
+      getRows().forEach(tr => {
+        const on = (tr.querySelector('.order-name')?.value || '').trim();
+        if (!on) return;
+        const ok = normalizeOrder(on) || on;
+        function mark(tag, selCsv) {
+          for (const sel of selCsv.split(',').map(s => s.trim())) {
+            const el = tr.querySelector(sel);
+            if (el && num(el.value) !== 0) {
+              guard.add(ok + '|' + tag);
+              break;
+            }
+          }
+        }
+        mark('wip', SEL_1C_WIP);
+        mark('mat', SEL_1C_MAT);
+        mark('proc', SEL_1C_PROC);
+        mark('oth', SEL_1C_OTHER);
+      });
+      return guard;
+    }
+
+    function setInputValue(rowEl, selector, value, fieldTag, orderKey, initialGuard) {
+      if (initialGuard.has(orderKey + '|' + fieldTag)) return;
+      let el = null;
+      for (const sel of String(selector)
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)) {
+        el = rowEl.querySelector(sel);
+        if (el) break;
+      }
       if (!el) return;
-      el.value = String(num(el.value) + value);
+      const add = num(value);
+      if (add === 0) return;
+      el.value = String(num(el.value) + add);
       initTableNumDisplay(el);
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      console.log('TYPE:', type, 'ORDER:', orderForLog, 'VALUE:', value);
     }
 
     function process1cExcelRowDistribution(rowArrays) {
+      const initialGuard = build1cInitialFieldGuard();
       let currentOrder = null;
 
       for (let i = 0; i < rowArrays.length; i++) {
-        const parts = normalize1cSheetRow(rowArrays[i]);
+        const row = rowArrays[i];
+        console.log('ROW:', row);
+        const parts = normalize1cSheetRow(row);
         if (!parts.some(p => String(p).trim())) continue;
         if (is1cExcelParserSkipRow(parts)) continue;
 
-        const rowTextRaw = parts.join(' ');
-        const rowText = rowTextRaw
-          .toLowerCase()
-          .replace(/\u0451/g, '\u0435');
+        while (parts.length < 5) parts.push('');
 
-        let contractCol = -1;
-        let contractStr = '';
-        for (let j = 0; j < parts.length; j++) {
-          const s = String(parts[j] == null ? '' : parts[j]).trim();
-          if (/договор\s*№/i.test(s)) {
-            contractStr = s;
-            contractCol = j;
-            break;
-          }
-        }
+        const order = String(parts[0] ?? '').trim();
+        const wip = parts[1];
+        const materials = parts[2];
+        const processing = parts[3];
+        const other = parts[4];
 
-        const rowSum = sumAmountCellsIn1cRow(parts, contractCol);
-
-        if (contractStr) {
-          currentOrder = contractStr;
+        if (/договор\s*№/i.test(order)) {
+          currentOrder = order;
           ensure1cExpenseRowForOrder(currentOrder);
-          if (rowSum === 0) {
-            console.log('TYPE:', 'contract', 'ORDER:', currentOrder, 'VALUE:', 0);
-          }
+        } else if (/для ремонта/i.test(order)) {
+          currentOrder = order;
+          ensure1cExpenseRowForOrder(currentOrder);
         }
 
-        const isWipRow =
-          safeIncludes(rowText, 'для ремонта') ||
-          safeIncludes(rowText, 'старых двигателей');
-
-        const orderLabelFromRow = parts
-          .filter(p => {
-            const t = String(p == null ? '' : p).trim();
-            return t && !isNumericAmountCellFor1c(t);
-          })
-          .join(' ')
-          .trim();
-
-        if (isWipRow && rowSum !== 0) {
-          if (!currentOrder) {
-            currentOrder = orderLabelFromRow || rowTextRaw.trim() || 'Без названия';
-            ensure1cExpenseRowForOrder(currentOrder);
-          }
-          const trW = findRowByOrderName(currentOrder);
-          if (trW) {
-            addTo1cField(trW, SEL_1C_WIP, rowSum, 'wip', currentOrder);
-          }
-          continue;
-        }
-
-        if (rowSum === 0) continue;
         if (!currentOrder) continue;
 
         const tr = findRowByOrderName(currentOrder);
         if (!tr) continue;
 
-        let type = 'materials';
-        let sel = SEL_1C_MAT;
-        if (
-          safeIncludes(rowText, 'работ') ||
-          safeIncludes(rowText, 'услуг')
-        ) {
-          type = 'processing';
-          sel = SEL_1C_PROC;
-        } else if (
-          safeIncludes(rowText, 'прочее') ||
-          safeIncludes(rowText, 'проч')
-        ) {
-          type = 'other';
-          sel = SEL_1C_OTHER;
-        }
+        const orderKey = normalizeOrder(currentOrder) || currentOrder;
 
-        addTo1cField(tr, sel, rowSum, type, currentOrder);
+        setInputValue(tr, SEL_1C_WIP, wip, 'wip', orderKey, initialGuard);
+        setInputValue(tr, SEL_1C_MAT, materials, 'mat', orderKey, initialGuard);
+        setInputValue(tr, SEL_1C_PROC, processing, 'proc', orderKey, initialGuard);
+        setInputValue(tr, SEL_1C_OTHER, other, 'oth', orderKey, initialGuard);
       }
     }
 

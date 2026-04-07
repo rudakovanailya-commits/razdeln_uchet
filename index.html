@@ -576,6 +576,53 @@
       return isNaN(n) ? 0 : n;
     }
 
+    function formatNumber(value) {
+      const s = String(value == null ? '' : value)
+        .replace(/\s/g, '')
+        .replace(/,/g, '.');
+      if (s === '' || s === '.') return '';
+      const n = Number(s);
+      if (!Number.isFinite(n)) return '';
+      if (n === 0) return '0';
+      return n.toLocaleString('ru-RU');
+    }
+
+    function isSeparatedMoneyTableInput(el) {
+      return (
+        el &&
+        el.matches &&
+        el.matches(
+          'input.shipment-vat, input.wip-start, input.materials, input.processing, input.other-direct, input.salary'
+        )
+      );
+    }
+
+    function separatedMoneyToAscii(displayValue) {
+      let s = String(displayValue == null ? '' : displayValue)
+        .replace(/\s/g, '')
+        .replace(/,/g, '.');
+      s = s.replace(/[^\d.]/g, '');
+      const d = s.indexOf('.');
+      if (d !== -1) {
+        s = s.slice(0, d + 1) + s.slice(d + 1).replace(/\./g, '');
+      }
+      return s;
+    }
+
+    function rawAsciiToRuDisplay(ascii) {
+      if (ascii === '' || ascii === '.') return '';
+      const parts = ascii.split('.');
+      if (parts.length > 2) return ascii;
+      const intRaw = parts[0] === undefined ? '' : parts[0];
+      const decRaw = parts.length > 1 ? parts[1] : null;
+      let intDigits = intRaw.replace(/\D/g, '');
+      if (intDigits === '') intDigits = '0';
+      const intNum = parseInt(intDigits, 10);
+      const intStr = intNum.toLocaleString('ru-RU');
+      if (decRaw === null) return intStr;
+      return intStr + ',' + decRaw.replace(/\D/g, '');
+    }
+
     function safeIncludes(value, text) {
       console.log('CHECK CELL:', value);
       if (value == null) return false;
@@ -605,9 +652,19 @@
     }
 
     function sanitizeTableNumInput(el) {
+      if (isSeparatedMoneyTableInput(el)) {
+        const s = separatedMoneyToAscii(el.value);
+        el.value = rawAsciiToRuDisplay(s);
+        if (typeof el.setSelectionRange === 'function') {
+          const len = el.value.length;
+          el.setSelectionRange(len, len);
+        }
+        return;
+      }
+
       const start = el.selectionStart;
       const end = el.selectionEnd;
-      let s = el.value.replace(/\s/g, '').replace(',', '.');
+      let s = el.value.replace(/\s/g, '').replace(/,/g, '.');
       s = s.replace(/[^\d.]/g, '');
       const d = s.indexOf('.');
       if (d !== -1) {
@@ -623,13 +680,22 @@
     }
 
     function initTableNumDisplay(el) {
-      const raw = el.value.replace(/\s/g, '').replace(',', '.');
+      const raw = el.value.replace(/\s/g, '').replace(/,/g, '.');
       if (isManualWriteoffInput(el)) {
         if (raw === '' || raw === '.') {
           el.value = '';
           return;
         }
         el.value = formatTableNumWithSpaces(el.value);
+        return;
+      }
+      if (isSeparatedMoneyTableInput(el)) {
+        const s = separatedMoneyToAscii(el.value);
+        if (s === '' || s === '.') {
+          el.value = '0';
+          return;
+        }
+        el.value = formatNumber(s);
         return;
       }
       if (raw === '' || raw === '.') {
@@ -641,20 +707,40 @@
 
     function onTableNumFocus(el) {
       if (isManualWriteoffInput(el)) return;
-      const r = el.value.replace(/\s/g, '').replace(',', '.');
+      if (isSeparatedMoneyTableInput(el)) {
+        const s = separatedMoneyToAscii(el.value);
+        if (s === '' || s === '.') return;
+        if (s.endsWith('.')) {
+          el.value = s;
+          return;
+        }
+        if (num(s) === 0) el.value = '';
+        else el.value = s;
+        return;
+      }
+      const r = el.value.replace(/\s/g, '').replace(/,/g, '.');
       if (r === '' || r === '.') return;
       if (r.endsWith('.')) return;
       if (num(el.value) === 0) el.value = '';
     }
 
     function onTableNumBlur(el) {
-      const raw = el.value.replace(/\s/g, '').replace(',', '.');
+      const raw = el.value.replace(/\s/g, '').replace(/,/g, '.');
       if (isManualWriteoffInput(el)) {
         if (raw === '' || raw === '.') {
           el.value = '';
           return;
         }
         el.value = formatTableNumWithSpaces(el.value);
+        return;
+      }
+      if (isSeparatedMoneyTableInput(el)) {
+        const s = separatedMoneyToAscii(el.value);
+        if (s === '' || s === '.') {
+          el.value = '0';
+          return;
+        }
+        el.value = formatNumber(s);
         return;
       }
       if (raw === '' || raw === '.') {

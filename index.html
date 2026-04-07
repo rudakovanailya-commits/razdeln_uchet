@@ -916,7 +916,7 @@
       return addOrderRow({ order: key, shipment: 0 });
     }
 
-    function apply1cExpenseMerge(row, materialsStr, processingStr, otherStr, salaryStr) {
+    function apply1cExpenseMerge(row, materialsStr, processingStr, otherStr) {
       const addNum = (sel, raw) => {
         const el = row.querySelector(sel);
         const next = num(el.value) + num(raw);
@@ -926,9 +926,6 @@
       addNum('.materials', materialsStr);
       addNum('.processing', processingStr);
       addNum('.other-direct', otherStr);
-      if (salaryStr !== undefined && salaryStr !== null && String(salaryStr).trim() !== '') {
-        addNum('.salary', salaryStr);
-      }
     }
 
     function is1cSkippedServiceRow(orderRaw) {
@@ -970,47 +967,46 @@
       });
     }
 
-    function apply1cExpenseFieldsToRow(targetRow, materials, processing, other, salary, wipStart) {
+    function apply1cExpenseFieldsToRow(
+      targetRow,
+      materials,
+      processing,
+      other,
+      _salary,
+      wipStart
+    ) {
       if (!targetRow) return;
 
-      importSetVal(
+      setInputValue(
         targetRow,
         '.materials input, input.materials',
-        materials
+        materials,
+        'mat'
       );
-      importSetVal(
+      setInputValue(
         targetRow,
         '.processing input, input.processing',
-        processing
+        processing,
+        'proc'
       );
-      importSetVal(
+      setInputValue(
         targetRow,
         '.other input, input.other, input.other-direct',
-        other
+        other,
+        'oth'
       );
-      importSetVal(targetRow, '.salary input, input.salary', salary);
 
-      const wipEl = targetRow.querySelector(
-        '.wip-start input, input.wip-start'
-      );
       if (
-        wipEl &&
-        (!wipEl.value ||
-          Number(String(wipEl.value).replace(/\s/g, '').replace(',', '.')) ===
-            0) &&
         wipStart !== undefined &&
         wipStart !== null &&
         String(wipStart).trim() !== ''
       ) {
-        console.log(
-          'SET wip-start found=',
-          !!wipEl,
-          'value=',
+        setInputValue(
+          targetRow,
+          '.wip-start input, input.wip-start',
           wipStart,
-          '(site was empty/0)'
+          'wip'
         );
-        wipEl.value = String(wipStart);
-        wipEl.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }
 
@@ -1132,31 +1128,7 @@
     const SEL_1C_PROC = '.processing input, input.processing';
     const SEL_1C_OTHER = '.other input, input.other-direct';
 
-    function build1cInitialFieldGuard() {
-      const guard = new Set();
-      getRows().forEach(tr => {
-        const on = (tr.querySelector('.order-name')?.value || '').trim();
-        if (!on) return;
-        const ok = normalizeOrder(on) || on;
-        function mark(tag, selCsv) {
-          for (const sel of selCsv.split(',').map(s => s.trim())) {
-            const el = tr.querySelector(sel);
-            if (el && num(el.value) !== 0) {
-              guard.add(ok + '|' + tag);
-              break;
-            }
-          }
-        }
-        mark('wip', SEL_1C_WIP);
-        mark('mat', SEL_1C_MAT);
-        mark('proc', SEL_1C_PROC);
-        mark('oth', SEL_1C_OTHER);
-      });
-      return guard;
-    }
-
-    function setInputValue(rowEl, selector, value, fieldTag, orderKey, initialGuard) {
-      if (initialGuard.has(orderKey + '|' + fieldTag)) return;
+    function setInputValue(rowEl, selector, value, fieldTag) {
       let el = null;
       for (const sel of String(selector)
         .split(',')
@@ -1166,15 +1138,44 @@
         if (el) break;
       }
       if (!el) return;
-      const add = num(value);
-      if (add === 0) return;
-      el.value = String(num(el.value) + add);
-      initTableNumDisplay(el);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const current = Number(el.value || 0);
+      const incoming = Number(
+        String(value == null ? '' : value)
+          .replace(/\s/g, '')
+          .replace(/,/g, '.') || 0
+      );
+      const currentN = Number.isFinite(current) ? current : num(el.value);
+      const incomingN = Number.isFinite(incoming) ? incoming : num(value);
+
+      console.log(
+        'FIELD:',
+        selector,
+        'CURRENT:',
+        currentN,
+        'NEW:',
+        incomingN
+      );
+
+      if (fieldTag === 'wip') {
+        if (incomingN === 0) return;
+        el.value = String(currentN + incomingN);
+        initTableNumDisplay(el);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (!currentN) {
+        if (incomingN === 0) return;
+        el.value = String(incomingN);
+        initTableNumDisplay(el);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      } else {
+        console.log('SKIP (manual value exists):', currentN);
+      }
     }
 
     function process1cExcelRowDistribution(rowArrays) {
-      const initialGuard = build1cInitialFieldGuard();
       let currentOrder = null;
 
       for (let i = 0; i < rowArrays.length; i++) {
@@ -1205,12 +1206,10 @@
         const tr = findRowByOrderName(currentOrder);
         if (!tr) continue;
 
-        const orderKey = normalizeOrder(currentOrder) || currentOrder;
-
-        setInputValue(tr, SEL_1C_WIP, wip, 'wip', orderKey, initialGuard);
-        setInputValue(tr, SEL_1C_MAT, materials, 'mat', orderKey, initialGuard);
-        setInputValue(tr, SEL_1C_PROC, processing, 'proc', orderKey, initialGuard);
-        setInputValue(tr, SEL_1C_OTHER, other, 'oth', orderKey, initialGuard);
+        setInputValue(tr, SEL_1C_WIP, wip, 'wip');
+        setInputValue(tr, SEL_1C_MAT, materials, 'mat');
+        setInputValue(tr, SEL_1C_PROC, processing, 'proc');
+        setInputValue(tr, SEL_1C_OTHER, other, 'oth');
       }
     }
 

@@ -1151,14 +1151,37 @@
       return sum;
     }
 
-    function parse1cExcelLooseRows(rowArrays) {
-      const records = [];
+    const SEL_1C_WIP = '.wip-start input, input.wip-start';
+    const SEL_1C_MAT = '.materials input, input.materials';
+    const SEL_1C_PROC = '.processing input, input.processing';
+    const SEL_1C_OTHER = '.other input, input.other-direct';
+
+    function addTo1cField(tr, selectorCsv, delta, type, orderForLog) {
+      if (!tr) return;
+      const value = num(delta);
+      if (value === 0) return;
+      const el =
+        tr.querySelector(selectorCsv) ||
+        tr.querySelector(selectorCsv.split(',')[0].trim());
+      if (!el) return;
+      el.value = String(num(el.value) + value);
+      initTableNumDisplay(el);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      console.log('TYPE:', type, 'ORDER:', orderForLog, 'VALUE:', value);
+    }
+
+    function process1cExcelRowDistribution(rowArrays) {
       let currentOrder = null;
 
       for (let i = 0; i < rowArrays.length; i++) {
         const parts = normalize1cSheetRow(rowArrays[i]);
         if (!parts.some(p => String(p).trim())) continue;
         if (is1cExcelParserSkipRow(parts)) continue;
+
+        const rowTextRaw = parts.join(' ');
+        const rowText = rowTextRaw
+          .toLowerCase()
+          .replace(/\u0451/g, '\u0435');
 
         let contractCol = -1;
         let contractStr = '';
@@ -1170,18 +1193,65 @@
             break;
           }
         }
-        if (contractStr) {
-          currentOrder = contractStr;
-        }
 
         const rowSum = sumAmountCellsIn1cRow(parts, contractCol);
-        if (rowSum !== 0 && currentOrder) {
-          console.log('PARSED ORDER', currentOrder, 'SUM', rowSum);
-          records.push({ order: currentOrder, materials: rowSum });
-        }
-      }
 
-      return records;
+        if (contractStr) {
+          currentOrder = contractStr;
+          ensure1cExpenseRowForOrder(currentOrder);
+          if (rowSum === 0) {
+            console.log('TYPE:', 'contract', 'ORDER:', currentOrder, 'VALUE:', 0);
+          }
+        }
+
+        const isWipRow =
+          safeIncludes(rowText, 'для ремонта') ||
+          safeIncludes(rowText, 'старых двигателей');
+
+        const orderLabelFromRow = parts
+          .filter(p => {
+            const t = String(p == null ? '' : p).trim();
+            return t && !isNumericAmountCellFor1c(t);
+          })
+          .join(' ')
+          .trim();
+
+        if (isWipRow && rowSum !== 0) {
+          if (!currentOrder) {
+            currentOrder = orderLabelFromRow || rowTextRaw.trim() || 'Без названия';
+            ensure1cExpenseRowForOrder(currentOrder);
+          }
+          const trW = findRowByOrderName(currentOrder);
+          if (trW) {
+            addTo1cField(trW, SEL_1C_WIP, rowSum, 'wip', currentOrder);
+          }
+          continue;
+        }
+
+        if (rowSum === 0) continue;
+        if (!currentOrder) continue;
+
+        const tr = findRowByOrderName(currentOrder);
+        if (!tr) continue;
+
+        let type = 'materials';
+        let sel = SEL_1C_MAT;
+        if (
+          safeIncludes(rowText, 'работ') ||
+          safeIncludes(rowText, 'услуг')
+        ) {
+          type = 'processing';
+          sel = SEL_1C_PROC;
+        } else if (
+          safeIncludes(rowText, 'прочее') ||
+          safeIncludes(rowText, 'проч')
+        ) {
+          type = 'other';
+          sel = SEL_1C_OTHER;
+        }
+
+        addTo1cField(tr, sel, rowSum, type, currentOrder);
+      }
     }
 
     function is1cDogovorOrderRow(parts) {
@@ -1261,18 +1331,7 @@
     }
 
     function loadFrom1cRows(rowArrays) {
-      const records = parse1cExcelLooseRows(rowArrays);
-      records.forEach(rec => {
-        const parts = [
-          rec.order,
-          String(rec.materials),
-          '',
-          '',
-          '',
-          ''
-        ];
-        apply1cParts(parts, [rec.order, rec.materials]);
-      });
+      process1cExcelRowDistribution(rowArrays);
       calculateAll();
     }
 

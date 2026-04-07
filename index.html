@@ -99,17 +99,44 @@
       table-layout: auto;
     }
 
-    #ordersTable th:first-child,
-    #ordersTable td:first-child {
+    #ordersTable thead th:first-child {
       position: sticky;
       left: 0;
+      top: 0;
+      z-index: 4;
       background: #f5fbf7;
-      z-index: 2;
-      box-shadow: 2px 0 4px rgba(20, 83, 45, 0.08);
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
     }
 
-    #ordersTable th:first-child {
+    #ordersTable tbody td:first-child,
+    #ordersTable tfoot td:first-child {
+      position: sticky;
+      left: 0;
       z-index: 3;
+      background: #f5fbf7;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    }
+
+    #ordersTable thead th:nth-child(2) {
+      position: sticky;
+      left: 220px;
+      top: 0;
+      z-index: 3;
+      background: #e0f2e8;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    }
+
+    #ordersTable tbody td:nth-child(2),
+    #ordersTable tfoot td:nth-child(2) {
+      position: sticky;
+      left: 220px;
+      z-index: 2;
+      background: #f5fbf7;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    }
+
+    #ordersTable tfoot td:nth-child(2) {
+      background: #e8f5ec;
     }
 
     #ordersTable tfoot td {
@@ -212,8 +239,12 @@
 
     /* Мин. ширина ячеек — таблица растягивается, поля реально становятся шире */
     #ordersTable thead th:nth-child(1),
-    #ordersTable tbody td:nth-child(1) {
-      min-width: 200px;
+    #ordersTable tbody td:nth-child(1),
+    #ordersTable tfoot td:first-child {
+      min-width: 220px;
+      width: 220px;
+      max-width: 220px;
+      box-sizing: border-box;
     }
 
     #ordersTable thead th:nth-child(2),

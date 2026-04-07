@@ -1103,6 +1103,81 @@
       return row.map(c => (c == null ? '' : String(c)).trim());
     }
 
+    function is1cExcelParserSkipRow(parts) {
+      const cells = parts.map(p =>
+        String(p == null ? '' : p)
+          .trim()
+          .toLowerCase()
+          .replace(/\u0451/g, '\u0435')
+      );
+      if (!cells.some(c => c)) return true;
+      for (const c of cells) {
+        if (c === 'итого') return true;
+        if (c === 'счет' || c === 'счёт') return true;
+        if (c === 'ооо') return true;
+        if (c.includes('оборот')) return true;
+      }
+      if (cells.join(' ').includes('номенклатурные группы')) return true;
+      return false;
+    }
+
+    function isNumericAmountCellFor1c(str) {
+      const t = String(str == null ? '' : str)
+        .replace(/\u00a0/g, ' ')
+        .trim()
+        .replace(/\s/g, '')
+        .replace(',', '.');
+      if (t === '' || t === '.' || t === '-' || t === '-.') return false;
+      return /^-?\d+(\.\d+)?$/.test(t);
+    }
+
+    function sumAmountCellsIn1cRow(parts, contractColumnIndex) {
+      let sum = 0;
+      for (let i = 0; i < parts.length; i++) {
+        if (i === contractColumnIndex) continue;
+        const raw = parts[i];
+        if (raw == null || String(raw).trim() === '') continue;
+        if (/договор\s*№/i.test(String(raw))) continue;
+        if (isNumericAmountCellFor1c(raw)) {
+          sum += num(raw);
+        }
+      }
+      return sum;
+    }
+
+    function parse1cExcelLooseRows(rowArrays) {
+      const records = [];
+      let currentOrder = null;
+
+      for (let i = 0; i < rowArrays.length; i++) {
+        const parts = normalize1cSheetRow(rowArrays[i]);
+        if (!parts.some(p => String(p).trim())) continue;
+        if (is1cExcelParserSkipRow(parts)) continue;
+
+        let contractCol = -1;
+        let contractStr = '';
+        for (let j = 0; j < parts.length; j++) {
+          const s = String(parts[j] == null ? '' : parts[j]).trim();
+          if (/договор\s*№/i.test(s)) {
+            contractStr = s;
+            contractCol = j;
+            break;
+          }
+        }
+        if (contractStr) {
+          currentOrder = contractStr;
+        }
+
+        const rowSum = sumAmountCellsIn1cRow(parts, contractCol);
+        if (rowSum !== 0 && currentOrder) {
+          console.log('PARSED ORDER', currentOrder, 'SUM', rowSum);
+          records.push({ order: currentOrder, materials: rowSum });
+        }
+      }
+
+      return records;
+    }
+
     function is1cDogovorOrderRow(parts) {
       return parts.length > 0 && /^договор/i.test(parts[0]);
     }
@@ -1174,30 +1249,18 @@
     }
 
     function loadFrom1cRows(rowArrays) {
-      const dogovorRows = [];
-      const materialRows = [];
-      const fallbackRows = [];
-
-      for (let i = 0; i < rowArrays.length; i++) {
-        const parts = normalize1cSheetRow(rowArrays[i]);
-        if (!parts.length) continue;
-
-        if (is1cDogovorOrderRow(parts)) {
-          dogovorRows.push(parts);
-        } else if (is1cMaterialsWriteoffRow(parts)) {
-          materialRows.push(parts);
-        } else {
-          while (parts.length < 4) parts.push('');
-          fallbackRows.push({ raw: rowArrays[i], parts: parts.slice() });
-        }
-      }
-
-      dogovorRows.forEach(apply1cDogovorRow);
-      materialRows.forEach(apply1cMaterialsWriteoffRow);
-      fallbackRows.forEach(entry => {
-        apply1cParts(entry.parts, entry.raw);
+      const records = parse1cExcelLooseRows(rowArrays);
+      records.forEach(rec => {
+        const parts = [
+          rec.order,
+          String(rec.materials),
+          '',
+          '',
+          '',
+          ''
+        ];
+        apply1cParts(parts, [rec.order, rec.materials]);
       });
-
       calculateAll();
     }
 

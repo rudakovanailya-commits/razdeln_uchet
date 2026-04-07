@@ -1304,97 +1304,40 @@
     function checkData() {
       calculateAll();
 
-      const vatRate = num(document.getElementById('vatRate').value);
-      const totalInsurance = num(document.getElementById('totalInsurance').value);
-      const totalSick = num(document.getElementById('totalSick').value);
-      const total25 = num(document.getElementById('total25').value);
-      const total26 = num(document.getElementById('total26').value);
-      const total44 = num(document.getElementById('total44').value);
-
       const rows = getRows();
-      let totalShipmentNoVat = 0;
-      let totalSalary = 0;
-
-      rows.forEach(row => {
-        const shipmentVat = num(row.querySelector('.shipment-vat').value);
-        const salary = num(row.querySelector('.salary').value);
-        const shipmentNoVat = shipmentVat / (1 + vatRate / 100);
-        totalShipmentNoVat += shipmentNoVat;
-        totalSalary += salary;
-      });
-
       const warnings = [];
 
       rows.forEach(row => {
-        const orderName = row.querySelector('.order-name').value || 'Без названия';
-        const shipmentNoVat = num(row.querySelector('.shipment-no-vat').textContent);
-        const shipmentVat = num(row.querySelector('.shipment-vat').value);
-        const wipStart = num(row.querySelector('.wip-start').value);
-        const materials = num(row.querySelector('.materials').value);
-        const processing = num(row.querySelector('.processing').value);
-        const otherDirect = num(row.querySelector('.other-direct').value);
-        const salary = num(row.querySelector('.salary').value);
-        const profitPercent = num(row.querySelector('.profit-percent').value);
+        const orderRaw = row.querySelector('.order-name')?.value ?? '';
+        const order = String(orderRaw).trim();
 
-        const shipmentShare = totalShipmentNoVat ? shipmentNoVat / totalShipmentNoVat : 0;
-        const salaryShare = totalSalary ? salary / totalSalary : 0;
+        const shipment = num(row.querySelector('.shipment-vat')?.value);
+        const totalCosts = num(row.querySelector('.total-cost')?.textContent);
+        const wipStart = num(row.querySelector('.wip-start')?.value);
 
-        const insurance = totalInsurance * salaryShare;
-        const sick = totalSick * salaryShare;
-        const acc25 = total25 * salaryShare;
-        const acc26 = total26 * salaryShare;
-        const acc44 = total44 * shipmentShare;
+        const label = order || '—';
 
-        const totalCost =
-          wipStart +
-          materials +
-          processing +
-          otherDirect +
-          salary +
-          insurance +
-          sick +
-          acc25 +
-          acc26 +
-          acc44;
-
-        const manualInput = row.querySelector('.manual-writeoff');
-
-        let writeOffRaw;
-        if (manualInput && manualWriteoffHasValue(manualInput)) {
-          writeOffRaw = num(manualInput.value);
-        } else {
-          writeOffRaw = shipmentNoVat * (profitPercent / 100);
+        if (shipment > 0 && totalCosts === 0) {
+          warnings.push(`⚠ ${label} — есть отгрузка, но нет затрат`);
         }
 
-        let writeOff = writeOffRaw;
-        if (writeOff > totalCost) writeOff = totalCost;
-        if (writeOff < 0) writeOff = 0;
-
-        const profitRub = shipmentNoVat - writeOff;
-        const hasShipment = shipmentNoVat > 0 || shipmentVat > 0;
-
-        if (hasShipment && writeOff === 0) {
-          warnings.push(`Заказ "${orderName}": нет списания`);
+        if (shipment === 0 && totalCosts > 0) {
+          warnings.push(`⚠ ${label} — есть затраты, но нет отгрузки`);
         }
 
-        if (writeOff > shipmentNoVat) {
-          warnings.push(`Заказ "${orderName}": списание больше отгрузки`);
+        if (wipStart > 0 && shipment === 0 && totalCosts === 0) {
+          warnings.push(`⚠ ${label} — есть НЗП без движения`);
         }
 
-        if (profitRub < 0) {
-          warnings.push(`Заказ "${orderName}": убыточный заказ`);
-        }
-
-        if (!hasShipment) {
-          warnings.push(`Заказ "${orderName}": нет отгрузки`);
+        if (!order || order === 'Заказ') {
+          warnings.push('⚠ пустой заказ — можно удалить');
         }
       });
 
-      const warningBox = document.getElementById('warningBox');
       if (warnings.length) {
-        warningBox.innerHTML = '<span class="danger">' + warnings.join('<br>') + '</span>';
+        alert(warnings.join('\n'));
       } else {
-        warningBox.textContent = 'Все проверки пройдены';
+        alert('✅ Всё выглядит нормально');
       }
     }
 

@@ -576,6 +576,12 @@
       return isNaN(n) ? 0 : n;
     }
 
+    function safeIncludes(value, text) {
+      console.log('CHECK CELL:', value);
+      if (value == null) return false;
+      return typeof value === 'string' && value.includes(text);
+    }
+
     function isManualWriteoffInput(el) {
       return el && el.classList && el.classList.contains('manual-writeoff');
     }
@@ -853,8 +859,8 @@
         (d === 'прочее' || d.startsWith('проч'));
       if (!base) return false;
       if (parts.length < 5) return true;
-      const e = (parts[4] || '').trim().toLowerCase();
-      return e === '' || e.startsWith('зп') || e.includes('зарплат');
+      const e = String(parts[4] ?? '').trim().toLowerCase();
+      return e === '' || e.startsWith('зп') || safeIncludes(e, 'зарплат');
     }
 
     function normalizeOrder(str) {
@@ -934,8 +940,8 @@
       if (u === 'итого') return true;
       if (u === 'счет' || u === 'счёт') return true;
       if (u === 'ооо') return true;
-      if (u.includes('номенклатурные группы')) return true;
-      if (u.includes('оборот')) return true;
+      if (safeIncludes(u, 'номенклатурные группы')) return true;
+      if (safeIncludes(u, 'оборот')) return true;
       return false;
     }
 
@@ -1115,9 +1121,9 @@
         if (c === 'итого') return true;
         if (c === 'счет' || c === 'счёт') return true;
         if (c === 'ооо') return true;
-        if (c.includes('оборот')) return true;
+        if (safeIncludes(c, 'оборот')) return true;
       }
-      if (cells.join(' ').includes('номенклатурные группы')) return true;
+      if (safeIncludes(cells.join(' '), 'номенклатурные группы')) return true;
       return false;
     }
 
@@ -1183,7 +1189,9 @@
     }
 
     function is1cMaterialsWriteoffRow(parts) {
-      return parts.some(p => String(p).toLowerCase().includes('списание материалов'));
+      return parts.some(p =>
+        safeIncludes(String(p).toLowerCase(), 'списание материалов')
+      );
     }
 
     function indexOfDogovorCell(parts) {
@@ -1195,7 +1203,11 @@
 
     function indexOfMaterialsWriteoffLabel(parts) {
       for (let i = 0; i < parts.length; i++) {
-        if (String(parts[i]).toLowerCase().includes('списание материалов')) return i;
+        if (
+          safeIncludes(String(parts[i]).toLowerCase(), 'списание материалов')
+        ) {
+          return i;
+        }
       }
       return -1;
     }

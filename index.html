@@ -2093,19 +2093,9 @@
       'https://script.google.com/macros/s/AKfycbwsgT3sbIvxkhjmYNqVPfMpD_BdwPo_fEt755v8a_aB842AvIqqmvaV6p48tvoi_0SYAA/exec';
 
     function getCloudPeriodReportFetchUrl() {
-      return CLOUD_SAVE_URL;
-    }
-
-    function normalizePeriodFromSheet(period) {
-      if (period == null || period === '') return '';
-      if (typeof period === 'string') {
-        const t = period.trim();
-        if (/^\d{4}-\d{2}$/.test(t)) return t;
-        const m = t.match(/^(\d{4}-\d{2})/);
-        if (m) return m[1];
-        return normalizePeriodStr(t);
-      }
-      return normalizePeriodStr(String(period));
+      const base = CLOUD_SAVE_URL;
+      const sep = base.includes('?') ? '&' : '?';
+      return base + sep + 'action=getRows';
     }
 
     async function fetchSheetRowsForPeriodReport() {
@@ -2119,7 +2109,7 @@
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error('Ответ не JSON. Проверьте doGet в Apps Script.');
+        throw new Error('Ответ не JSON. Добавьте в Apps Script doGet с action=getRows.');
       }
       if (Array.isArray(data)) return data;
       if (data && Array.isArray(data.rows)) return data.rows;
@@ -2161,7 +2151,7 @@
       try {
         const rows = await fetchSheetRowsForPeriodReport();
         const filtered = rows.filter(r => {
-          const p = normalizePeriodFromSheet(r && r.period != null ? r.period : '');
+          const p = normalizePeriodStr(r && r.period != null ? r.period : '');
           return p && p >= from && p <= to;
         });
 
@@ -2179,8 +2169,7 @@
               processing: 0,
               salary: 0,
               profit: 0,
-              totalCost: 0,
-              writeoff: 0
+              totalCost: 0
             };
             map.set(key, a);
           }
@@ -2191,7 +2180,6 @@
           a.salary += num(r.salary);
           a.profit += num(r.profit);
           a.totalCost += num(r.totalCost);
-          a.writeoff += num(r.writeoff);
         });
 
         const list = Array.from(map.values()).sort((x, y) =>
@@ -2204,14 +2192,10 @@
           html += '<tr><td colspan="4" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
         } else {
           list.forEach(a => {
-            const sumParts =
-              a.materials + a.processing + a.salary;
             const costs =
               a.totalCost > 0
                 ? a.totalCost
-                : sumParts > 0
-                  ? sumParts
-                  : a.writeoff;
+                : a.materials + a.processing + a.salary;
             html +=
               '<tr><td>' +
               escapeHtmlForReport(a.order) +
@@ -2234,14 +2218,14 @@
               filtered.length +
               ', уникальных заказов: ' +
               list.length
-            : 'Нет строк за выбранный диапазон (проверьте лист и формат периода YYYY-MM).';
+            : 'Нет строк за выбранный диапазон (проверьте данные в таблице и doGet ?action=getRows).';
         }
       } catch (err) {
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось получить данные из Google Таблицы: ' +
             (err && err.message ? err.message : String(err)) +
-            '\n\nОжидается doGet: JSON-массив объектов { period, order, shipment, writeoff, profit } (как из листа: колонки A–E, первая строка — заголовки).'
+            '\n\nВ веб-приложении Google Apps Script нужен doGet: при action=getRows вернуть JSON-массив строк с полями period, order, shipment, materials, processing, salary, profit (и при необходимости totalCost).'
         );
       }
     }

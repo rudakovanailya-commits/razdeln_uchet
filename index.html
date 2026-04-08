@@ -2189,7 +2189,8 @@
         let html =
           '<table><thead><tr><th>Заказ</th><th>Отгрузка</th><th>Затраты</th><th>Прибыль</th></tr></thead><tbody>';
         if (!list.length) {
-          html += '<tr><td colspan="4" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
+          html +=
+            '<tr><td colspan="4" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
         } else {
           list.forEach(a => {
             const costs =

@@ -98,17 +98,22 @@
       min-width: 2400px;
       table-layout: auto;
       --orders-col-order-w: 220px;
-      --orders-col-shipment-vat-w: 140px;
+      --orders-col-shipment-vat-w: 160px;
+      --orders-sticky-pin-bg: #1e293b;
+      --orders-sticky-pin-border: #334155;
+      --orders-sticky-pin-text: #e2e8f0;
     }
 
-    /* Заказ — первый столбец (класс в разметке, не nth-child) */
+    /* Три закреплённых столбца подряд (без «дырки»): Заказ | С НДС | без НДС */
     #ordersTable thead th.orders-col-order {
       position: sticky;
       left: 0;
       top: 0;
-      z-index: 4;
-      background: #f5fbf7;
-      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+      z-index: 5;
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+      border-right: 1px solid var(--orders-sticky-pin-border);
+      box-shadow: none;
     }
 
     #ordersTable tbody td.orders-col-order,
@@ -116,33 +121,60 @@
       position: sticky;
       left: 0;
       z-index: 3;
-      background: #f5fbf7;
-      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+      border-right: 1px solid var(--orders-sticky-pin-border);
+      box-shadow: none;
     }
 
-    /* Отгрузка без НДС — заголовок th + ячейка .shipment-no-vat / tfoot */
+    #ordersTable thead th.orders-col-shipment-vat {
+      position: sticky;
+      left: var(--orders-col-order-w);
+      top: 0;
+      z-index: 4;
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+      border-right: 1px solid var(--orders-sticky-pin-border);
+      box-shadow: none;
+    }
+
+    #ordersTable tbody td.orders-col-shipment-vat,
+    #ordersTable tfoot td.orders-col-shipment-vat {
+      position: sticky;
+      left: var(--orders-col-order-w);
+      z-index: 2;
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+      border-right: 1px solid var(--orders-sticky-pin-border);
+      box-shadow: none;
+    }
+
     #ordersTable thead th.orders-col-shipment-no-vat {
       position: sticky;
-      left: calc(var(--orders-col-order-w) + var(--orders-col-shipment-vat-w));
+      left: calc(
+        var(--orders-col-order-w) + var(--orders-col-shipment-vat-w)
+      );
       top: 0;
-      z-index: 3;
+      z-index: 4;
       min-width: 120px;
-      background: #e0f2e8;
-      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+      border-right: 1px solid var(--orders-sticky-pin-border);
+      box-shadow: none;
     }
 
     #ordersTable tbody td.shipment-no-vat,
     #ordersTable tfoot td.orders-col-shipment-no-vat {
       position: sticky;
-      left: calc(var(--orders-col-order-w) + var(--orders-col-shipment-vat-w));
+      left: calc(
+        var(--orders-col-order-w) + var(--orders-col-shipment-vat-w)
+      );
       z-index: 2;
       min-width: 120px;
-      background: #ecf8f0;
-      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
-    }
-
-    #ordersTable tfoot td.orders-col-shipment-no-vat {
-      background: #e8f5ec;
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+      border-right: 1px solid var(--orders-sticky-pin-border);
+      box-shadow: none;
     }
 
     #ordersTable tfoot td {
@@ -256,9 +288,9 @@
     #ordersTable thead th.orders-col-shipment-vat,
     #ordersTable tbody td.orders-col-shipment-vat,
     #ordersTable tfoot td.orders-col-shipment-vat {
-      min-width: 140px;
-      width: 140px;
-      max-width: 140px;
+      min-width: 160px;
+      width: 160px;
+      max-width: 160px;
       box-sizing: border-box;
     }
 
@@ -348,6 +380,37 @@
 
     #ordersTable.orders-block-table tbody tr:hover td {
       background: #daf5e4;
+    }
+
+    #ordersTable.orders-block-table tbody tr:hover td.orders-col-order,
+    #ordersTable.orders-block-table tbody tr:hover td.orders-col-shipment-vat,
+    #ordersTable.orders-block-table tbody tr:hover td.shipment-no-vat,
+    #ordersTable.orders-block-table tbody tr:hover td.orders-col-shipment-no-vat {
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+    }
+
+    #ordersTable tr.row-validate-writeoff td.orders-col-order,
+    #ordersTable tr.row-validate-writeoff td.orders-col-shipment-vat,
+    #ordersTable tr.row-validate-writeoff td.shipment-no-vat,
+    #ordersTable tr.row-negative-margin td.orders-col-order,
+    #ordersTable tr.row-negative-margin td.orders-col-shipment-vat,
+    #ordersTable tr.row-negative-margin td.shipment-no-vat,
+    #ordersTable tr.row-negative-profit-with26 td.orders-col-order,
+    #ordersTable tr.row-negative-profit-with26 td.orders-col-shipment-vat,
+    #ordersTable tr.row-negative-profit-with26 td.shipment-no-vat {
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
+    }
+
+    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.orders-col-order,
+    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.orders-col-shipment-vat,
+    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.shipment-no-vat,
+    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td.orders-col-order,
+    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td.orders-col-shipment-vat,
+    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td.shipment-no-vat {
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
     }
 
     #ordersTable input.cell-validate-hi,
@@ -2030,9 +2093,19 @@
       'https://script.google.com/macros/s/AKfycbwsgT3sbIvxkhjmYNqVPfMpD_BdwPo_fEt755v8a_aB842AvIqqmvaV6p48tvoi_0SYAA/exec';
 
     function getCloudPeriodReportFetchUrl() {
-      const base = CLOUD_SAVE_URL;
-      const sep = base.includes('?') ? '&' : '?';
-      return base + sep + 'action=getRows';
+      return CLOUD_SAVE_URL;
+    }
+
+    function normalizePeriodFromSheet(period) {
+      if (period == null || period === '') return '';
+      if (typeof period === 'string') {
+        const t = period.trim();
+        if (/^\d{4}-\d{2}$/.test(t)) return t;
+        const m = t.match(/^(\d{4}-\d{2})/);
+        if (m) return m[1];
+        return normalizePeriodStr(t);
+      }
+      return normalizePeriodStr(String(period));
     }
 
     async function fetchSheetRowsForPeriodReport() {
@@ -2046,7 +2119,7 @@
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error('Ответ не JSON. Добавьте в Apps Script doGet с action=getRows.');
+        throw new Error('Ответ не JSON. Проверьте doGet в Apps Script.');
       }
       if (Array.isArray(data)) return data;
       if (data && Array.isArray(data.rows)) return data.rows;
@@ -2088,7 +2161,7 @@
       try {
         const rows = await fetchSheetRowsForPeriodReport();
         const filtered = rows.filter(r => {
-          const p = normalizePeriodStr(r && r.period != null ? r.period : '');
+          const p = normalizePeriodFromSheet(r && r.period != null ? r.period : '');
           return p && p >= from && p <= to;
         });
 
@@ -2106,7 +2179,8 @@
               processing: 0,
               salary: 0,
               profit: 0,
-              totalCost: 0
+              totalCost: 0,
+              writeoff: 0
             };
             map.set(key, a);
           }
@@ -2117,6 +2191,7 @@
           a.salary += num(r.salary);
           a.profit += num(r.profit);
           a.totalCost += num(r.totalCost);
+          a.writeoff += num(r.writeoff);
         });
 
         const list = Array.from(map.values()).sort((x, y) =>
@@ -2129,10 +2204,14 @@
           html += '<tr><td colspan="4" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
         } else {
           list.forEach(a => {
+            const sumParts =
+              a.materials + a.processing + a.salary;
             const costs =
               a.totalCost > 0
                 ? a.totalCost
-                : a.materials + a.processing + a.salary;
+                : sumParts > 0
+                  ? sumParts
+                  : a.writeoff;
             html +=
               '<tr><td>' +
               escapeHtmlForReport(a.order) +
@@ -2155,14 +2234,14 @@
               filtered.length +
               ', уникальных заказов: ' +
               list.length
-            : 'Нет строк за выбранный диапазон (проверьте данные в таблице и doGet ?action=getRows).';
+            : 'Нет строк за выбранный диапазон (проверьте лист и формат периода YYYY-MM).';
         }
       } catch (err) {
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось получить данные из Google Таблицы: ' +
             (err && err.message ? err.message : String(err)) +
-            '\n\nВ веб-приложении Google Apps Script нужен doGet: при action=getRows вернуть JSON-массив строк с полями period, order, shipment, materials, processing, salary, profit (и при необходимости totalCost).'
+            '\n\nОжидается doGet: JSON-массив объектов { period, order, shipment, writeoff, profit } (как из листа: колонки A–E, первая строка — заголовки).'
         );
       }
     }

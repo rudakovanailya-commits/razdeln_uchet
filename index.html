@@ -97,9 +97,12 @@
       width: 100%;
       min-width: 2400px;
       table-layout: auto;
+      --orders-col-order-w: 220px;
+      --orders-col-shipment-vat-w: 140px;
     }
 
-    #ordersTable thead th:first-child {
+    /* Заказ — первый столбец (класс в разметке, не nth-child) */
+    #ordersTable thead th.orders-col-order {
       position: sticky;
       left: 0;
       top: 0;
@@ -108,8 +111,8 @@
       box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
     }
 
-    #ordersTable tbody td:first-child,
-    #ordersTable tfoot td:first-child {
+    #ordersTable tbody td.orders-col-order,
+    #ordersTable tfoot td.orders-col-order {
       position: sticky;
       left: 0;
       z-index: 3;
@@ -117,25 +120,28 @@
       box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
     }
 
-    #ordersTable thead th:nth-child(2) {
+    /* Отгрузка без НДС — заголовок th + ячейка .shipment-no-vat / tfoot */
+    #ordersTable thead th.orders-col-shipment-no-vat {
       position: sticky;
-      left: 220px;
+      left: calc(var(--orders-col-order-w) + var(--orders-col-shipment-vat-w));
       top: 0;
       z-index: 3;
+      min-width: 120px;
       background: #e0f2e8;
       box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
     }
 
-    #ordersTable tbody td:nth-child(2),
-    #ordersTable tfoot td:nth-child(2) {
+    #ordersTable tbody td.shipment-no-vat,
+    #ordersTable tfoot td.orders-col-shipment-no-vat {
       position: sticky;
-      left: 220px;
+      left: calc(var(--orders-col-order-w) + var(--orders-col-shipment-vat-w));
       z-index: 2;
-      background: #f5fbf7;
+      min-width: 120px;
+      background: #ecf8f0;
       box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
     }
 
-    #ordersTable tfoot td:nth-child(2) {
+    #ordersTable tfoot td.orders-col-shipment-no-vat {
       background: #e8f5ec;
     }
 
@@ -238,22 +244,29 @@
     }
 
     /* Мин. ширина ячеек — таблица растягивается, поля реально становятся шире */
-    #ordersTable thead th:nth-child(1),
-    #ordersTable tbody td:nth-child(1),
-    #ordersTable tfoot td:first-child {
+    #ordersTable thead th.orders-col-order,
+    #ordersTable tbody td.orders-col-order,
+    #ordersTable tfoot td.orders-col-order {
       min-width: 220px;
       width: 220px;
       max-width: 220px;
       box-sizing: border-box;
     }
 
-    #ordersTable thead th:nth-child(2),
+    #ordersTable thead th.orders-col-shipment-vat,
+    #ordersTable tbody td.orders-col-shipment-vat,
+    #ordersTable tfoot td.orders-col-shipment-vat {
+      min-width: 140px;
+      width: 140px;
+      max-width: 140px;
+      box-sizing: border-box;
+    }
+
     #ordersTable thead th:nth-child(5),
     #ordersTable thead th:nth-child(6),
     #ordersTable thead th:nth-child(7),
     #ordersTable thead th:nth-child(8),
     #ordersTable thead th:nth-child(18),
-    #ordersTable tbody td:nth-child(2),
     #ordersTable tbody td:nth-child(5),
     #ordersTable tbody td:nth-child(6),
     #ordersTable tbody td:nth-child(7),
@@ -272,7 +285,6 @@
       min-width: 180px;
     }
 
-    #ordersTable thead th:nth-child(3),
     #ordersTable thead th:nth-child(4),
     #ordersTable thead th:nth-child(10),
     #ordersTable thead th:nth-child(11),
@@ -288,7 +300,6 @@
     #ordersTable thead th:nth-child(23),
     #ordersTable thead th:nth-child(24),
     #ordersTable thead th:nth-child(25),
-    #ordersTable tbody td:nth-child(3),
     #ordersTable tbody td:nth-child(4),
     #ordersTable tbody td:nth-child(10),
     #ordersTable tbody td:nth-child(11),
@@ -503,9 +514,9 @@
         <table id="ordersTable" class="orders-block-table">
           <thead>
             <tr>
-              <th>Заказ</th>
-              <th>Отгрузка с НДС</th>
-              <th>Отгрузка без НДС</th>
+              <th class="orders-col-order">Заказ</th>
+              <th class="orders-col-shipment-vat">Отгрузка с НДС</th>
+              <th class="orders-col-shipment-no-vat">Отгрузка без НДС</th>
               <th>% отгрузки</th>
               <th>НЗП нач.</th>
               <th>Материалы</th>
@@ -534,9 +545,9 @@
           <tbody id="ordersBody"></tbody>
           <tfoot>
             <tr>
-              <td class="readonly">Итого</td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
+              <td class="readonly orders-col-order">Итого</td>
+              <td class="readonly orders-col-shipment-vat"></td>
+              <td class="readonly orders-col-shipment-no-vat"></td>
               <td class="readonly"></td>
               <td class="readonly"></td>
               <td class="readonly" id="ordersFootMaterials">0.00</td>
@@ -608,6 +619,14 @@
     }
 
     function formatNumber(value) {
+      const nVal = Number(
+        String(value == null ? '' : value).replace(/\s/g, '').replace(/,/g, '.')
+      );
+      if (!nVal) return '';
+      return nVal.toLocaleString('ru-RU');
+    }
+
+    function formatSeparatedInputNumber(value) {
       const s = String(value == null ? '' : value)
         .replace(/\s/g, '')
         .replace(/,/g, '.');
@@ -616,6 +635,41 @@
       if (!Number.isFinite(n)) return '';
       if (n === 0) return '0';
       return n.toLocaleString('ru-RU');
+    }
+
+    function formatAllCalculatedFields() {
+      document.querySelectorAll('#ordersTable td.readonly').forEach(cell => {
+        if (cell.querySelector && cell.querySelector('input')) return;
+        const raw = cell.textContent;
+        if (!raw || !String(raw).trim()) return;
+        if (/%/.test(raw)) return;
+        const t = String(raw)
+          .trim()
+          .replace(/\u00a0/g, ' ');
+        if (!/^[\d\s.,+\-]+$/.test(t)) return;
+        const n = num(t);
+        if (!Number.isFinite(n)) return;
+        let out = formatNumber(String(n));
+        if (out === '' && n === 0) out = '0';
+        cell.textContent = out;
+      });
+
+      [
+        'totalShipmentNoVat',
+        'totalSalaryValue',
+        'totalWrittenOff',
+        'totalEndingWIP'
+      ].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const raw = el.textContent;
+        if (!raw || !String(raw).trim()) return;
+        const n = num(raw);
+        if (!Number.isFinite(n)) return;
+        let out = formatNumber(String(n));
+        if (out === '' && n === 0) out = '0';
+        el.textContent = out;
+      });
     }
 
     function isSeparatedMoneyTableInput(el) {
@@ -726,7 +780,7 @@
           el.value = '0';
           return;
         }
-        el.value = formatNumber(s);
+        el.value = formatSeparatedInputNumber(s);
         return;
       }
       if (raw === '' || raw === '.') {
@@ -771,7 +825,7 @@
           el.value = '0';
           return;
         }
-        el.value = formatNumber(s);
+        el.value = formatSeparatedInputNumber(s);
         return;
       }
       if (raw === '' || raw === '.') {
@@ -909,9 +963,9 @@
       tr.className = 'order-item';
 
       tr.innerHTML = `
-        <td><input class="text order-name" type="text" placeholder="Заказ"></td>
-        <td><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="readonly shipment-no-vat">0.00</td>
+        <td class="orders-col-order"><input class="text order-name" type="text" placeholder="Заказ"></td>
+        <td class="orders-col-shipment-vat"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly shipment-no-vat orders-col-shipment-no-vat">0.00</td>
         <td class="readonly shipment-percent">0.00%</td>
         <td><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
         <td><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
@@ -1685,6 +1739,8 @@
       } else {
         warningBox.textContent = 'Ограничения не сработали. Расчёт выполнен.';
       }
+
+      formatAllCalculatedFields();
     }
 
     // =====================
@@ -2237,7 +2293,6 @@
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
           loadFrom1cRows(rows);
-          calculateAll();
           autoSave();
 
           if (statusEl) {

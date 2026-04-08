@@ -420,6 +420,31 @@
       font-weight: bold;
     }
 
+    #periodReportBox {
+      border: 1px solid #c5e4cf;
+      border-radius: 12px;
+      padding: 16px;
+      background: #f5fbf7;
+    }
+
+    #periodReportBox table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    #periodReportBox th,
+    #periodReportBox td {
+      border-bottom: 1px solid #d1f0db;
+      padding: 8px;
+      text-align: right;
+    }
+
+    #periodReportBox th:first-child,
+    #periodReportBox td:first-child {
+      text-align: left;
+    }
+
     @media (max-width: 900px) {
       .top-grid,
       .totals {
@@ -455,6 +480,28 @@
       </div>
 
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+
+      <div
+        class="period-report-row"
+        style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;"
+      >
+        <div class="field" style="width: 160px;">
+          <label for="reportPeriodFrom">Отчёт: период С (YYYY-MM)</label>
+          <input id="reportPeriodFrom" type="text" placeholder="2025-01" autocomplete="off">
+        </div>
+        <div class="field" style="width: 160px;">
+          <label for="reportPeriodTo">период ПО (YYYY-MM)</label>
+          <input id="reportPeriodTo" type="text" placeholder="2025-03" autocomplete="off">
+        </div>
+        <button id="buildPeriodReportBtn" type="button" class="secondary">
+          Сформировать отчет
+        </button>
+      </div>
+      <div class="hint" id="periodReportStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+      <div id="periodReportBox" style="margin-top: 12px; display: none;">
+        <h3 style="margin: 0 0 8px; color: #14532d;">Сводка за период</h3>
+        <div id="periodReportTableWrap"></div>
+      </div>
 
       <div class="top-grid">
         <div class="field">
@@ -1982,6 +2029,144 @@
     const CLOUD_SAVE_URL =
       'https://script.google.com/macros/s/AKfycbwsgT3sbIvxkhjmYNqVPfMpD_BdwPo_fEt755v8a_aB842AvIqqmvaV6p48tvoi_0SYAA/exec';
 
+    function getCloudPeriodReportFetchUrl() {
+      const base = CLOUD_SAVE_URL;
+      const sep = base.includes('?') ? '&' : '?';
+      return base + sep + 'action=getRows';
+    }
+
+    async function fetchSheetRowsForPeriodReport() {
+      const url = getCloudPeriodReportFetchUrl();
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Ответ не JSON. Добавьте в Apps Script doGet с action=getRows.');
+      }
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.rows)) return data.rows;
+      if (data && Array.isArray(data.data)) return data.data;
+      return [];
+    }
+
+    function escapeHtmlForReport(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function buildPeriodReport() {
+      const from = normalizePeriodStr(
+        (document.getElementById('reportPeriodFrom') || {}).value || ''
+      );
+      const to = normalizePeriodStr(
+        (document.getElementById('reportPeriodTo') || {}).value || ''
+      );
+      const periodRe = /^\d{4}-\d{2}$/;
+      if (!periodRe.test(from) || !periodRe.test(to)) {
+        alert('Укажите периоды в формате YYYY-MM');
+        return;
+      }
+      if (from > to) {
+        alert('Период «С» не может быть больше периода «ПО»');
+        return;
+      }
+
+      const statusEl = document.getElementById('periodReportStatus');
+      const box = document.getElementById('periodReportBox');
+      const wrap = document.getElementById('periodReportTableWrap');
+      if (statusEl) statusEl.textContent = 'Загрузка из Google Таблицы…';
+      if (wrap) wrap.innerHTML = '';
+
+      try {
+        const rows = await fetchSheetRowsForPeriodReport();
+        const filtered = rows.filter(r => {
+          const p = normalizePeriodStr(r && r.period != null ? r.period : '');
+          return p && p >= from && p <= to;
+        });
+
+        const map = new Map();
+        filtered.forEach(r => {
+          const key = String(r && r.order != null ? r.order : '').trim();
+          if (!key) return;
+
+          let a = map.get(key);
+          if (!a) {
+            a = {
+              order: key,
+              shipment: 0,
+              materials: 0,
+              processing: 0,
+              salary: 0,
+              profit: 0,
+              totalCost: 0
+            };
+            map.set(key, a);
+          }
+
+          a.shipment += num(r.shipment);
+          a.materials += num(r.materials);
+          a.processing += num(r.processing);
+          a.salary += num(r.salary);
+          a.profit += num(r.profit);
+          a.totalCost += num(r.totalCost);
+        });
+
+        const list = Array.from(map.values()).sort((x, y) =>
+          x.order.localeCompare(y.order, 'ru')
+        );
+
+        let html =
+          '<table><thead><tr><th>Заказ</th><th>Отгрузка</th><th>Затраты</th><th>Прибыль</th></tr></thead><tbody>';
+        if (!list.length) {
+          html += '<tr><td colspan="4" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
+        } else {
+          list.forEach(a => {
+            const costs =
+              a.totalCost > 0
+                ? a.totalCost
+                : a.materials + a.processing + a.salary;
+            html +=
+              '<tr><td>' +
+              escapeHtmlForReport(a.order) +
+              '</td><td>' +
+              fmt(a.shipment) +
+              '</td><td>' +
+              fmt(costs) +
+              '</td><td>' +
+              fmt(a.profit) +
+              '</td></tr>';
+          });
+        }
+        html += '</tbody></table>';
+
+        if (wrap) wrap.innerHTML = html;
+        if (box) box.style.display = 'block';
+        if (statusEl) {
+          statusEl.textContent = list.length
+            ? 'Строк в диапазоне: ' +
+              filtered.length +
+              ', уникальных заказов: ' +
+              list.length
+            : 'Нет строк за выбранный диапазон (проверьте данные в таблице и doGet ?action=getRows).';
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = '';
+        alert(
+          'Не удалось получить данные из Google Таблицы: ' +
+            (err && err.message ? err.message : String(err)) +
+            '\n\nВ веб-приложении Google Apps Script нужен doGet: при action=getRows вернуть JSON-массив строк с полями period, order, shipment, materials, processing, salary, profit (и при необходимости totalCost).'
+        );
+      }
+    }
+
     async function saveToCloud() {
       const period = getCurrentPeriod();
       if (!period) {
@@ -1997,6 +2182,10 @@
           period,
           order: (tr.querySelector('.order-name').value || '').trim(),
           shipment: num(tr.querySelector('.shipment-vat').value),
+          materials: num(tr.querySelector('.materials').value),
+          processing: num(tr.querySelector('.processing').value),
+          salary: num(tr.querySelector('.salary').value),
+          totalCost: num(tr.querySelector('.total-cost').textContent),
           writeoff: num(tr.querySelector('.write-off').textContent),
           profit: num(tr.querySelector('.profit-rub').textContent)
         }));
@@ -2396,6 +2585,13 @@
       }
       requestAnimationFrame(() => saveToCloud());
     });
+
+    const buildPeriodReportBtn = document.getElementById('buildPeriodReportBtn');
+    if (buildPeriodReportBtn) {
+      buildPeriodReportBtn.addEventListener('click', () => {
+        requestAnimationFrame(() => buildPeriodReport());
+      });
+    }
 
     document.getElementById('loadBtn').addEventListener('click', () => {
       const inp = getElementByIdDeep('periodInput');

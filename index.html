@@ -536,10 +536,19 @@
           </select>
         </div>
 
+        <div class="field" style="width: 220px;">
+          <label for="periodStatusSelect">Статус периода</label>
+          <select id="periodStatusSelect">
+            <option value="draft">В работе (draft)</option>
+            <option value="final">Закрыт (final)</option>
+          </select>
+        </div>
+
         <button id="saveBtn" type="button">Сохранить</button>
         <button id="saveCloudBtn" type="button" class="secondary">Сохранить в облако</button>
         <button id="deletePeriodBtn" type="button">Удалить период</button>
         <button id="loadBtn" type="button" class="secondary">Загрузить</button>
+        <button id="loadCloudBtn" type="button" class="secondary">Загрузить из облака</button>
       </div>
 
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
@@ -1893,6 +1902,254 @@
         .trim();
     }
 
+    function normalizePeriodFromSheet(p) {
+      if (p == null) return '';
+      if (Object.prototype.toString.call(p) === '[object Date]' && !isNaN(p.getTime())) {
+        const y = p.getFullYear();
+        const m = String(p.getMonth() + 1).padStart(2, '0');
+        return y + '-' + m;
+      }
+      const s = normalizePeriodStr(p);
+      const m = s.match(/^(\d{4})-(\d{2})/);
+      if (m) return m[1] + '-' + m[2];
+      return s;
+    }
+
+    function getPeriodStatus() {
+      const el = document.getElementById('periodStatusSelect');
+      const v = el && el.value ? el.value : 'draft';
+      return v === 'final' ? 'final' : 'draft';
+    }
+
+    function setPeriodStatus(status) {
+      const el = document.getElementById('periodStatusSelect');
+      if (!el) return;
+      el.value = status === 'final' ? 'final' : 'draft';
+    }
+
+    function setTableReadOnlyMode(locked) {
+      if (!ordersBody) return;
+      ordersBody.querySelectorAll('input').forEach(inp => {
+        inp.readOnly = locked;
+        inp.disabled = locked;
+      });
+      ordersBody.querySelectorAll('.delete-row').forEach(b => {
+        b.disabled = locked;
+        b.style.opacity = locked ? '0.5' : '1';
+        b.style.pointerEvents = locked ? 'none' : '';
+      });
+      const addBtn = document.getElementById('addRowBtn');
+      if (addBtn) addBtn.disabled = locked;
+      const imp = document.getElementById('import1cBtn');
+      if (imp) imp.disabled = locked;
+      const fin = document.getElementById('fileInput');
+      if (fin && locked) fin.disabled = true;
+      else if (fin) fin.disabled = false;
+    }
+
+    function collectRowData(tr) {
+      return {
+        order: tr.querySelector('.order-name').value,
+        shipmentVat: tr.querySelector('.shipment-vat').value,
+        wipStart: tr.querySelector('.wip-start').value,
+        materials: tr.querySelector('.materials').value,
+        processing: tr.querySelector('.processing').value,
+        other: tr.querySelector('.other-direct').value,
+        salary: tr.querySelector('.salary').value,
+        profitPercent: tr.querySelector('.profit-percent').value,
+        manualWriteoff: tr.querySelector('.manual-writeoff').value,
+        snapshot: {
+          shipmentNoVat: tr.querySelector('.shipment-no-vat').textContent,
+          shipmentPercent: tr.querySelector('.shipment-percent').textContent,
+          salaryShare: tr.querySelector('.salary-share').textContent,
+          insurance: tr.querySelector('.insurance').textContent,
+          sick: tr.querySelector('.sick').textContent,
+          acc25: tr.querySelector('.acc25').textContent,
+          acc26: tr.querySelector('.acc26').textContent,
+          acc44: tr.querySelector('.acc44').textContent,
+          totalCost: tr.querySelector('.total-cost').textContent,
+          periodCost: tr.querySelector('.period-cost').textContent,
+          writeOff: tr.querySelector('.write-off').textContent,
+          wipEnd: tr.querySelector('.wip-end').textContent,
+          profitRub: tr.querySelector('.profit-rub').textContent,
+          profitWith26: tr.querySelector('.profit-with-26').textContent,
+          profitMargin: tr.querySelector('.profit-margin').textContent,
+          marginWith26: tr.querySelector('.margin-with-26').textContent
+        }
+      };
+    }
+
+    function applyRowSnapshot(tr, snap) {
+      if (!tr || !snap) return;
+      const set = (sel, v) => {
+        if (v == null || v === '') return;
+        const el = tr.querySelector(sel);
+        if (el) el.textContent = String(v);
+      };
+      set('.shipment-no-vat', snap.shipmentNoVat);
+      set('.shipment-percent', snap.shipmentPercent);
+      set('.salary-share', snap.salaryShare);
+      set('.insurance', snap.insurance);
+      set('.sick', snap.sick);
+      set('.acc25', snap.acc25);
+      set('.acc26', snap.acc26);
+      set('.acc44', snap.acc44);
+      set('.total-cost', snap.totalCost);
+      set('.period-cost', snap.periodCost);
+      set('.write-off', snap.writeOff);
+      set('.wip-end', snap.wipEnd);
+      set('.profit-rub', snap.profitRub);
+      set('.profit-with-26', snap.profitWith26);
+      set('.profit-margin', snap.profitMargin);
+      set('.margin-with-26', snap.marginWith26);
+    }
+
+    function sheetNum(r, snake, camel) {
+      const a = r[snake];
+      if (a != null && a !== '') return num(a);
+      if (camel && r[camel] != null && r[camel] !== '') return num(r[camel]);
+      return 0;
+    }
+
+    function mapSheetRowToAppRow(r, vatRate) {
+      const vat = num(vatRate);
+      const ship = sheetNum(r, 'shipment');
+      const snv = vat > -100 ? ship / (1 + vat / 100) : ship;
+      const acc26 = sheetNum(r, 'account26', 'account26');
+      const profit = sheetNum(r, 'profit');
+      const pp = sheetNum(r, 'profit_percent', 'profitPercent');
+      return {
+        order: String(r.order != null ? r.order : '').trim(),
+        shipmentVat: String(r.shipment != null ? r.shipment : ''),
+        wipStart: '0',
+        materials: String(r.materials != null ? r.materials : ''),
+        processing: String(r.processing != null ? r.processing : ''),
+        other: String(r.other != null ? r.other : ''),
+        salary: String(r.salary != null ? r.salary : ''),
+        profitPercent: String(pp || ''),
+        manualWriteoff: '',
+        snapshot: {
+          shipmentNoVat: fmt(snv),
+          shipmentPercent: '0.00%',
+          salaryShare: '0.00%',
+          insurance: fmt(0),
+          sick: fmt(0),
+          acc25: fmt(sheetNum(r, 'account25', 'account25')),
+          acc26: fmt(sheetNum(r, 'account26', 'account26')),
+          acc44: fmt(sheetNum(r, 'account44', 'account44')),
+          totalCost: fmt(sheetNum(r, 'total_cost', 'totalCost')),
+          periodCost: fmt(sheetNum(r, 'total_cost', 'totalCost')),
+          writeOff: fmt(sheetNum(r, 'writeoff', 'writeOff')),
+          wipEnd: fmt(0),
+          profitRub: fmt(profit),
+          profitWith26: fmt(profit - acc26),
+          profitMargin: (pp ? pp.toFixed(1) : '0.0') + '%',
+          marginWith26: (pp ? pp.toFixed(1) : '0.0') + '%'
+        }
+      };
+    }
+
+    function getCloudPayloadRows(period) {
+      const st = getPeriodStatus();
+      return getRows()
+        .map(tr => {
+          const order = (tr.querySelector('.order-name').value || '').trim();
+          return {
+            period,
+            order,
+            shipment: num(tr.querySelector('.shipment-vat').value),
+            materials: num(tr.querySelector('.materials').value),
+            processing: num(tr.querySelector('.processing').value),
+            other: num(tr.querySelector('.other-direct').value),
+            salary: num(tr.querySelector('.salary').value),
+            account25: num(tr.querySelector('.acc25').textContent),
+            account26: num(tr.querySelector('.acc26').textContent),
+            account44: num(tr.querySelector('.acc44').textContent),
+            total_cost: num(tr.querySelector('.total-cost').textContent),
+            writeoff: num(tr.querySelector('.write-off').textContent),
+            profit: num(tr.querySelector('.profit-rub').textContent),
+            profit_percent: num(tr.querySelector('.profit-margin').textContent),
+            status: st
+          };
+        })
+        .filter(row => row.order);
+    }
+
+    async function loadPeriodFromCloud() {
+      const period = getCurrentPeriod();
+      if (!period) {
+        alert('Укажите период');
+        return;
+      }
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) statusEl.textContent = 'Загрузка из облака…';
+      try {
+        const all = await fetchSheetRowsForPeriodReport();
+        const pn = normalizePeriodStr(period);
+        const filtered = all.filter(r => normalizePeriodFromSheet(r.period) === pn);
+        if (!filtered.length) {
+          if (statusEl) statusEl.textContent = '';
+          alert('Нет строк в облаке за период ' + period);
+          return;
+        }
+        const vatRate = document.getElementById('vatRate').value;
+        const rawSt = String(filtered[0].status != null ? filtered[0].status : 'draft').toLowerCase();
+        const periodStatus = rawSt === 'final' ? 'final' : 'draft';
+        const data = {
+          globals: {
+            vatRate: document.getElementById('vatRate').value,
+            totalInsurance: document.getElementById('totalInsurance').value,
+            totalSick: document.getElementById('totalSick').value,
+            total25: document.getElementById('total25').value,
+            total26: document.getElementById('total26').value,
+            total44: document.getElementById('total44').value
+          },
+          periodStatus,
+          rows: filtered.map(r => mapSheetRowToAppRow(r, vatRate))
+        };
+        applyData(data);
+        if (statusEl) {
+          statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = '';
+        alert(
+          'Не удалось загрузить из облака: ' + (err && err.message ? err.message : String(err))
+        );
+      }
+    }
+
+    const PERIOD_REPORT_NUMERIC_KEYS = [
+      'shipment',
+      'materials',
+      'processing',
+      'other',
+      'salary',
+      'account25',
+      'account26',
+      'account44',
+      'total_cost',
+      'writeoff',
+      'profit',
+      'profit_percent'
+    ];
+
+    const PERIOD_REPORT_LABELS = {
+      order: 'Заказ',
+      shipment: 'Отгрузка',
+      materials: 'Материалы',
+      processing: 'Обработка',
+      other: 'Прочие прямые',
+      salary: 'ЗП',
+      account25: '25 сч.',
+      account26: '26 сч.',
+      account44: '44 сч.',
+      total_cost: 'Всего затрат',
+      writeoff: 'Списание',
+      profit: 'Прибыль',
+      profit_percent: 'Маржа % (сумма)'
+    };
+
     function getCurrentPeriod() {
       const inputEl = getElementByIdDeep('periodInput');
       const selectEl = getElementByIdDeep('periodSelect');
@@ -1927,21 +2184,10 @@
     }
 
     function collectData() {
-      const rows = getRows().map(row => {
-        return {
-          order: row.querySelector('.order-name').value,
-          shipmentVat: row.querySelector('.shipment-vat').value,
-          wipStart: row.querySelector('.wip-start').value,
-          materials: row.querySelector('.materials').value,
-          processing: row.querySelector('.processing').value,
-          other: row.querySelector('.other-direct').value,
-          salary: row.querySelector('.salary').value,
-          profitPercent: row.querySelector('.profit-percent').value,
-          manualWriteoff: row.querySelector('.manual-writeoff').value
-        };
-      });
+      const rows = getRows().map(row => collectRowData(row));
 
       return {
+        periodStatus: getPeriodStatus(),
         globals: {
           vatRate: document.getElementById('vatRate').value,
           totalInsurance: document.getElementById('totalInsurance').value,
@@ -1957,11 +2203,13 @@
     function applyData(data) {
       if (!data) return;
 
-      Object.keys(data.globals).forEach(key => {
-        if (document.getElementById(key)) {
-          document.getElementById(key).value = data.globals[key];
-        }
+      Object.keys(data.globals || {}).forEach(key => {
+        const el = document.getElementById(key);
+        if (el) el.value = data.globals[key];
       });
+
+      setPeriodStatus(data.periodStatus || 'draft');
+      const isFinal = getPeriodStatus() === 'final';
 
       ordersBody.innerHTML = '';
 
@@ -1972,7 +2220,32 @@
       }
 
       refreshAllGlobalNums();
-      calculateAll();
+
+      const rowsEls = getRows();
+      const hasAnySnapshot =
+        isFinal && data.rows && data.rows.some(r => r && r.snapshot);
+
+      if (isFinal && data.rows) {
+        data.rows.forEach((r, i) => {
+          if (rowsEls[i] && r.snapshot) applyRowSnapshot(rowsEls[i], r.snapshot);
+        });
+      }
+
+      if (isFinal && !hasAnySnapshot) {
+        setTableReadOnlyMode(false);
+        calculateAll();
+        setTableReadOnlyMode(true);
+        formatAllCalculatedFields();
+        return;
+      }
+
+      setTableReadOnlyMode(isFinal);
+
+      if (!isFinal) {
+        calculateAll();
+      } else {
+        formatAllCalculatedFields();
+      }
     }
 
     function savePeriod(showAlert = true) {
@@ -2151,7 +2424,7 @@
       try {
         const rows = await fetchSheetRowsForPeriodReport();
         const filtered = rows.filter(r => {
-          const p = normalizePeriodStr(r && r.period != null ? r.period : '');
+          const p = normalizePeriodFromSheet(r && r.period != null ? r.period : '');
           return p && p >= from && p <= to;
         });
 
@@ -2162,52 +2435,60 @@
 
           let a = map.get(key);
           if (!a) {
-            a = {
-              order: key,
-              shipment: 0,
-              materials: 0,
-              processing: 0,
-              salary: 0,
-              profit: 0,
-              totalCost: 0
-            };
+            a = { order: key };
+            PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
+              a[k] = 0;
+            });
             map.set(key, a);
           }
 
-          a.shipment += num(r.shipment);
-          a.materials += num(r.materials);
-          a.processing += num(r.processing);
-          a.salary += num(r.salary);
-          a.profit += num(r.profit);
-          a.totalCost += num(r.totalCost);
+          PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
+            const camel =
+              k === 'total_cost'
+                ? 'totalCost'
+                : k === 'profit_percent'
+                  ? 'profitPercent'
+                  : k === 'writeoff'
+                    ? 'writeOff'
+                    : null;
+            a[k] += sheetNum(r, k, camel);
+          });
         });
 
         const list = Array.from(map.values()).sort((x, y) =>
           x.order.localeCompare(y.order, 'ru')
         );
 
-        let html =
-          '<table><thead><tr><th>Заказ</th><th>Отгрузка</th><th>Затраты</th><th>Прибыль</th></tr></thead><tbody>';
+        const headCells = ['<th>' + escapeHtmlForReport(PERIOD_REPORT_LABELS.order) + '</th>'];
+        PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
+          headCells.push('<th>' + escapeHtmlForReport(PERIOD_REPORT_LABELS[k] || k) + '</th>');
+        });
+        const colCount = 1 + PERIOD_REPORT_NUMERIC_KEYS.length;
+
+        let html = '<table><thead><tr>' + headCells.join('') + '</tr></thead><tbody>';
         if (!list.length) {
           html +=
-            '<tr><td colspan="4" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
+            '<tr><td colspan="' +
+            colCount +
+            '" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
         } else {
-          list.forEach(a => {
-            const costs =
-              a.totalCost > 0
-                ? a.totalCost
-                : a.materials + a.processing + a.salary;
-            html +=
-              '<tr><td>' +
-              escapeHtmlForReport(a.order) +
-              '</td><td>' +
-              fmt(a.shipment) +
-              '</td><td>' +
-              fmt(costs) +
-              '</td><td>' +
-              fmt(a.profit) +
-              '</td></tr>';
+          const totals = {};
+          PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
+            totals[k] = 0;
           });
+          list.forEach(a => {
+            html += '<tr><td>' + escapeHtmlForReport(a.order) + '</td>';
+            PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
+              totals[k] += a[k];
+              html += '<td>' + fmt(a[k]) + '</td>';
+            });
+            html += '</tr>';
+          });
+          html += '<tr style="font-weight:bold;"><td>Итого</td>';
+          PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
+            html += '<td>' + fmt(totals[k]) + '</td>';
+          });
+          html += '</tr>';
         }
         html += '</tbody></table>';
 
@@ -2226,7 +2507,7 @@
         alert(
           'Не удалось получить данные из Google Таблицы: ' +
             (err && err.message ? err.message : String(err)) +
-            '\n\nВ веб-приложении Google Apps Script нужен doGet: при action=getRows вернуть JSON-массив строк с полями period, order, shipment, materials, processing, salary, profit (и при необходимости totalCost).'
+            '\n\nВ веб-приложении Google Apps Script нужен doGet: при action=getRows вернуть JSON-массив строк (period, order, shipment, materials, processing, other, salary, account25, account26, account44, total_cost, writeoff, profit, profit_percent, status).'
         );
       }
     }
@@ -2242,26 +2523,28 @@
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
-        const rows = getRows().map(tr => ({
-          period,
-          order: (tr.querySelector('.order-name').value || '').trim(),
-          shipment: num(tr.querySelector('.shipment-vat').value),
-          materials: num(tr.querySelector('.materials').value),
-          processing: num(tr.querySelector('.processing').value),
-          salary: num(tr.querySelector('.salary').value),
-          totalCost: num(tr.querySelector('.total-cost').textContent),
-          writeoff: num(tr.querySelector('.write-off').textContent),
-          profit: num(tr.querySelector('.profit-rub').textContent)
-        }));
+        const payload = {
+          action: 'upsert',
+          rows: getCloudPayloadRows(period)
+        };
 
-        const formData = new FormData();
-
-        formData.append('data', JSON.stringify(rows));
-
-        await fetch(CLOUD_SAVE_URL, {
+        const res = await fetch(CLOUD_SAVE_URL, {
           method: 'POST',
-          body: formData
+          mode: 'cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
         });
+
+        const text = await res.text();
+        let parsed = null;
+        try {
+          parsed = JSON.parse(text);
+        } catch (e) {
+          /* ответ может быть пустым */
+        }
+        if (parsed && parsed.error) {
+          throw new Error(String(parsed.error));
+        }
 
         if (statusEl) {
           statusEl.textContent = 'Данные отправлены в облако';
@@ -2283,6 +2566,8 @@
       document.getElementById('total25').value = '0';
       document.getElementById('total26').value = '0';
       document.getElementById('total44').value = '0';
+      setPeriodStatus('draft');
+      setTableReadOnlyMode(false);
 
       refreshAllGlobalNums();
       createRow();
@@ -2664,6 +2949,33 @@
       }
       requestAnimationFrame(() => loadPeriod(true));
     });
+
+    const loadCloudBtn = document.getElementById('loadCloudBtn');
+    if (loadCloudBtn) {
+      loadCloudBtn.addEventListener('click', () => {
+        const inp = getElementByIdDeep('periodInput');
+        if (inp && document.activeElement === inp) {
+          inp.blur();
+        }
+        requestAnimationFrame(() => loadPeriodFromCloud());
+      });
+    }
+
+    const periodStatusSelectEl = document.getElementById('periodStatusSelect');
+    if (periodStatusSelectEl) {
+      periodStatusSelectEl.addEventListener('change', () => {
+        const final = getPeriodStatus() === 'final';
+        if (final) {
+          calculateAll();
+          setTableReadOnlyMode(true);
+          formatAllCalculatedFields();
+        } else {
+          setTableReadOnlyMode(false);
+          calculateAll();
+        }
+        autoSave();
+      });
+    }
 
     document.getElementById('deletePeriodBtn').addEventListener('click', function() {
       const period = getCurrentPeriod();

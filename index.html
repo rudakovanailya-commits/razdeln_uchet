@@ -1196,33 +1196,16 @@
         opts && opts.order != null ? String(opts.order).trim() : '';
       if (!orderRaw) return null;
       createRow({ order: orderRaw });
-      const row = findRowByOrderName(orderRaw);
+      const list = getRows();
+      const row = list.length ? list[list.length - 1] : null;
       if (row) {
         const sh = row.querySelector('.shipment-vat');
-        sh.value = '0';
-        initTableNumDisplay(sh);
+        if (sh) {
+          sh.value = '0';
+          initTableNumDisplay(sh);
+        }
       }
       return row;
-    }
-
-    function ensure1cExpenseRowForOrder(orderRaw) {
-      const key = String(orderRaw == null ? '' : orderRaw).trim();
-      if (!key) return null;
-      let row = findRowByOrderName(key);
-      if (row) return row;
-      return addOrderRow({ order: key, shipment: 0 });
-    }
-
-    function apply1cExpenseMerge(row, materialsStr, processingStr, otherStr) {
-      const addNum = (sel, raw) => {
-        const el = row.querySelector(sel);
-        const next = num(el.value) + num(raw);
-        el.value = String(next);
-        initTableNumDisplay(el);
-      };
-      addNum('.materials', materialsStr);
-      addNum('.processing', processingStr);
-      addNum('.other-direct', otherStr);
     }
 
     function is1cSkippedServiceRow(orderRaw) {
@@ -1232,7 +1215,6 @@
         .toLowerCase()
         .replace(/\u0451/g, '\u0435');
       if (u === 'итого') return true;
-      if (u === 'счет' || u === 'счёт') return true;
       if (u === 'ооо') return true;
       if (safeIncludes(u, 'номенклатурные группы')) return true;
       if (safeIncludes(u, 'оборот')) return true;
@@ -1373,8 +1355,7 @@
         return;
       }
 
-      addOrderRow({ order: orderRaw, shipment: 0 });
-      const newRow = findRowByOrderName(orderRaw);
+      const newRow = addOrderRow({ order: orderRaw, shipment: 0 });
       console.log('NEW ROW FOUND', !!newRow);
       if (newRow) logImportRowInputs(newRow, '[1C import] inputs в новой строке');
       apply1cExpenseFieldsToRow(
@@ -1412,18 +1393,12 @@
       if (!cells.some(c => c)) return true;
       for (const c of cells) {
         if (c === 'итого') return true;
-        if (c === 'счет' || c === 'счёт') return true;
         if (c === 'ооо') return true;
         if (safeIncludes(c, 'оборот')) return true;
       }
       if (safeIncludes(cells.join(' '), 'номенклатурные группы')) return true;
       return false;
     }
-
-    const SEL_1C_WIP = '.wip-start input, input.wip-start';
-    const SEL_1C_MAT = '.materials input, input.materials';
-    const SEL_1C_PROC = '.processing input, input.processing';
-    const SEL_1C_OTHER = '.other input, input.other-direct';
 
     function setInputValue(rowEl, selector, value, fieldTag) {
       let el = null;
@@ -1473,117 +1448,27 @@
     }
 
     function process1cExcelRowDistribution(rowArrays) {
-      let currentOrder = null;
-
       for (let i = 0; i < rowArrays.length; i++) {
-        const row = rowArrays[i];
-        console.log('ROW:', row);
-        const parts = normalize1cSheetRow(row);
+        const parts = normalize1cSheetRow(rowArrays[i]);
         if (!parts.some(p => String(p).trim())) continue;
         if (is1cExcelParserSkipRow(parts)) continue;
+        if (is1cCsvHeaderRow(parts)) continue;
 
-        while (parts.length < 5) parts.push('');
+        const orderRaw = String(parts[0] ?? '').trim();
+        if (!orderRaw) continue;
 
-        const order = String(parts[0] ?? '').trim();
+        while (parts.length < 6) parts.push('');
+
         const wip = parts[1];
         const materials = parts[2];
         const processing = parts[3];
         const other = parts[4];
 
-        if (/договор\s*№/i.test(order)) {
-          currentOrder = order;
-          ensure1cExpenseRowForOrder(currentOrder);
-        } else if (/для ремонта/i.test(order)) {
-          currentOrder = order;
-          ensure1cExpenseRowForOrder(currentOrder);
-        }
-
-        if (!currentOrder) continue;
-
-        const tr = findRowByOrderName(currentOrder);
+        const tr = addOrderRow({ order: orderRaw });
         if (!tr) continue;
 
-        setInputValue(tr, SEL_1C_WIP, wip, 'wip');
-        setInputValue(tr, SEL_1C_MAT, materials, 'mat');
-        setInputValue(tr, SEL_1C_PROC, processing, 'proc');
-        setInputValue(tr, SEL_1C_OTHER, other, 'oth');
+        apply1cExpenseFieldsToRow(tr, materials, processing, other, '', wip);
       }
-    }
-
-    function is1cDogovorOrderRow(parts) {
-      return parts.length > 0 && /^договор/i.test(parts[0]);
-    }
-
-    function is1cMaterialsWriteoffRow(parts) {
-      return parts.some(p =>
-        safeIncludes(String(p).toLowerCase(), 'списание материалов')
-      );
-    }
-
-    function indexOfDogovorCell(parts) {
-      for (let i = 0; i < parts.length; i++) {
-        if (/^договор/i.test(parts[i])) return i;
-      }
-      return -1;
-    }
-
-    function indexOfMaterialsWriteoffLabel(parts) {
-      for (let i = 0; i < parts.length; i++) {
-        if (
-          safeIncludes(String(parts[i]).toLowerCase(), 'списание материалов')
-        ) {
-          return i;
-        }
-      }
-      return -1;
-    }
-
-    function pickRightmostAmount(parts, excludeIdx) {
-      const ex = excludeIdx instanceof Set ? excludeIdx : new Set(excludeIdx);
-      for (let j = parts.length - 1; j >= 0; j--) {
-        if (ex.has(j)) continue;
-        const n = num(parts[j]);
-        if (n !== 0) return n;
-      }
-      return 0;
-    }
-
-    function apply1cDogovorRow(parts) {
-      const orderName = String(parts[0] == null ? '' : parts[0]).trim();
-      if (!orderName) return;
-      ensure1cExpenseRowForOrder(orderName);
-    }
-
-    function apply1cMaterialsWriteoffRow(parts) {
-      const labelIdx = indexOfMaterialsWriteoffLabel(parts);
-      const dogovorIdx = indexOfDogovorCell(parts);
-      const exclude = new Set();
-      if (labelIdx >= 0) exclude.add(labelIdx);
-
-      let orderName = '';
-      let amount = 0;
-
-      if (dogovorIdx >= 0) {
-        orderName = String(parts[dogovorIdx] == null ? '' : parts[dogovorIdx]).trim();
-        exclude.add(dogovorIdx);
-        amount = pickRightmostAmount(parts, exclude);
-      } else {
-        orderName = String(parts[1] == null ? '' : parts[1]).trim();
-        exclude.add(0);
-        amount = pickRightmostAmount(parts, exclude);
-      }
-
-      if (!orderName || amount === 0) return;
-
-      const tr = ensure1cExpenseRowForOrder(orderName);
-      if (!tr) return;
-      const mel =
-        tr.querySelector('.materials input, input.materials') ||
-        tr.querySelector('.materials');
-      if (!mel) return;
-      mel.value = String(num(mel.value) + amount);
-      initTableNumDisplay(mel);
-      mel.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function loadFrom1cRows(rowArrays) {

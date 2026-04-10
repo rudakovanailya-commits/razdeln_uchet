@@ -569,6 +569,12 @@
         <button id="buildPeriodReportBtn" type="button" class="secondary">
           Сформировать отчет
         </button>
+        <button type="button" class="secondary" onclick="clearReport()">
+          Очистить отчет
+        </button>
+        <button type="button" class="secondary" onclick="downloadCSV()">
+          Скачать CSV
+        </button>
       </div>
       <div class="hint" id="periodReportStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div id="periodReportBox" style="margin-top: 12px; display: none;">
@@ -2491,6 +2497,48 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    function clearReport() {
+      const wrap = document.getElementById('periodReportTableWrap');
+      if (wrap) {
+        wrap.innerHTML = '';
+      }
+      const box = document.getElementById('periodReportBox');
+      if (box) {
+        box.style.display = 'none';
+      }
+    }
+
+    function downloadCSV() {
+      const table = document.querySelector('#periodReportTableWrap table');
+
+      if (!table) {
+        alert('Нет отчета для выгрузки');
+        return;
+      }
+
+      const csv = [];
+
+      for (const row of table.rows) {
+        const cols = [...row.cells].map(td => td.innerText.trim());
+        csv.push(cols.join(';'));
+      }
+
+      const blob = new Blob([csv.join('\n')], {
+        type: 'text/csv;charset=utf-8;'
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'report.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
     }
 
     async function buildPeriodReport() {

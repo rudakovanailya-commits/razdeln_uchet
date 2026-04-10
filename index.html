@@ -551,6 +551,7 @@
         <button id="loadCloudBtn" type="button" class="secondary">Загрузить из облака</button>
       </div>
 
+      <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
 
       <div
@@ -2004,6 +2005,36 @@
       set('.margin-with-26', snap.marginWith26);
     }
 
+    function normalizeSheetRecord(r) {
+      if (!r || typeof r !== 'object') return {};
+      const out = {};
+      Object.keys(r).forEach(k => {
+        out[k.trim()] = r[k];
+      });
+      return out;
+    }
+
+    function sheetMarginPercentVal(r) {
+      const pp = r.profit_percent;
+      const s = String(pp == null ? '' : pp)
+        .toLowerCase()
+        .trim();
+      if (s === 'draft' || s === 'final') return 0;
+      return num(pp);
+    }
+
+    function inferPeriodStatusFromSheetRow(r) {
+      const st = String(r.status || '')
+        .toLowerCase()
+        .trim();
+      if (st === 'final' || st === 'draft') return st === 'final' ? 'final' : 'draft';
+      const misplaced = String(r.profit_percent || '')
+        .toLowerCase()
+        .trim();
+      if (misplaced === 'draft' || misplaced === 'final') return misplaced === 'final' ? 'final' : 'draft';
+      return 'draft';
+    }
+
     function sheetNum(r, snake, camel) {
       const a = r[snake];
       if (a != null && a !== '') return num(a);
@@ -2012,21 +2043,22 @@
     }
 
     function mapSheetRowToAppRow(r, vatRate) {
+      const r0 = normalizeSheetRecord(r);
       const vat = num(vatRate);
-      const ship = sheetNum(r, 'shipment');
+      const ship = sheetNum(r0, 'shipment');
       const snv = vat > -100 ? ship / (1 + vat / 100) : ship;
-      const acc26 = sheetNum(r, 'account26', 'account26');
-      const profit = sheetNum(r, 'profit');
-      const pp = sheetNum(r, 'profit_percent', 'profitPercent');
+      const acc26 = sheetNum(r0, 'account26', 'account26');
+      const profit = sheetNum(r0, 'profit');
+      const pp = sheetMarginPercentVal(r0);
       return {
-        order: String(r.order != null ? r.order : '').trim(),
-        shipmentVat: String(r.shipment != null ? r.shipment : ''),
+        order: String(r0.order != null ? r0.order : '').trim(),
+        shipmentVat: String(r0.shipment != null ? r0.shipment : ''),
         wipStart: '0',
-        materials: String(r.materials != null ? r.materials : ''),
-        processing: String(r.processing != null ? r.processing : ''),
-        other: String(r.other != null ? r.other : ''),
-        salary: String(r.salary != null ? r.salary : ''),
-        profitPercent: String(pp || ''),
+        materials: String(r0.materials != null ? r0.materials : ''),
+        processing: String(r0.processing != null ? r0.processing : ''),
+        other: String(r0.other != null ? r0.other : ''),
+        salary: String(r0.salary != null ? r0.salary : ''),
+        profitPercent: String(pp !== 0 ? pp : ''),
         manualWriteoff: '',
         snapshot: {
           shipmentNoVat: fmt(snv),
@@ -2034,12 +2066,12 @@
           salaryShare: '0.00%',
           insurance: fmt(0),
           sick: fmt(0),
-          acc25: fmt(sheetNum(r, 'account25', 'account25')),
-          acc26: fmt(sheetNum(r, 'account26', 'account26')),
-          acc44: fmt(sheetNum(r, 'account44', 'account44')),
-          totalCost: fmt(sheetNum(r, 'total_cost', 'totalCost')),
-          periodCost: fmt(sheetNum(r, 'total_cost', 'totalCost')),
-          writeOff: fmt(sheetNum(r, 'writeoff', 'writeOff')),
+          acc25: fmt(sheetNum(r0, 'account25', 'account25')),
+          acc26: fmt(sheetNum(r0, 'account26', 'account26')),
+          acc44: fmt(sheetNum(r0, 'account44', 'account44')),
+          totalCost: fmt(sheetNum(r0, 'total_cost', 'totalCost')),
+          periodCost: fmt(sheetNum(r0, 'total_cost', 'totalCost')),
+          writeOff: fmt(sheetNum(r0, 'writeoff', 'writeOff')),
           wipEnd: fmt(0),
           profitRub: fmt(profit),
           profitWith26: fmt(profit - acc26),
@@ -2093,8 +2125,7 @@
           return;
         }
         const vatRate = document.getElementById('vatRate').value;
-        const rawSt = String(filtered[0].status != null ? filtered[0].status : 'draft').toLowerCase();
-        const periodStatus = rawSt === 'final' ? 'final' : 'draft';
+        const periodStatus = inferPeriodStatusFromSheetRow(normalizeSheetRecord(filtered[0]));
         const data = {
           globals: {
             vatRate: document.getElementById('vatRate').value,
@@ -2365,10 +2396,64 @@
     const CLOUD_SAVE_URL =
       'https://script.google.com/macros/s/AKfycbwsgT3sbIvxkhjmYNqVPfMpD_BdwPo_fEt755v8a_aB842AvIqqmvaV6p48tvoi_0SYAA/exec';
 
+    const CLOUD_DATA_URL =
+      'https://script.google.com/macros/s/AKfycbzevbcYIAH6-YgAthMDW58RjJEOULACRQmbHyM5h3E-pecLiTBTotlKmVYKWgtp4lNxYw/exec';
+
+    let allData = [];
+
     function getCloudPeriodReportFetchUrl() {
-      const base = CLOUD_SAVE_URL;
-      const sep = base.includes('?') ? '&' : '?';
-      return base + sep + 'action=getRows';
+      return CLOUD_DATA_URL;
+    }
+
+    async function loadData() {
+      const res = await fetch(CLOUD_DATA_URL, { method: 'GET' });
+      const raw = await res.json();
+      const arr = Array.isArray(raw) ? raw : (raw && (raw.rows || raw.data)) || [];
+      return arr.map(row => {
+        const r = normalizeSheetRecord(row);
+        const periodNorm = r.period != null ? normalizePeriodFromSheet(r.period) : '';
+        return Object.assign({}, r, { period: periodNorm });
+      });
+    }
+
+    function pickLatestPeriodMm(rows) {
+      let max = '';
+      (rows || []).forEach(r => {
+        const p = normalizePeriodStr(r.period != null ? r.period : '');
+        if (p && /^\d{4}-\d{2}$/.test(p) && p > max) max = p;
+      });
+      return max;
+    }
+
+    function renderTable(data) {
+      const hint = document.getElementById('cloudDataStatus');
+      if (!data || !data.length) {
+        if (hint) hint.textContent = 'Нет данных';
+        createRow();
+        calculateAll();
+        return;
+      }
+      if (hint) hint.textContent = 'Загружено строк: ' + data.length;
+
+      const vatRate = document.getElementById('vatRate').value;
+      const latest = pickLatestPeriodMm(data);
+      const periodInputEl = getElementByIdDeep('periodInput');
+      if (periodInputEl && latest) periodInputEl.value = latest;
+
+      const periodStatus = inferPeriodStatusFromSheetRow(data[0]);
+      const appData = {
+        globals: {
+          vatRate: document.getElementById('vatRate').value,
+          totalInsurance: document.getElementById('totalInsurance').value,
+          totalSick: document.getElementById('totalSick').value,
+          total25: document.getElementById('total25').value,
+          total26: document.getElementById('total26').value,
+          total44: document.getElementById('total44').value
+        },
+        periodStatus,
+        rows: data.map(r => mapSheetRowToAppRow(r, vatRate))
+      };
+      applyData(appData);
     }
 
     async function fetchSheetRowsForPeriodReport() {
@@ -2569,6 +2654,12 @@
 
       const prev = sel.value;
       const names = new Set();
+
+      (allData || []).forEach(r => {
+        const o = normalizeSheetRecord(r);
+        const name = String(o.order != null ? o.order : '').trim();
+        if (name) names.add(name);
+      });
 
       Object.keys(localStorage)
         .filter(key => key.startsWith('razdelny_uchet_'))
@@ -3012,10 +3103,19 @@
     // =====================
 
     refreshAllGlobalNums();
-    createRow();
-    calculateAll();
-    updatePeriodList();
-    populateOrderSelect();
+    (async function initFromCloud() {
+      try {
+        allData = await loadData();
+      } catch (e) {
+        console.error(e);
+        allData = [];
+        const h = document.getElementById('cloudDataStatus');
+        if (h) h.textContent = 'Не удалось загрузить данные';
+      }
+      renderTable(allData);
+      updatePeriodList();
+      populateOrderSelect();
+    })();
   </script>
 </body>
 </html>  

@@ -1904,16 +1904,26 @@
     }
 
     function normalizePeriodFromSheet(p) {
-      if (p == null) return '';
+      if (!p) return '';
+
+      // если это Date
       if (Object.prototype.toString.call(p) === '[object Date]' && !isNaN(p.getTime())) {
         const y = p.getFullYear();
         const m = String(p.getMonth() + 1).padStart(2, '0');
         return y + '-' + m;
       }
-      const s = normalizePeriodStr(p);
+
+      const s = String(p).trim();
+
+      // 💥 ВОТ ГЛАВНЫЙ ФИКС
+      if (s.includes('T')) {
+        return s.slice(0, 7); // "2025-10"
+      }
+
       const m = s.match(/^(\d{4})-(\d{2})/);
       if (m) return m[1] + '-' + m[2];
-      return s;
+
+      return '';
     }
 
     function getPeriodStatus() {

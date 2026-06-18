@@ -971,7 +971,7 @@
               <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
               <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
               <th class="orders-col-w col-total-cost-no26 tab-v-reconcile">Итого без 26</th>
-              <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="Сначала из списания закрывается 26: min(26, общее списание)">Списано 26</th>
+              <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="В 1С 26 закрывается полностью в периоде">Списано 26</th>
               <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списано с 20</th>
               <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП 20</th>
               <th class="orders-col-w col-reconcile-status-1c tab-v-reconcile">Статус</th>
@@ -2127,9 +2127,10 @@
       if (!row) return;
 
       const totalCostNo26 = totalCostWith26 - acc26;
-      const writeOff26_1c = Math.min(acc26, writeOffWith26);
-      const writeOff20 = Math.max(0, writeOffWith26 - writeOff26_1c);
-      const wip20Raw = totalCostNo26 - writeOff20;
+      const writeOff26_1c = acc26;
+      const writeOff20 = Math.max(0, writeOffWith26 - acc26);
+      const wip20 = totalCostNo26 - writeOff20;
+      const over26 = Math.max(0, acc26 - writeOffWith26);
 
       const set = (selector, text) => {
         const el = row.querySelector(selector);
@@ -2139,7 +2140,7 @@
       set('.total-cost-no26', fmt(totalCostNo26));
       set('.writeoff-26-1c', fmt(writeOff26_1c));
       set('.writeoff-no26', fmt(writeOff20));
-      set('.wip-no26', fmt(wip20Raw));
+      set('.wip-no26', fmt(wip20));
 
       const statusEl = row.querySelector('.reconcile-status-1c');
       const wip20Cell = row.querySelector('.wip-no26');
@@ -2148,6 +2149,7 @@
       let status;
       let comment = '';
 
+      row.classList.remove('row-negative-profit-with26');
       if (wip20Cell) {
         wip20Cell.classList.remove('cell-validate-negative');
         wip20Cell.removeAttribute('title');
@@ -2158,9 +2160,10 @@
           'reconcile-status-warn',
           'reconcile-status-check'
         );
+        statusEl.removeAttribute('title');
       }
 
-      if (wip20Raw < -RECONCILE_EPS) {
+      if (wip20 < -RECONCILE_EPS) {
         status = 'Проверить';
         comment = 'Списание с 20 больше расходов без 26';
         if (wip20Cell) {
@@ -2168,12 +2171,21 @@
           wip20Cell.title = comment;
         }
         if (statusEl) statusEl.classList.add('reconcile-status-check');
-      } else {
-        const hasAcc26 = acc26 > RECONCILE_EPS;
-        status = hasAcc26 ? '26 отдельно' : 'ОК';
+      } else if (over26 > RECONCILE_EPS) {
+        status = '26 > списания';
+        comment =
+          '26 счет больше общего списания по расчету. В 1С 26 закроется полностью, а списание с 20 = 0';
+        row.classList.add('row-negative-profit-with26');
         if (statusEl) {
-          statusEl.classList.add(hasAcc26 ? 'reconcile-status-warn' : 'reconcile-status-ok');
+          statusEl.classList.add('reconcile-status-warn');
+          statusEl.title = comment;
         }
+      } else if (acc26 > RECONCILE_EPS) {
+        status = '26 отдельно';
+        if (statusEl) statusEl.classList.add('reconcile-status-warn');
+      } else {
+        status = 'ОК';
+        if (statusEl) statusEl.classList.add('reconcile-status-ok');
       }
 
       if (statusEl) statusEl.textContent = status;

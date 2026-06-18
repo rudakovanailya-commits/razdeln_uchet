@@ -403,8 +403,38 @@
       text-overflow: ellipsis;
     }
 
+    #ordersTable td input.order-name:focus,
+    #ordersTable td input.order-name.order-name-focused {
+      overflow-x: auto;
+      text-overflow: clip;
+      outline: 2px solid #86efac;
+      outline-offset: -2px;
+    }
+
     #ordersTable td.orders-col-order {
       overflow: hidden;
+      position: relative;
+    }
+
+    .order-name-tooltip {
+      position: fixed;
+      z-index: 10000;
+      max-width: min(520px, 92vw);
+      padding: 8px 12px;
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+      pointer-events: none;
+      word-break: break-word;
+      white-space: normal;
+    }
+
+    .order-name-tooltip[hidden] {
+      display: none !important;
     }
 
     #ordersTable td.readonly {
@@ -1051,14 +1081,137 @@
 
     function syncOrderNameTitle(input) {
       if (!input) return;
-      const v = String(input.value || '').trim();
+      const v = String(input.value ?? '');
       input.title = v;
       const td = input.closest('td');
-      if (td) td.title = v;
+      if (td) {
+        td.title = v;
+        if (v) td.setAttribute('aria-label', v);
+        else td.removeAttribute('aria-label');
+      }
     }
 
     function refreshAllOrderNameTitles() {
       ordersBody.querySelectorAll('.order-name').forEach(syncOrderNameTitle);
+    }
+
+    let orderNameTooltipEl = null;
+    let orderNameTooltipHideTimer = null;
+    let orderNameTooltipShowTimer = null;
+    let orderNameTooltipAnchor = null;
+
+    function getOrderNameTooltipEl() {
+      if (!orderNameTooltipEl) {
+        orderNameTooltipEl = document.createElement('div');
+        orderNameTooltipEl.id = 'orderNameTooltip';
+        orderNameTooltipEl.className = 'order-name-tooltip';
+        orderNameTooltipEl.hidden = true;
+        orderNameTooltipEl.setAttribute('role', 'tooltip');
+        document.body.appendChild(orderNameTooltipEl);
+      }
+      return orderNameTooltipEl;
+    }
+
+    function hideOrderNameTooltip() {
+      if (orderNameTooltipShowTimer) {
+        clearTimeout(orderNameTooltipShowTimer);
+        orderNameTooltipShowTimer = null;
+      }
+      if (orderNameTooltipHideTimer) {
+        clearTimeout(orderNameTooltipHideTimer);
+        orderNameTooltipHideTimer = null;
+      }
+      orderNameTooltipAnchor = null;
+      if (orderNameTooltipEl) orderNameTooltipEl.hidden = true;
+    }
+
+    function positionOrderNameTooltip(anchorEl) {
+      const tip = getOrderNameTooltipEl();
+      if (tip.hidden || !anchorEl) return;
+      const rect = anchorEl.getBoundingClientRect();
+      tip.style.visibility = 'hidden';
+      tip.hidden = false;
+      const tipW = tip.offsetWidth;
+      const tipH = tip.offsetHeight;
+      let left = rect.left;
+      let top = rect.bottom + 6;
+      if (left + tipW > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - tipW - 8);
+      }
+      if (top + tipH > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - tipH - 6);
+      }
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+      tip.style.visibility = 'visible';
+    }
+
+    function showOrderNameTooltip(anchorEl, text) {
+      const v = String(text ?? '');
+      if (!v || !anchorEl) {
+        hideOrderNameTooltip();
+        return;
+      }
+      orderNameTooltipAnchor = anchorEl;
+      const tip = getOrderNameTooltipEl();
+      tip.textContent = v;
+      tip.hidden = false;
+      positionOrderNameTooltip(anchorEl);
+    }
+
+    function scheduleOrderNameTooltip(anchorEl, text) {
+      if (orderNameTooltipShowTimer) clearTimeout(orderNameTooltipShowTimer);
+      orderNameTooltipShowTimer = setTimeout(() => {
+        orderNameTooltipShowTimer = null;
+        showOrderNameTooltip(anchorEl, text);
+      }, 350);
+    }
+
+    function setupOrderNameTooltipHandlers() {
+      if (ordersBody.dataset.orderTooltipBound) return;
+      ordersBody.dataset.orderTooltipBound = '1';
+
+      ordersBody.addEventListener('mouseover', e => {
+        const input = e.target.closest('.order-name');
+        if (!input || !ordersBody.contains(input)) return;
+        const text = input.value;
+        if (!text) return;
+        if (document.activeElement === input) return;
+        scheduleOrderNameTooltip(input, text);
+      });
+
+      ordersBody.addEventListener('mouseout', e => {
+        const input = e.target.closest('.order-name');
+        if (!input) return;
+        const related = e.relatedTarget;
+        if (related && (input === related || input.contains(related))) return;
+        hideOrderNameTooltip();
+      });
+
+      ordersBody.addEventListener('focusin', e => {
+        const input = e.target;
+        if (!input.matches || !input.matches('.order-name')) return;
+        input.classList.add('order-name-focused');
+        hideOrderNameTooltip();
+        if (input.value) showOrderNameTooltip(input, input.value);
+      });
+
+      ordersBody.addEventListener('focusout', e => {
+        const input = e.target;
+        if (!input.matches || !input.matches('.order-name')) return;
+        input.classList.remove('order-name-focused');
+        hideOrderNameTooltip();
+      });
+
+      window.addEventListener(
+        'scroll',
+        () => {
+          if (orderNameTooltipAnchor && orderNameTooltipEl && !orderNameTooltipEl.hidden) {
+            positionOrderNameTooltip(orderNameTooltipAnchor);
+          }
+        },
+        true
+      );
     }
 
     let ordersTableSyncScrollWidth = null;
@@ -1095,10 +1248,30 @@
 
     ordersBody.addEventListener('input', (e) => {
       const t = e.target;
+      if (t.matches && t.matches('input.order-name')) {
+        syncOrderNameTitle(t);
+        if (
+          orderNameTooltipEl &&
+          !orderNameTooltipEl.hidden &&
+          document.activeElement === t
+        ) {
+          showOrderNameTooltip(t, t.value);
+        }
+        calculateAll();
+        autoSave();
+        return;
+      }
       if (t.matches && t.matches('input.table-num')) {
         sanitizeTableNumInput(t);
         calculateAll();
         autoSave();
+      }
+    });
+
+    ordersBody.addEventListener('change', e => {
+      const t = e.target;
+      if (t.matches && t.matches('input.order-name')) {
+        syncOrderNameTitle(t);
       }
     });
 
@@ -1220,12 +1393,6 @@
       syncOrderNameTitle(orderInput);
 
       tr.querySelectorAll('input.table-num').forEach(initTableNumDisplay);
-
-      orderInput.addEventListener('input', () => {
-        syncOrderNameTitle(orderInput);
-        calculateAll();
-        autoSave();
-      });
 
       tr.querySelector('.delete-row').addEventListener('click', () => {
         tr.remove();
@@ -1569,6 +1736,7 @@
     function loadFrom1cRows(rowArrays) {
       process1cExcelRowDistribution(rowArrays);
       calculateAll();
+      refreshAllOrderNameTitles();
     }
 
     function clearOrderRowValidation(row) {
@@ -3144,6 +3312,7 @@
     // =====================
 
     refreshAllGlobalNums();
+    setupOrderNameTooltipHandlers();
     (async function initFromCloud() {
       try {
         allData = await loadData();

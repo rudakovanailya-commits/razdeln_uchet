@@ -437,6 +437,45 @@
       display: none !important;
     }
 
+    .orders-tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+
+    .orders-tab-bar button.orders-tab-btn {
+      background: #e0f2e8;
+      color: #14532d;
+      margin-right: 0;
+      font-size: 14px;
+    }
+
+    .orders-tab-bar button.orders-tab-btn.active {
+      background: #2f855a;
+      color: #f0fdf4;
+    }
+
+    #ordersTable[data-active-tab="expenses"]
+      :is(th, td):not(.tab-v-expenses):not(.tab-v-common) {
+      display: none;
+    }
+
+    #ordersTable[data-active-tab="economist"]
+      :is(th, td):not(.tab-v-economist):not(.tab-v-common) {
+      display: none;
+    }
+
+    #ordersTable[data-active-tab="reconcile"]
+      :is(th, td):not(.tab-v-reconcile):not(.tab-v-common) {
+      display: none;
+    }
+
+    #ordersTable :is(th, td).tab-v-internal {
+      display: none !important;
+    }
+
     #ordersTable td.readonly {
       font-size: 15px;
       padding: 10px 12px;
@@ -706,71 +745,86 @@
     <div class="card">
       <h2>Таблица заказов</h2>
 
+      <div class="orders-tab-bar" id="ordersTabBar" role="tablist" aria-label="Разделы таблицы заказов">
+        <button type="button" class="orders-tab-btn active" data-orders-tab="expenses" role="tab" aria-selected="true">
+          Расходы / база
+        </button>
+        <button type="button" class="orders-tab-btn" data-orders-tab="economist" role="tab" aria-selected="false">
+          Расчёт экономиста
+        </button>
+        <button type="button" class="orders-tab-btn" data-orders-tab="reconcile" role="tab" aria-selected="false">
+          Сверка с 1С
+        </button>
+      </div>
+      <div class="hint" id="ordersTabReconcileHint" hidden>
+        На этом этапе показаны базовые колонки для сверки. Полное разложение (без 26, 26 в НЗП, статусы, комментарий) — в следующем этапе.
+      </div>
+
       <div class="orders-table-scroll-outer">
         <div class="orders-table-scroll-top" id="ordersTableScrollTop" aria-hidden="true">
           <div class="orders-table-scroll-top-inner" id="ordersTableScrollTopInner"></div>
         </div>
         <div class="table-wrap orders-table-wrap" id="ordersTableWrap">
-        <table id="ordersTable" class="orders-block-table">
+        <table id="ordersTable" class="orders-block-table" data-active-tab="expenses">
           <thead>
             <tr>
-              <th class="orders-col-order">Заказ</th>
-              <th class="orders-col-shipment-vat">Отгрузка с НДС</th>
-              <th class="orders-col-shipment-no-vat">Отгрузка без НДС</th>
-              <th>% отгрузки</th>
-              <th>НЗП нач.</th>
-              <th>Материалы</th>
-              <th>Обработка</th>
-              <th>Прочее</th>
-              <th>ЗП</th>
-              <th>Доля ЗП</th>
-              <th>Взносы</th>
-              <th>Больничные</th>
-              <th>25 сч.</th>
-              <th>26 сч.</th>
-              <th>44 сч.</th>
-              <th>Всего затрат</th>
-              <th>Затраты периода</th>
-              <th>% списания</th>
-              <th>Ручное списание</th>
-              <th>Списано</th>
-              <th>НЗП конец</th>
-              <th>Прибыль, руб.</th>
-              <th>Прибыль с 26</th>
-              <th>Маржа, %</th>
-              <th>Маржа с 26, %</th>
-              <th>Удалить</th>
+              <th class="orders-col-order tab-v-expenses tab-v-economist tab-v-reconcile">Заказ</th>
+              <th class="orders-col-shipment-vat tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка с НДС</th>
+              <th class="orders-col-shipment-no-vat tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка без НДС</th>
+              <th class="tab-v-expenses">% отгрузки</th>
+              <th class="tab-v-expenses">НЗП нач.</th>
+              <th class="tab-v-expenses">Материалы</th>
+              <th class="tab-v-expenses">Обработка</th>
+              <th class="tab-v-expenses">Прочее</th>
+              <th class="tab-v-expenses">ЗП</th>
+              <th class="tab-v-internal">Доля ЗП</th>
+              <th class="tab-v-expenses">Взносы</th>
+              <th class="tab-v-expenses">Больничные</th>
+              <th class="tab-v-expenses">25 сч.</th>
+              <th class="tab-v-expenses tab-v-reconcile">26 распределённый</th>
+              <th class="tab-v-expenses">44 / транспортные</th>
+              <th class="tab-v-expenses tab-v-economist tab-v-reconcile">Итого расходов с 26</th>
+              <th class="tab-v-internal">Затраты периода</th>
+              <th class="tab-v-economist">% списания</th>
+              <th class="tab-v-economist">Ручное списание</th>
+              <th class="tab-v-economist tab-v-reconcile">Списание с 26</th>
+              <th class="tab-v-economist tab-v-reconcile">НЗП конец с 26</th>
+              <th class="tab-v-economist">Прибыль, руб.</th>
+              <th class="tab-v-internal">Прибыль с 26</th>
+              <th class="tab-v-economist">Маржа, %</th>
+              <th class="tab-v-internal">Маржа с 26, %</th>
+              <th class="tab-v-common">Удалить</th>
             </tr>
           </thead>
           <tbody id="ordersBody"></tbody>
           <tfoot>
             <tr>
-              <td class="readonly orders-col-order">Итого</td>
-              <td class="readonly orders-col-shipment-vat"></td>
-              <td class="readonly orders-col-shipment-no-vat"></td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
-              <td class="readonly" id="ordersFootMaterials">0.00</td>
-              <td class="readonly" id="ordersFootProcessing">0.00</td>
-              <td class="readonly" id="ordersFootOther">0.00</td>
-              <td class="readonly" id="ordersFootSalary">0.00</td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
-              <td class="readonly" id="ordersFootAcc25">0.00</td>
-              <td class="readonly" id="ordersFootAcc26">0.00</td>
-              <td class="readonly" id="ordersFootAcc44">0.00</td>
-              <td class="readonly" id="ordersFootTotalCost">0.00</td>
-              <td class="readonly" id="ordersFootPeriodCost">0.00</td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
-              <td class="readonly" id="ordersFootWriteOff">0.00</td>
-              <td class="readonly"></td>
-              <td class="readonly" id="ordersFootProfit">0.00</td>
-              <td class="readonly" id="ordersFootProfitWith26">0.00</td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
-              <td class="readonly"></td>
+              <td class="readonly orders-col-order tab-v-expenses tab-v-economist tab-v-reconcile">Итого</td>
+              <td class="readonly orders-col-shipment-vat tab-v-expenses tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-shipment-no-vat tab-v-expenses tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly tab-v-expenses"></td>
+              <td class="readonly tab-v-expenses"></td>
+              <td class="readonly tab-v-expenses" id="ordersFootMaterials">0.00</td>
+              <td class="readonly tab-v-expenses" id="ordersFootProcessing">0.00</td>
+              <td class="readonly tab-v-expenses" id="ordersFootOther">0.00</td>
+              <td class="readonly tab-v-expenses" id="ordersFootSalary">0.00</td>
+              <td class="readonly tab-v-internal"></td>
+              <td class="readonly tab-v-expenses"></td>
+              <td class="readonly tab-v-expenses"></td>
+              <td class="readonly tab-v-expenses" id="ordersFootAcc25">0.00</td>
+              <td class="readonly tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
+              <td class="readonly tab-v-expenses" id="ordersFootAcc44">0.00</td>
+              <td class="readonly tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
+              <td class="readonly tab-v-internal" id="ordersFootPeriodCost">0.00</td>
+              <td class="readonly tab-v-economist"></td>
+              <td class="readonly tab-v-economist"></td>
+              <td class="readonly tab-v-economist tab-v-reconcile" id="ordersFootWriteOff">0.00</td>
+              <td class="readonly tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly tab-v-economist" id="ordersFootProfit">0.00</td>
+              <td class="readonly tab-v-internal" id="ordersFootProfitWith26">0.00</td>
+              <td class="readonly tab-v-economist"></td>
+              <td class="readonly tab-v-internal"></td>
+              <td class="readonly tab-v-common"></td>
             </tr>
           </tfoot>
         </table>
@@ -1246,6 +1300,38 @@
       ordersTableSyncScrollWidth();
     }
 
+    function setupOrdersTableTabs() {
+      const table = document.getElementById('ordersTable');
+      const bar = document.getElementById('ordersTabBar');
+      if (!table || !bar || bar.dataset.tabsBound) return;
+      bar.dataset.tabsBound = '1';
+
+      const hint = document.getElementById('ordersTabReconcileHint');
+
+      function setOrdersTab(tabId) {
+        const id =
+          tabId === 'economist' || tabId === 'reconcile' ? tabId : 'expenses';
+        table.setAttribute('data-active-tab', id);
+        bar.querySelectorAll('[data-orders-tab]').forEach(btn => {
+          const active = btn.getAttribute('data-orders-tab') === id;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        if (hint) hint.hidden = id !== 'reconcile';
+        setupOrdersTableScrollSync();
+      }
+
+      bar.addEventListener('click', e => {
+        const btn = e.target.closest('[data-orders-tab]');
+        if (!btn) return;
+        setOrdersTab(btn.getAttribute('data-orders-tab'));
+      });
+
+      if (!table.getAttribute('data-active-tab')) {
+        setOrdersTab('expenses');
+      }
+    }
+
     ordersBody.addEventListener('input', (e) => {
       const t = e.target;
       if (t.matches && t.matches('input.order-name')) {
@@ -1351,32 +1437,32 @@
       tr.className = 'order-item';
 
       tr.innerHTML = `
-        <td class="orders-col-order"><input class="text order-name" type="text" placeholder="Заказ"></td>
-        <td class="orders-col-shipment-vat"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="readonly shipment-no-vat orders-col-shipment-no-vat">0.00</td>
-        <td class="readonly shipment-percent">0.00%</td>
-        <td><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
-        <td><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
-        <td><input class="processing table-num" type="text" inputmode="decimal" value="0"></td>
-        <td><input class="other-direct table-num" type="text" inputmode="decimal" value="0"></td>
-        <td><input class="salary table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="readonly salary-share">0.00%</td>
-        <td class="readonly insurance">0.00</td>
-        <td class="readonly sick">0.00</td>
-        <td class="readonly acc25">0.00</td>
-        <td class="readonly acc26">0.00</td>
-        <td class="readonly acc44">0.00</td>
-        <td class="readonly total-cost">0.00</td>
-        <td class="readonly period-cost">0.00</td>
-        <td><input class="profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
-        <td><input class="manual-writeoff table-num" type="text" inputmode="decimal"></td>
-        <td class="readonly write-off">0.00</td>
-        <td class="readonly wip-end">0.00</td>
-        <td class="readonly profit-rub">0.00</td>
-        <td class="readonly profit-with-26">0.00</td>
-        <td class="readonly profit-margin">0.0%</td>
-        <td class="readonly margin-with-26">0.0%</td>
-        <td><button type="button" class="secondary delete-row">X</button></td>
+        <td class="orders-col-order tab-v-expenses tab-v-economist tab-v-reconcile"><input class="text order-name" type="text" placeholder="Заказ"></td>
+        <td class="orders-col-shipment-vat tab-v-expenses tab-v-economist tab-v-reconcile"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly shipment-no-vat orders-col-shipment-no-vat tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly shipment-percent tab-v-expenses">0.00%</td>
+        <td class="tab-v-expenses"><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="tab-v-expenses"><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="tab-v-expenses"><input class="processing table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="tab-v-expenses"><input class="other-direct table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="tab-v-expenses"><input class="salary table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly salary-share tab-v-internal">0.00%</td>
+        <td class="readonly insurance tab-v-expenses">0.00</td>
+        <td class="readonly sick tab-v-expenses">0.00</td>
+        <td class="readonly acc25 tab-v-expenses">0.00</td>
+        <td class="readonly acc26 tab-v-expenses tab-v-reconcile">0.00</td>
+        <td class="readonly acc44 tab-v-expenses">0.00</td>
+        <td class="readonly total-cost tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly period-cost tab-v-internal">0.00</td>
+        <td class="tab-v-economist"><input class="profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="tab-v-economist"><input class="manual-writeoff table-num" type="text" inputmode="decimal"></td>
+        <td class="readonly write-off tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly wip-end tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly profit-rub tab-v-economist">0.00</td>
+        <td class="readonly profit-with-26 tab-v-internal">0.00</td>
+        <td class="readonly profit-margin tab-v-economist">0.0%</td>
+        <td class="readonly margin-with-26 tab-v-internal">0.0%</td>
+        <td class="tab-v-common"><button type="button" class="secondary delete-row">X</button></td>
       `;
 
       if (data.order) tr.querySelector('.order-name').value = data.order;
@@ -3313,6 +3399,7 @@
 
     refreshAllGlobalNums();
     setupOrderNameTooltipHandlers();
+    setupOrdersTableTabs();
     (async function initFromCloud() {
       try {
         allData = await loadData();

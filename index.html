@@ -87,6 +87,32 @@
       overflow-x: auto;
     }
 
+    .orders-table-scroll-outer {
+      margin-top: 4px;
+    }
+
+    .orders-table-scroll-top {
+      overflow-x: auto;
+      overflow-y: hidden;
+      height: 14px;
+      margin-bottom: 4px;
+      scrollbar-width: thin;
+    }
+
+    .orders-table-scroll-top-inner {
+      height: 1px;
+      pointer-events: none;
+    }
+
+    .table-wrap.orders-table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 300px);
+      min-height: 220px;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid #c8e6d1;
+      border-radius: 8px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -97,7 +123,7 @@
       width: 100%;
       min-width: 2400px;
       table-layout: auto;
-      --orders-col-order-w: 220px;
+      --orders-col-order-w: 280px;
       --orders-col-shipment-vat-w: 160px;
       --orders-sticky-pin-bg: #1e293b;
       --orders-sticky-pin-border: #334155;
@@ -109,11 +135,11 @@
       position: sticky;
       left: 0;
       top: 0;
-      z-index: 5;
+      z-index: 7;
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
       border-right: 1px solid var(--orders-sticky-pin-border);
-      box-shadow: none;
+      box-shadow: 2px 0 0 var(--orders-sticky-pin-border);
     }
 
     #ordersTable tbody td.orders-col-order,
@@ -131,11 +157,11 @@
       position: sticky;
       left: var(--orders-col-order-w);
       top: 0;
-      z-index: 4;
+      z-index: 6;
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
       border-right: 1px solid var(--orders-sticky-pin-border);
-      box-shadow: none;
+      box-shadow: 2px 0 0 var(--orders-sticky-pin-border);
     }
 
     #ordersTable tbody td.orders-col-shipment-vat,
@@ -155,12 +181,12 @@
         var(--orders-col-order-w) + var(--orders-col-shipment-vat-w)
       );
       top: 0;
-      z-index: 4;
+      z-index: 6;
       min-width: 120px;
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
       border-right: 1px solid var(--orders-sticky-pin-border);
-      box-shadow: none;
+      box-shadow: 2px 0 0 var(--orders-sticky-pin-border);
     }
 
     #ordersTable tbody td.shipment-no-vat,
@@ -199,6 +225,12 @@
       top: 0;
       z-index: 1;
       color: #14532d;
+    }
+
+    #ordersTable thead th:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat) {
+      z-index: 4;
+      background: #e0f2e8 !important;
+      box-shadow: 0 1px 0 #c8e6d1;
     }
 
     td input {
@@ -279,9 +311,9 @@
     #ordersTable thead th.orders-col-order,
     #ordersTable tbody td.orders-col-order,
     #ordersTable tfoot td.orders-col-order {
-      min-width: 220px;
-      width: 220px;
-      max-width: 220px;
+      min-width: 280px;
+      width: 280px;
+      max-width: 280px;
       box-sizing: border-box;
     }
 
@@ -363,8 +395,16 @@
     #ordersTable td input.order-name {
       width: 100%;
       min-height: 42px;
+      max-height: 42px;
       padding: 10px 12px;
       font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #ordersTable td.orders-col-order {
+      overflow: hidden;
     }
 
     #ordersTable td.readonly {
@@ -628,7 +668,7 @@
 
       <div class="hint">
         В этой версии:
-        44 распределяется по % отгрузки без НДС, а взносы, больничные, 25 и 26 — по доле ЗП.
+        44 и 26 распределяются по % отгрузки без НДС, а взносы, больничные и 25 — по доле ЗП.
         НЗП на начало вводится вручную, НЗП на конец считается автоматически.
       </div>
     </div>
@@ -636,7 +676,11 @@
     <div class="card">
       <h2>Таблица заказов</h2>
 
-      <div class="table-wrap">
+      <div class="orders-table-scroll-outer">
+        <div class="orders-table-scroll-top" id="ordersTableScrollTop" aria-hidden="true">
+          <div class="orders-table-scroll-top-inner" id="ordersTableScrollTopInner"></div>
+        </div>
+        <div class="table-wrap orders-table-wrap" id="ordersTableWrap">
         <table id="ordersTable" class="orders-block-table">
           <thead>
             <tr>
@@ -700,6 +744,7 @@
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
 
       <div class="totals">
@@ -1004,6 +1049,50 @@
       return Array.from(ordersBody.querySelectorAll('tr.order-item'));
     }
 
+    function syncOrderNameTitle(input) {
+      if (!input) return;
+      const v = String(input.value || '').trim();
+      input.title = v;
+      const td = input.closest('td');
+      if (td) td.title = v;
+    }
+
+    function refreshAllOrderNameTitles() {
+      ordersBody.querySelectorAll('.order-name').forEach(syncOrderNameTitle);
+    }
+
+    let ordersTableSyncScrollWidth = null;
+
+    function setupOrdersTableScrollSync() {
+      const wrap = document.getElementById('ordersTableWrap');
+      const top = document.getElementById('ordersTableScrollTop');
+      const topInner = document.getElementById('ordersTableScrollTopInner');
+      const table = document.getElementById('ordersTable');
+      if (!wrap || !top || !topInner || !table) return;
+
+      if (!wrap.dataset.scrollSyncBound) {
+        wrap.dataset.scrollSyncBound = '1';
+        top.addEventListener('scroll', () => {
+          if (wrap.scrollLeft !== top.scrollLeft) wrap.scrollLeft = top.scrollLeft;
+        });
+        wrap.addEventListener('scroll', () => {
+          if (top.scrollLeft !== wrap.scrollLeft) top.scrollLeft = wrap.scrollLeft;
+        });
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => {
+            if (ordersTableSyncScrollWidth) ordersTableSyncScrollWidth();
+          });
+          ro.observe(table);
+        }
+      }
+
+      ordersTableSyncScrollWidth = () => {
+        topInner.style.width = table.scrollWidth + 'px';
+        top.scrollLeft = wrap.scrollLeft;
+      };
+      ordersTableSyncScrollWidth();
+    }
+
     ordersBody.addEventListener('input', (e) => {
       const t = e.target;
       if (t.matches && t.matches('input.table-num')) {
@@ -1127,9 +1216,13 @@
       if (data.profitPercent) tr.querySelector('.profit-percent').value = data.profitPercent;
       if ('manualWriteoff' in data) tr.querySelector('.manual-writeoff').value = data.manualWriteoff;
 
+      const orderInput = tr.querySelector('.order-name');
+      syncOrderNameTitle(orderInput);
+
       tr.querySelectorAll('input.table-num').forEach(initTableNumDisplay);
 
-      tr.querySelector('.order-name').addEventListener('input', () => {
+      orderInput.addEventListener('input', () => {
+        syncOrderNameTitle(orderInput);
         calculateAll();
         autoSave();
       });
@@ -1138,9 +1231,11 @@
         tr.remove();
         calculateAll();
         autoSave();
+        setupOrdersTableScrollSync();
       });
 
       ordersBody.appendChild(tr);
+      setupOrdersTableScrollSync();
     }
 
     function is1cCsvHeaderRow(parts) {
@@ -1585,7 +1680,7 @@
         const insurance = totalInsurance * salaryShare;
         const sick = totalSick * salaryShare;
         const acc25 = total25 * salaryShare;
-        const acc26 = total26 * salaryShare;
+        const acc26 = total26 * shipmentShare;
         const acc44 = total44 * shipmentShare;
 
         const totalCost =
@@ -2178,6 +2273,9 @@
       } else {
         formatAllCalculatedFields();
       }
+
+      refreshAllOrderNameTitles();
+      setupOrdersTableScrollSync();
     }
 
     function savePeriod(showAlert = true) {
@@ -2666,7 +2764,7 @@
       const insurance = totalInsurance * salaryShare;
       const sick = totalSick * salaryShare;
       const acc25 = total25 * salaryShare;
-      const acc26 = total26 * salaryShare;
+      const acc26 = total26 * shipmentShare;
       const acc44 = total44 * shipmentShare;
 
       const totalCost =
@@ -3058,6 +3156,8 @@
       renderTable(allData);
       updatePeriodList();
       populateOrderSelect();
+      refreshAllOrderNameTitles();
+      setupOrdersTableScrollSync();
     })();
   </script>
 </body>

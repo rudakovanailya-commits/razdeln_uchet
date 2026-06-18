@@ -120,14 +120,20 @@
     }
 
     #ordersTable {
-      width: 100%;
-      min-width: 2400px;
-      table-layout: auto;
-      --orders-col-order-w: 280px;
-      --orders-col-shipment-vat-w: 160px;
+      width: max-content;
+      min-width: 0;
+      table-layout: fixed;
+      --orders-col-order-w: 220px;
+      --orders-col-shipment-vat-w: 118px;
+      --orders-col-shipment-no-vat-w: 118px;
       --orders-sticky-pin-bg: #1e293b;
       --orders-sticky-pin-border: #334155;
       --orders-sticky-pin-text: #e2e8f0;
+    }
+
+    #ordersTable :is(th, td).orders-col-w {
+      box-sizing: border-box;
+      overflow: hidden;
     }
 
     /* Три закреплённых столбца подряд (без «дырки»): Заказ | С НДС | без НДС */
@@ -182,7 +188,9 @@
       );
       top: 0;
       z-index: 6;
-      min-width: 120px;
+      min-width: var(--orders-col-shipment-no-vat-w);
+      width: var(--orders-col-shipment-no-vat-w);
+      max-width: var(--orders-col-shipment-no-vat-w);
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
       border-right: 1px solid var(--orders-sticky-pin-border);
@@ -196,7 +204,9 @@
         var(--orders-col-order-w) + var(--orders-col-shipment-vat-w)
       );
       z-index: 2;
-      min-width: 120px;
+      min-width: var(--orders-col-shipment-no-vat-w);
+      width: var(--orders-col-shipment-no-vat-w);
+      max-width: var(--orders-col-shipment-no-vat-w);
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
       border-right: 1px solid var(--orders-sticky-pin-border);
@@ -295,109 +305,216 @@
       font-weight: bold;
     }
 
-    /* Таблица заказов: шире колонки и крупнее цифры (иначе width:100% даёт «узкие» поля) */
+    /* Таблица заказов: компактные ячейки */
     #ordersTable th,
     #ordersTable td {
-      padding: 10px 10px;
+      padding: 8px 6px;
       font-size: 14px;
     }
 
     #ordersTable th {
-      font-size: 13px;
-      line-height: 1.35;
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: break-word;
+      hyphens: auto;
+      padding: 8px 6px;
     }
 
-    /* Мин. ширина ячеек — таблица растягивается, поля реально становятся шире */
+    #ordersTable thead th.orders-col-order,
+    #ordersTable thead th.orders-col-shipment-vat,
+    #ordersTable thead th.orders-col-shipment-no-vat {
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    /* --- Ширины колонок: вкладка «Расходы / база» --- */
+    #ordersTable[data-active-tab="expenses"] {
+      --orders-col-order-w: 218px;
+      --orders-col-shipment-vat-w: 116px;
+      --orders-col-shipment-no-vat-w: 116px;
+    }
+
+    #ordersTable[data-active-tab="expenses"] .col-pct-shipment {
+      width: 78px;
+      min-width: 78px;
+      max-width: 78px;
+    }
+
+    #ordersTable[data-active-tab="expenses"] .col-wip-start,
+    #ordersTable[data-active-tab="expenses"] .col-materials,
+    #ordersTable[data-active-tab="expenses"] .col-processing,
+    #ordersTable[data-active-tab="expenses"] .col-other,
+    #ordersTable[data-active-tab="expenses"] .col-salary {
+      width: 110px;
+      min-width: 110px;
+      max-width: 110px;
+    }
+
+    #ordersTable[data-active-tab="expenses"] .col-insurance,
+    #ordersTable[data-active-tab="expenses"] .col-sick,
+    #ordersTable[data-active-tab="expenses"] .col-acc25,
+    #ordersTable[data-active-tab="expenses"] .col-acc44 {
+      width: 96px;
+      min-width: 96px;
+      max-width: 96px;
+    }
+
+    #ordersTable[data-active-tab="expenses"] .col-acc26 {
+      width: 104px;
+      min-width: 104px;
+      max-width: 104px;
+    }
+
+    #ordersTable[data-active-tab="expenses"] .col-total-cost {
+      width: 128px;
+      min-width: 128px;
+      max-width: 128px;
+    }
+
+    /* --- Ширины: вкладка «Расчёт экономиста» --- */
+    #ordersTable[data-active-tab="economist"] {
+      --orders-col-order-w: 196px;
+      --orders-col-shipment-vat-w: 112px;
+      --orders-col-shipment-no-vat-w: 112px;
+    }
+
+    #ordersTable[data-active-tab="economist"] .col-total-cost {
+      width: 132px;
+      min-width: 132px;
+      max-width: 132px;
+    }
+
+    #ordersTable[data-active-tab="economist"] .col-profit-pct {
+      width: 88px;
+      min-width: 88px;
+      max-width: 88px;
+    }
+
+    #ordersTable[data-active-tab="economist"] .col-manual-writeoff {
+      width: 112px;
+      min-width: 112px;
+      max-width: 112px;
+    }
+
+    #ordersTable[data-active-tab="economist"] .col-writeoff,
+    #ordersTable[data-active-tab="economist"] .col-wip-end {
+      width: 114px;
+      min-width: 114px;
+      max-width: 114px;
+    }
+
+    #ordersTable[data-active-tab="economist"] .col-profit {
+      width: 108px;
+      min-width: 108px;
+      max-width: 108px;
+    }
+
+    #ordersTable[data-active-tab="economist"] .col-margin {
+      width: 78px;
+      min-width: 78px;
+      max-width: 78px;
+    }
+
+    /* --- Ширины: вкладка «Сверка с 1С» --- */
+    #ordersTable[data-active-tab="reconcile"] {
+      --orders-col-order-w: 210px;
+      --orders-col-shipment-vat-w: 110px;
+      --orders-col-shipment-no-vat-w: 110px;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] .col-acc26 {
+      width: 118px;
+      min-width: 118px;
+      max-width: 118px;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] .col-total-cost {
+      width: 134px;
+      min-width: 134px;
+      max-width: 134px;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] .col-writeoff,
+    #ordersTable[data-active-tab="reconcile"] .col-wip-end {
+      width: 120px;
+      min-width: 120px;
+      max-width: 120px;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] thead th.col-acc26,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-total-cost,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-writeoff,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-wip-end {
+      white-space: normal;
+      line-height: 1.25;
+    }
+
+    /* Общие ширины закреплённых и служебных колонок */
     #ordersTable thead th.orders-col-order,
     #ordersTable tbody td.orders-col-order,
     #ordersTable tfoot td.orders-col-order {
-      min-width: 280px;
-      width: 280px;
-      max-width: 280px;
+      min-width: var(--orders-col-order-w);
+      width: var(--orders-col-order-w);
+      max-width: var(--orders-col-order-w);
       box-sizing: border-box;
     }
 
     #ordersTable thead th.orders-col-shipment-vat,
     #ordersTable tbody td.orders-col-shipment-vat,
     #ordersTable tfoot td.orders-col-shipment-vat {
-      min-width: 160px;
-      width: 160px;
-      max-width: 160px;
+      min-width: var(--orders-col-shipment-vat-w);
+      width: var(--orders-col-shipment-vat-w);
+      max-width: var(--orders-col-shipment-vat-w);
       box-sizing: border-box;
     }
 
-    #ordersTable thead th:nth-child(5),
-    #ordersTable thead th:nth-child(6),
-    #ordersTable thead th:nth-child(7),
-    #ordersTable thead th:nth-child(8),
-    #ordersTable thead th:nth-child(18),
-    #ordersTable tbody td:nth-child(5),
-    #ordersTable tbody td:nth-child(6),
-    #ordersTable tbody td:nth-child(7),
-    #ordersTable tbody td:nth-child(8),
-    #ordersTable tbody td:nth-child(18) {
-      min-width: 140px;
+    #ordersTable .col-delete {
+      width: 48px;
+      min-width: 48px;
+      max-width: 48px;
+      padding-left: 4px;
+      padding-right: 4px;
     }
 
-    #ordersTable thead th:nth-child(9),
-    #ordersTable tbody td:nth-child(9) {
-      min-width: 260px;
-    }
-
-    #ordersTable thead th:nth-child(19),
-    #ordersTable tbody td:nth-child(19) {
-      min-width: 180px;
-    }
-
-    #ordersTable thead th:nth-child(4),
-    #ordersTable thead th:nth-child(10),
-    #ordersTable thead th:nth-child(11),
-    #ordersTable thead th:nth-child(12),
-    #ordersTable thead th:nth-child(13),
-    #ordersTable thead th:nth-child(14),
-    #ordersTable thead th:nth-child(15),
-    #ordersTable thead th:nth-child(16),
-    #ordersTable thead th:nth-child(17),
-    #ordersTable thead th:nth-child(20),
-    #ordersTable thead th:nth-child(21),
-    #ordersTable thead th:nth-child(22),
-    #ordersTable thead th:nth-child(23),
-    #ordersTable thead th:nth-child(24),
-    #ordersTable thead th:nth-child(25),
-    #ordersTable tbody td:nth-child(4),
-    #ordersTable tbody td:nth-child(10),
-    #ordersTable tbody td:nth-child(11),
-    #ordersTable tbody td:nth-child(12),
-    #ordersTable tbody td:nth-child(13),
-    #ordersTable tbody td:nth-child(14),
-    #ordersTable tbody td:nth-child(15),
-    #ordersTable tbody td:nth-child(16),
-    #ordersTable tbody td:nth-child(17),
-    #ordersTable tbody td:nth-child(20),
-    #ordersTable tbody td:nth-child(21),
-    #ordersTable tbody td:nth-child(22),
-    #ordersTable tbody td:nth-child(23),
-    #ordersTable tbody td:nth-child(24),
-    #ordersTable tbody td:nth-child(25) {
-      min-width: 120px;
+    #ordersTable .col-delete button {
+      width: 100%;
+      min-width: 0;
+      padding: 8px 4px;
+      margin: 0;
     }
 
     #ordersTable td input.table-num {
       width: 100%;
       min-width: 0;
-      min-height: 42px;
-      padding: 10px 12px;
-      font-size: 15px;
-      line-height: 1.35;
+      min-height: 36px;
+      padding: 7px 8px;
+      font-size: 14px;
+      line-height: 1.3;
       font-variant-numeric: tabular-nums;
+    }
+
+    #ordersTable[data-active-tab="expenses"] td input.wip-start,
+    #ordersTable[data-active-tab="expenses"] td input.materials,
+    #ordersTable[data-active-tab="expenses"] td input.processing,
+    #ordersTable[data-active-tab="expenses"] td input.other-direct,
+    #ordersTable[data-active-tab="expenses"] td input.salary {
+      min-height: 38px;
+      padding: 8px 8px;
+    }
+
+    #ordersTable[data-active-tab="economist"] td input.profit-percent,
+    #ordersTable[data-active-tab="economist"] td input.manual-writeoff {
+      min-height: 38px;
+      padding: 8px 8px;
     }
 
     #ordersTable td input.order-name {
       width: 100%;
-      min-height: 42px;
-      max-height: 42px;
-      padding: 10px 12px;
-      font-size: 15px;
+      min-height: 38px;
+      max-height: 38px;
+      padding: 8px 10px;
+      font-size: 14px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -477,10 +594,15 @@
     }
 
     #ordersTable td.readonly {
-      font-size: 15px;
-      padding: 10px 12px;
+      font-size: 14px;
+      padding: 8px 8px;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
+    }
+
+    #ordersTable[data-active-tab="expenses"] td.readonly.col-pct-shipment {
+      font-size: 13px;
+      padding: 8px 4px;
     }
 
     .orders-block-table tbody tr:hover {
@@ -768,63 +890,63 @@
         <table id="ordersTable" class="orders-block-table" data-active-tab="expenses">
           <thead>
             <tr>
-              <th class="orders-col-order tab-v-expenses tab-v-economist tab-v-reconcile">Заказ</th>
-              <th class="orders-col-shipment-vat tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка с НДС</th>
-              <th class="orders-col-shipment-no-vat tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка без НДС</th>
-              <th class="tab-v-expenses">% отгрузки</th>
-              <th class="tab-v-expenses">НЗП нач.</th>
-              <th class="tab-v-expenses">Материалы</th>
-              <th class="tab-v-expenses">Обработка</th>
-              <th class="tab-v-expenses">Прочее</th>
-              <th class="tab-v-expenses">ЗП</th>
-              <th class="tab-v-internal">Доля ЗП</th>
-              <th class="tab-v-expenses">Взносы</th>
-              <th class="tab-v-expenses">Больничные</th>
-              <th class="tab-v-expenses">25 сч.</th>
-              <th class="tab-v-expenses tab-v-reconcile">26 распределённый</th>
-              <th class="tab-v-expenses">44 / транспортные</th>
-              <th class="tab-v-expenses tab-v-economist tab-v-reconcile">Итого расходов с 26</th>
-              <th class="tab-v-internal">Затраты периода</th>
-              <th class="tab-v-economist">% списания</th>
-              <th class="tab-v-economist">Ручное списание</th>
-              <th class="tab-v-economist tab-v-reconcile">Списание с 26</th>
-              <th class="tab-v-economist tab-v-reconcile">НЗП конец с 26</th>
-              <th class="tab-v-economist">Прибыль, руб.</th>
-              <th class="tab-v-internal">Прибыль с 26</th>
-              <th class="tab-v-economist">Маржа, %</th>
-              <th class="tab-v-internal">Маржа с 26, %</th>
-              <th class="tab-v-common">Удалить</th>
+              <th class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Заказ</th>
+              <th class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка с НДС</th>
+              <th class="orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка без НДС</th>
+              <th class="orders-col-w col-pct-shipment tab-v-expenses">% отгрузки</th>
+              <th class="orders-col-w col-wip-start tab-v-expenses">НЗП нач.</th>
+              <th class="orders-col-w col-materials tab-v-expenses">Материалы</th>
+              <th class="orders-col-w col-processing tab-v-expenses">Обработка</th>
+              <th class="orders-col-w col-other tab-v-expenses">Прочее</th>
+              <th class="orders-col-w col-salary tab-v-expenses">ЗП</th>
+              <th class="orders-col-w col-salary-share tab-v-internal">Доля ЗП</th>
+              <th class="orders-col-w col-insurance tab-v-expenses">Взносы</th>
+              <th class="orders-col-w col-sick tab-v-expenses">Больничные</th>
+              <th class="orders-col-w col-acc25 tab-v-expenses">25 сч.</th>
+              <th class="orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" title="26 распределённый">26 распред.</th>
+              <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
+              <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
+              <th class="orders-col-w col-period-cost tab-v-internal">Затраты периода</th>
+              <th class="orders-col-w col-profit-pct tab-v-economist">% списания</th>
+              <th class="orders-col-w col-manual-writeoff tab-v-economist">Ручное списание</th>
+              <th class="orders-col-w col-writeoff tab-v-economist tab-v-reconcile">Списание с 26</th>
+              <th class="orders-col-w col-wip-end tab-v-economist tab-v-reconcile">НЗП конец с 26</th>
+              <th class="orders-col-w col-profit tab-v-economist">Прибыль, руб.</th>
+              <th class="orders-col-w col-profit-with26 tab-v-internal">Прибыль с 26</th>
+              <th class="orders-col-w col-margin tab-v-economist">Маржа, %</th>
+              <th class="orders-col-w col-margin-with26 tab-v-internal">Маржа с 26, %</th>
+              <th class="orders-col-w col-delete tab-v-common">Удалить</th>
             </tr>
           </thead>
           <tbody id="ordersBody"></tbody>
           <tfoot>
             <tr>
-              <td class="readonly orders-col-order tab-v-expenses tab-v-economist tab-v-reconcile">Итого</td>
-              <td class="readonly orders-col-shipment-vat tab-v-expenses tab-v-economist tab-v-reconcile"></td>
-              <td class="readonly orders-col-shipment-no-vat tab-v-expenses tab-v-economist tab-v-reconcile"></td>
-              <td class="readonly tab-v-expenses"></td>
-              <td class="readonly tab-v-expenses"></td>
-              <td class="readonly tab-v-expenses" id="ordersFootMaterials">0.00</td>
-              <td class="readonly tab-v-expenses" id="ordersFootProcessing">0.00</td>
-              <td class="readonly tab-v-expenses" id="ordersFootOther">0.00</td>
-              <td class="readonly tab-v-expenses" id="ordersFootSalary">0.00</td>
-              <td class="readonly tab-v-internal"></td>
-              <td class="readonly tab-v-expenses"></td>
-              <td class="readonly tab-v-expenses"></td>
-              <td class="readonly tab-v-expenses" id="ordersFootAcc25">0.00</td>
-              <td class="readonly tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
-              <td class="readonly tab-v-expenses" id="ordersFootAcc44">0.00</td>
-              <td class="readonly tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
-              <td class="readonly tab-v-internal" id="ordersFootPeriodCost">0.00</td>
-              <td class="readonly tab-v-economist"></td>
-              <td class="readonly tab-v-economist"></td>
-              <td class="readonly tab-v-economist tab-v-reconcile" id="ordersFootWriteOff">0.00</td>
-              <td class="readonly tab-v-economist tab-v-reconcile"></td>
-              <td class="readonly tab-v-economist" id="ordersFootProfit">0.00</td>
-              <td class="readonly tab-v-internal" id="ordersFootProfitWith26">0.00</td>
-              <td class="readonly tab-v-economist"></td>
-              <td class="readonly tab-v-internal"></td>
-              <td class="readonly tab-v-common"></td>
+              <td class="readonly orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Итого</td>
+              <td class="readonly orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-pct-shipment tab-v-expenses"></td>
+              <td class="readonly orders-col-w col-wip-start tab-v-expenses"></td>
+              <td class="readonly orders-col-w col-materials tab-v-expenses" id="ordersFootMaterials">0.00</td>
+              <td class="readonly orders-col-w col-processing tab-v-expenses" id="ordersFootProcessing">0.00</td>
+              <td class="readonly orders-col-w col-other tab-v-expenses" id="ordersFootOther">0.00</td>
+              <td class="readonly orders-col-w col-salary tab-v-expenses" id="ordersFootSalary">0.00</td>
+              <td class="readonly orders-col-w col-salary-share tab-v-internal"></td>
+              <td class="readonly orders-col-w col-insurance tab-v-expenses"></td>
+              <td class="readonly orders-col-w col-sick tab-v-expenses"></td>
+              <td class="readonly orders-col-w col-acc25 tab-v-expenses" id="ordersFootAcc25">0.00</td>
+              <td class="readonly orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
+              <td class="readonly orders-col-w col-acc44 tab-v-expenses" id="ordersFootAcc44">0.00</td>
+              <td class="readonly orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
+              <td class="readonly orders-col-w col-period-cost tab-v-internal" id="ordersFootPeriodCost">0.00</td>
+              <td class="readonly orders-col-w col-profit-pct tab-v-economist"></td>
+              <td class="readonly orders-col-w col-manual-writeoff tab-v-economist"></td>
+              <td class="readonly orders-col-w col-writeoff tab-v-economist tab-v-reconcile" id="ordersFootWriteOff">0.00</td>
+              <td class="readonly orders-col-w col-wip-end tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-profit tab-v-economist" id="ordersFootProfit">0.00</td>
+              <td class="readonly orders-col-w col-profit-with26 tab-v-internal" id="ordersFootProfitWith26">0.00</td>
+              <td class="readonly orders-col-w col-margin tab-v-economist"></td>
+              <td class="readonly orders-col-w col-margin-with26 tab-v-internal"></td>
+              <td class="readonly orders-col-w col-delete tab-v-common"></td>
             </tr>
           </tfoot>
         </table>
@@ -1300,6 +1422,55 @@
       ordersTableSyncScrollWidth();
     }
 
+    const ORDERS_TAB_HEADER_LABELS = {
+      'col-acc26': {
+        expenses: '26 распред.',
+        economist: '26 распред.',
+        reconcile: '26 распределённый'
+      },
+      'col-acc44': {
+        expenses: '44 / трансп.',
+        economist: '44 / трансп.',
+        reconcile: '44 / трансп.'
+      },
+      'col-total-cost': {
+        expenses: 'Итого с 26',
+        economist: 'Итого с 26',
+        reconcile: 'Итого расходов с 26'
+      },
+      'col-writeoff': {
+        expenses: 'Списание с 26',
+        economist: 'Списание с 26',
+        reconcile: 'Списание с 26'
+      },
+      'col-wip-end': {
+        expenses: 'НЗП конец с 26',
+        economist: 'НЗП конец с 26',
+        reconcile: 'НЗП конец с 26'
+      }
+    };
+
+    function applyOrdersTabHeaderLabels(tabId) {
+      const table = document.getElementById('ordersTable');
+      if (!table) return;
+      Object.keys(ORDERS_TAB_HEADER_LABELS).forEach(colClass => {
+        const th = table.querySelector('thead th.' + colClass);
+        if (!th) return;
+        const labels = ORDERS_TAB_HEADER_LABELS[colClass];
+        const text = labels[tabId] || labels.expenses;
+        th.textContent = text;
+        if (labels.reconcile && labels.reconcile !== text) {
+          th.title = labels.reconcile;
+        } else if (colClass === 'col-acc26') {
+          th.title = '26 распределённый';
+        } else if (colClass === 'col-acc44') {
+          th.title = '44 / транспортные';
+        } else if (colClass === 'col-total-cost') {
+          th.title = 'Итого расходов с 26';
+        }
+      });
+    }
+
     function setupOrdersTableTabs() {
       const table = document.getElementById('ordersTable');
       const bar = document.getElementById('ordersTabBar');
@@ -1318,7 +1489,8 @@
           btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
         if (hint) hint.hidden = id !== 'reconcile';
-        setupOrdersTableScrollSync();
+        applyOrdersTabHeaderLabels(id);
+        requestAnimationFrame(() => setupOrdersTableScrollSync());
       }
 
       bar.addEventListener('click', e => {
@@ -1329,6 +1501,8 @@
 
       if (!table.getAttribute('data-active-tab')) {
         setOrdersTab('expenses');
+      } else {
+        applyOrdersTabHeaderLabels(table.getAttribute('data-active-tab'));
       }
     }
 
@@ -1437,32 +1611,32 @@
       tr.className = 'order-item';
 
       tr.innerHTML = `
-        <td class="orders-col-order tab-v-expenses tab-v-economist tab-v-reconcile"><input class="text order-name" type="text" placeholder="Заказ"></td>
-        <td class="orders-col-shipment-vat tab-v-expenses tab-v-economist tab-v-reconcile"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="readonly shipment-no-vat orders-col-shipment-no-vat tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
-        <td class="readonly shipment-percent tab-v-expenses">0.00%</td>
-        <td class="tab-v-expenses"><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="tab-v-expenses"><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="tab-v-expenses"><input class="processing table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="tab-v-expenses"><input class="other-direct table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="tab-v-expenses"><input class="salary table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="readonly salary-share tab-v-internal">0.00%</td>
-        <td class="readonly insurance tab-v-expenses">0.00</td>
-        <td class="readonly sick tab-v-expenses">0.00</td>
-        <td class="readonly acc25 tab-v-expenses">0.00</td>
-        <td class="readonly acc26 tab-v-expenses tab-v-reconcile">0.00</td>
-        <td class="readonly acc44 tab-v-expenses">0.00</td>
-        <td class="readonly total-cost tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
-        <td class="readonly period-cost tab-v-internal">0.00</td>
-        <td class="tab-v-economist"><input class="profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="tab-v-economist"><input class="manual-writeoff table-num" type="text" inputmode="decimal"></td>
-        <td class="readonly write-off tab-v-economist tab-v-reconcile">0.00</td>
-        <td class="readonly wip-end tab-v-economist tab-v-reconcile">0.00</td>
-        <td class="readonly profit-rub tab-v-economist">0.00</td>
-        <td class="readonly profit-with-26 tab-v-internal">0.00</td>
-        <td class="readonly profit-margin tab-v-economist">0.0%</td>
-        <td class="readonly margin-with-26 tab-v-internal">0.0%</td>
-        <td class="tab-v-common"><button type="button" class="secondary delete-row">X</button></td>
+        <td class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"><input class="text order-name" type="text" placeholder="Заказ"></td>
+        <td class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly shipment-no-vat orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly shipment-percent orders-col-w col-pct-shipment tab-v-expenses">0.00%</td>
+        <td class="orders-col-w col-wip-start tab-v-expenses"><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-w col-materials tab-v-expenses"><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-w col-processing tab-v-expenses"><input class="processing table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-w col-other tab-v-expenses"><input class="other-direct table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-w col-salary tab-v-expenses"><input class="salary table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="readonly salary-share orders-col-w col-salary-share tab-v-internal">0.00%</td>
+        <td class="readonly insurance orders-col-w col-insurance tab-v-expenses">0.00</td>
+        <td class="readonly sick orders-col-w col-sick tab-v-expenses">0.00</td>
+        <td class="readonly acc25 orders-col-w col-acc25 tab-v-expenses">0.00</td>
+        <td class="readonly acc26 orders-col-w col-acc26 tab-v-expenses tab-v-reconcile">0.00</td>
+        <td class="readonly acc44 orders-col-w col-acc44 tab-v-expenses">0.00</td>
+        <td class="readonly total-cost orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly period-cost orders-col-w col-period-cost tab-v-internal">0.00</td>
+        <td class="orders-col-w col-profit-pct tab-v-economist"><input class="profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-w col-manual-writeoff tab-v-economist"><input class="manual-writeoff table-num" type="text" inputmode="decimal"></td>
+        <td class="readonly write-off orders-col-w col-writeoff tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly wip-end orders-col-w col-wip-end tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly profit-rub orders-col-w col-profit tab-v-economist">0.00</td>
+        <td class="readonly profit-with-26 orders-col-w col-profit-with26 tab-v-internal">0.00</td>
+        <td class="readonly profit-margin orders-col-w col-margin tab-v-economist">0.0%</td>
+        <td class="readonly margin-with-26 orders-col-w col-margin-with26 tab-v-internal">0.0%</td>
+        <td class="orders-col-w col-delete tab-v-common"><button type="button" class="secondary delete-row">X</button></td>
       `;
 
       if (data.order) tr.querySelector('.order-name').value = data.order;

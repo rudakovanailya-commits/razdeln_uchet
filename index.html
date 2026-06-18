@@ -436,16 +436,68 @@
     }
 
     #ordersTable[data-active-tab="reconcile"] .col-writeoff,
-    #ordersTable[data-active-tab="reconcile"] .col-wip-end {
-      width: 120px;
-      min-width: 120px;
-      max-width: 120px;
+    #ordersTable[data-active-tab="reconcile"] .col-wip-end,
+    #ordersTable[data-active-tab="reconcile"] .col-total-cost-no26,
+    #ordersTable[data-active-tab="reconcile"] .col-writeoff-no26,
+    #ordersTable[data-active-tab="reconcile"] .col-writeoff-26-part,
+    #ordersTable[data-active-tab="reconcile"] .col-wip-no26,
+    #ordersTable[data-active-tab="reconcile"] .col-wip-26-part,
+    #ordersTable[data-active-tab="reconcile"] .col-wip-check,
+    #ordersTable[data-active-tab="reconcile"] .col-reconcile-diff {
+      width: 112px;
+      min-width: 112px;
+      max-width: 112px;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] .col-writeoff-share {
+      width: 82px;
+      min-width: 82px;
+      max-width: 82px;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] .col-reconcile-status {
+      width: 168px;
+      min-width: 168px;
+      max-width: 168px;
+      white-space: normal;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] .col-reconcile-comment {
+      width: 220px;
+      min-width: 220px;
+      max-width: 280px;
+      white-space: normal;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    #ordersTable td.reconcile-status-ok {
+      color: #166534;
+      font-weight: 600;
+    }
+
+    #ordersTable td.reconcile-status-warn {
+      color: #c2410c;
+      font-weight: 600;
+    }
+
+    #ordersTable td.cell-reconcile-wip26-warn {
+      box-shadow: inset 0 0 0 2px #f59e0b;
+      background: #fffbeb !important;
     }
 
     #ordersTable[data-active-tab="reconcile"] thead th.col-acc26,
     #ordersTable[data-active-tab="reconcile"] thead th.col-total-cost,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-total-cost-no26,
     #ordersTable[data-active-tab="reconcile"] thead th.col-writeoff,
-    #ordersTable[data-active-tab="reconcile"] thead th.col-wip-end {
+    #ordersTable[data-active-tab="reconcile"] thead th.col-wip-end,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-wip-no26,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-wip-26-part,
+    #ordersTable[data-active-tab="reconcile"] thead th.col-reconcile-status {
       white-space: normal;
       line-height: 1.25;
     }
@@ -627,9 +679,15 @@
     #ordersTable tr.row-negative-margin td.orders-col-order,
     #ordersTable tr.row-negative-margin td.orders-col-shipment-vat,
     #ordersTable tr.row-negative-margin td.shipment-no-vat,
-    #ordersTable tr.row-negative-profit-with26 td.orders-col-order,
-    #ordersTable tr.row-negative-profit-with26 td.orders-col-shipment-vat,
-    #ordersTable tr.row-negative-profit-with26 td.shipment-no-vat {
+    #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td.orders-col-order,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td.shipment-no-vat,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td.orders-col-order,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td.shipment-no-vat,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td.orders-col-order,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td.shipment-no-vat {
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
     }
@@ -637,21 +695,32 @@
     #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.orders-col-order,
     #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.orders-col-shipment-vat,
     #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.shipment-no-vat,
-    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td.orders-col-order,
-    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td.orders-col-shipment-vat,
-    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td.shipment-no-vat {
+    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td.orders-col-order,
+    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td.orders-col-shipment-vat,
+    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td.shipment-no-vat,
+    #ordersTable[data-active-tab="reconcile"]
+      .orders-block-table
+      tbody
+      tr.row-negative-profit-with26:hover
+      td.orders-col-order,
+    #ordersTable[data-active-tab="reconcile"]
+      .orders-block-table
+      tbody
+      tr.row-negative-profit-with26:hover
+      td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="reconcile"]
+      .orders-block-table
+      tbody
+      tr.row-negative-profit-with26:hover
+      td.shipment-no-vat {
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text);
     }
 
-    #ordersTable input.cell-validate-hi,
-    #ordersTable td.cell-validate-hi {
-      border-color: #dc2626 !important;
-      box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.45);
-    }
-
-    #ordersTable td.cell-validate-hi {
-      box-shadow: inset 0 0 0 2px #dc2626;
+    #ordersTable input.cell-validate-hi-input {
+      border-color: #ca8a04 !important;
+      box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.5);
+      background: #fffbeb !important;
     }
 
     #ordersTable input.cell-validate-zero {
@@ -660,24 +729,46 @@
       background: #fffbeb !important;
     }
 
-    #ordersTable tr.row-validate-writeoff td {
-      background: #fecaca !important;
-    }
-
+    /* Критические ошибки — розовая строка */
+    #ordersTable tr.row-validate-writeoff td,
     #ordersTable tr.row-negative-margin td {
       background: #fecaca !important;
     }
 
-    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td {
+    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td,
+    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td {
       background: #fca5a5 !important;
     }
 
-    #ordersTable tr.row-negative-profit-with26 td {
+    #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td,
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td {
       background: #fecaca !important;
     }
 
-    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td {
+    #ordersTable.orders-block-table tbody tr.row-negative-wip-end:hover td {
       background: #fca5a5 !important;
+    }
+
+    /* Прибыль с 26 < 0 — предупреждение только на вкладке «Сверка с 1С» */
+    #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td {
+      background: #ffedd5 !important;
+    }
+
+    #ordersTable.orders-block-table tbody tr.row-negative-profit-with26:hover td {
+      background: inherit;
+    }
+
+    #ordersTable[data-active-tab="reconcile"]
+      .orders-block-table
+      tbody
+      tr.row-negative-profit-with26:hover
+      td {
+      background: #fed7aa !important;
+    }
+
+    #ordersTable td.cell-warning-reconcile-26 {
+      box-shadow: inset 0 0 0 2px #f59e0b;
+      background: #fffbeb !important;
     }
 
     #ordersTable td.cell-validate-negative {
@@ -879,7 +970,9 @@
         </button>
       </div>
       <div class="hint" id="ordersTabReconcileHint" hidden>
-        На этом этапе показаны базовые колонки для сверки. Полное разложение (без 26, 26 в НЗП, статусы, комментарий) — в следующем этапе.
+        На этом этапе на вкладке показано разложение НЗП и списания между базой без 26 и 26 счётом.
+        «НЗП конец с 26» — расчёт экономиста; «НЗП без 26» — ориентир для 20 счёта; «26 в НЗП» — часть, которая в 1С относится к 26.
+        Оранжевая строка или ячейка «26 в НЗП» — статус «Внимание: часть НЗП сидит в 26».
       </div>
 
       <div class="orders-table-scroll-outer">
@@ -906,11 +999,21 @@
               <th class="orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" title="26 распределённый">26 распред.</th>
               <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
               <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
+              <th class="orders-col-w col-total-cost-no26 tab-v-reconcile">Итого без 26</th>
+              <th class="orders-col-w col-writeoff-share tab-v-reconcile">Доля списания</th>
               <th class="orders-col-w col-period-cost tab-v-internal">Затраты периода</th>
               <th class="orders-col-w col-profit-pct tab-v-economist">% списания</th>
               <th class="orders-col-w col-manual-writeoff tab-v-economist">Ручное списание</th>
               <th class="orders-col-w col-writeoff tab-v-economist tab-v-reconcile">Списание с 26</th>
+              <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списание без 26</th>
+              <th class="orders-col-w col-writeoff-26-part tab-v-reconcile">26 списано</th>
               <th class="orders-col-w col-wip-end tab-v-economist tab-v-reconcile">НЗП конец с 26</th>
+              <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП без 26</th>
+              <th class="orders-col-w col-wip-26-part tab-v-reconcile">26 в НЗП</th>
+              <th class="orders-col-w col-wip-check tab-v-reconcile">НЗП с 26 контроль</th>
+              <th class="orders-col-w col-reconcile-diff tab-v-reconcile">Разница</th>
+              <th class="orders-col-w col-reconcile-status tab-v-reconcile">Сверка 1С</th>
+              <th class="orders-col-w col-reconcile-comment tab-v-reconcile">Комментарий</th>
               <th class="orders-col-w col-profit tab-v-economist">Прибыль, руб.</th>
               <th class="orders-col-w col-profit-with26 tab-v-internal">Прибыль с 26</th>
               <th class="orders-col-w col-margin tab-v-economist">Маржа, %</th>
@@ -937,11 +1040,21 @@
               <td class="readonly orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
               <td class="readonly orders-col-w col-acc44 tab-v-expenses" id="ordersFootAcc44">0.00</td>
               <td class="readonly orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
+              <td class="readonly orders-col-w col-total-cost-no26 tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-writeoff-share tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-period-cost tab-v-internal" id="ordersFootPeriodCost">0.00</td>
               <td class="readonly orders-col-w col-profit-pct tab-v-economist"></td>
               <td class="readonly orders-col-w col-manual-writeoff tab-v-economist"></td>
               <td class="readonly orders-col-w col-writeoff tab-v-economist tab-v-reconcile" id="ordersFootWriteOff">0.00</td>
+              <td class="readonly orders-col-w col-writeoff-no26 tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-writeoff-26-part tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-wip-end tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-wip-no26 tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-wip-26-part tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-wip-check tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-reconcile-diff tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-reconcile-status tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-reconcile-comment tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-profit tab-v-economist" id="ordersFootProfit">0.00</td>
               <td class="readonly orders-col-w col-profit-with26 tab-v-internal" id="ordersFootProfitWith26">0.00</td>
               <td class="readonly orders-col-w col-margin tab-v-economist"></td>
@@ -1627,11 +1740,21 @@
         <td class="readonly acc26 orders-col-w col-acc26 tab-v-expenses tab-v-reconcile">0.00</td>
         <td class="readonly acc44 orders-col-w col-acc44 tab-v-expenses">0.00</td>
         <td class="readonly total-cost orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly total-cost-no26 orders-col-w col-total-cost-no26 tab-v-reconcile">0.00</td>
+        <td class="readonly writeoff-share orders-col-w col-writeoff-share tab-v-reconcile">0.00%</td>
         <td class="readonly period-cost orders-col-w col-period-cost tab-v-internal">0.00</td>
         <td class="orders-col-w col-profit-pct tab-v-economist"><input class="profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
         <td class="orders-col-w col-manual-writeoff tab-v-economist"><input class="manual-writeoff table-num" type="text" inputmode="decimal"></td>
         <td class="readonly write-off orders-col-w col-writeoff tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly writeoff-no26 orders-col-w col-writeoff-no26 tab-v-reconcile">0.00</td>
+        <td class="readonly writeoff-26-part orders-col-w col-writeoff-26-part tab-v-reconcile">0.00</td>
         <td class="readonly wip-end orders-col-w col-wip-end tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly wip-no26 orders-col-w col-wip-no26 tab-v-reconcile">0.00</td>
+        <td class="readonly wip-26-part orders-col-w col-wip-26-part tab-v-reconcile">0.00</td>
+        <td class="readonly wip-check orders-col-w col-wip-check tab-v-reconcile">0.00</td>
+        <td class="readonly reconcile-diff orders-col-w col-reconcile-diff tab-v-reconcile">0.00</td>
+        <td class="readonly reconcile-status orders-col-w col-reconcile-status tab-v-reconcile"></td>
+        <td class="readonly reconcile-comment orders-col-w col-reconcile-comment tab-v-reconcile"></td>
         <td class="readonly profit-rub orders-col-w col-profit tab-v-economist">0.00</td>
         <td class="readonly profit-with-26 orders-col-w col-profit-with26 tab-v-internal">0.00</td>
         <td class="readonly profit-margin orders-col-w col-margin tab-v-economist">0.0%</td>
@@ -2000,10 +2123,89 @@
     }
 
     function clearOrderRowValidation(row) {
-      row.classList.remove('row-validate-writeoff', 'row-negative-margin', 'row-negative-profit-with26');
+      row.classList.remove(
+        'row-validate-writeoff',
+        'row-negative-margin',
+        'row-negative-profit-with26',
+        'row-negative-wip-end'
+      );
       row.querySelectorAll('input, td').forEach(el => {
-        el.classList.remove('cell-validate-hi', 'cell-validate-zero', 'cell-validate-negative');
+        el.classList.remove(
+          'cell-validate-hi',
+          'cell-validate-hi-input',
+          'cell-validate-zero',
+          'cell-validate-negative',
+          'cell-warning-reconcile-26',
+          'cell-reconcile-wip26-warn',
+          'reconcile-status-ok',
+          'reconcile-status-warn'
+        );
       });
+    }
+
+    const RECONCILE_EPS = 0.01;
+
+    function applyReconcileRowMetrics(row, totalCostWith26, acc26, writeOffWith26, wipEndWith26) {
+      if (!row) return;
+
+      const totalCostNo26 = totalCostWith26 - acc26;
+      const writeOffShare =
+        totalCostWith26 > 0 ? writeOffWith26 / totalCostWith26 : 0;
+      const writeOffNo26 = totalCostNo26 * writeOffShare;
+      const writeOff26 = acc26 * writeOffShare;
+      const wipNo26 = totalCostNo26 - writeOffNo26;
+      const wip26 = acc26 - writeOff26;
+      const wipWith26Check = wipNo26 + wip26;
+      const difference = wipEndWith26 - wipWith26Check;
+
+      const set = (selector, text) => {
+        const el = row.querySelector(selector);
+        if (el) el.textContent = text;
+      };
+
+      set('.total-cost-no26', fmt(totalCostNo26));
+      set('.writeoff-share', (writeOffShare * 100).toFixed(2) + '%');
+      set('.writeoff-no26', fmt(writeOffNo26));
+      set('.writeoff-26-part', fmt(writeOff26));
+      set('.wip-no26', fmt(wipNo26));
+      set('.wip-26-part', fmt(wip26));
+      set('.wip-check', fmt(wipWith26Check));
+      set('.reconcile-diff', fmt(difference));
+
+      const statusEl = row.querySelector('.reconcile-status');
+      const commentEl = row.querySelector('.reconcile-comment');
+      const wip26Cell = row.querySelector('.wip-26-part');
+
+      let status = 'ОК';
+      let comment =
+        'НЗП на 20: ' +
+        fmt(wipNo26) +
+        '; в части 26: ' +
+        fmt(wip26) +
+        '.';
+
+      if (wip26 > RECONCILE_EPS) {
+        status = 'Внимание: часть НЗП сидит в 26';
+        comment =
+          'На 20 ориентировочно ' +
+          fmt(wipNo26) +
+          '; в части 26 — ' +
+          fmt(wip26) +
+          ' (в 1С 26 закрывается отдельно).';
+        row.classList.add('row-negative-profit-with26');
+        if (wip26Cell) wip26Cell.classList.add('cell-reconcile-wip26-warn');
+      }
+
+      if (Math.abs(difference) > RECONCILE_EPS) {
+        comment += ' Контрольная разница: ' + fmt(difference) + '.';
+      }
+
+      if (statusEl) {
+        statusEl.textContent = status;
+        statusEl.classList.toggle('reconcile-status-ok', wip26 <= RECONCILE_EPS);
+        statusEl.classList.toggle('reconcile-status-warn', wip26 > RECONCILE_EPS);
+      }
+      if (commentEl) commentEl.textContent = comment;
     }
 
     function checkData() {
@@ -2177,12 +2379,10 @@
         row.querySelector('.write-off').textContent = fmt(writeOff);
         row.querySelector('.wip-end').textContent = fmt(wipEnd);
 
+        applyReconcileRowMetrics(row, totalCost, acc26, writeOff, wipEnd);
+
         if (marginPct < 0) {
           row.classList.add('row-negative-margin');
-        }
-
-        if (profitWith26 < 0) {
-          row.classList.add('row-negative-profit-with26');
         }
 
         const rowHasOtherSums = totalCost > 0 || shipmentNoVat > 0;
@@ -2190,31 +2390,8 @@
         row.querySelectorAll('input.table-num').forEach(el => {
           if (el.classList.contains('manual-writeoff') && !manualWriteoffHasValue(el)) return;
           const v = num(el.value);
-          if (v > VALIDATE_HI) el.classList.add('cell-validate-hi');
+          if (v > VALIDATE_HI) el.classList.add('cell-validate-hi-input');
           if (v === 0 && rowHasOtherSums) el.classList.add('cell-validate-zero');
-        });
-
-        [
-          '.shipment-no-vat',
-          '.shipment-percent',
-          '.salary-share',
-          '.insurance',
-          '.sick',
-          '.acc25',
-          '.acc26',
-          '.acc44',
-          '.total-cost',
-          '.period-cost',
-          '.profit-rub',
-          '.profit-with-26',
-          '.profit-margin',
-          '.margin-with-26',
-          '.write-off',
-          '.wip-end'
-        ].forEach(sel => {
-          const cell = row.querySelector(sel);
-          if (!cell) return;
-          if (num(cell.textContent) > VALIDATE_HI) cell.classList.add('cell-validate-hi');
         });
 
         if (writeOffRaw > totalCost) {
@@ -2225,6 +2402,7 @@
         }
 
         if (wipEnd < 0) {
+          row.classList.add('row-negative-wip-end');
           row.querySelector('.wip-end').classList.add('cell-validate-negative');
         }
 

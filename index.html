@@ -463,13 +463,20 @@
       font-weight: 600;
     }
 
-    #ordersTable td.cell-reconcile-wip26-warn {
-      box-shadow: inset 0 0 0 2px #f59e0b;
-      background: #fffbeb !important;
+    #ordersTable td.reconcile-status-check {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] td.wip-no26.cell-validate-negative {
+      box-shadow: inset 0 0 0 2px #ef4444;
+      background: #fef2f2 !important;
+      color: #b91c1c;
     }
 
 
-    /* Общие ширины закреплённых и служебных колонок */    #ordersTable thead th.orders-col-order,
+    /* Общие ширины закреплённых и служебных колонок */
+    #ordersTable thead th.orders-col-order,
     #ordersTable tbody td.orders-col-order,
     #ordersTable tfoot td.orders-col-order {
       min-width: var(--orders-col-order-w);
@@ -964,7 +971,7 @@
               <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
               <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
               <th class="orders-col-w col-total-cost-no26 tab-v-reconcile">Итого без 26</th>
-              <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="В 1С весь 26 списан в периоде">Списано 26</th>
+              <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="Сначала из списания закрывается 26: min(26, общее списание)">Списано 26</th>
               <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списано с 20</th>
               <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП 20</th>
               <th class="orders-col-w col-reconcile-status-1c tab-v-reconcile">Статус</th>
@@ -2108,7 +2115,8 @@
           'cell-warning-reconcile-26',
           'cell-reconcile-wip26-warn',
           'reconcile-status-ok',
-          'reconcile-status-warn'
+          'reconcile-status-warn',
+          'reconcile-status-check'
         );
       });
     }
@@ -2119,10 +2127,9 @@
       if (!row) return;
 
       const totalCostNo26 = totalCostWith26 - acc26;
-      const writeOffShare =
-        totalCostWith26 > 0 ? writeOffWith26 / totalCostWith26 : 0;
-      const writeOffNo26 = totalCostNo26 * writeOffShare;
-      const wip20 = totalCostNo26 - writeOffNo26;
+      const writeOff26_1c = Math.min(acc26, writeOffWith26);
+      const writeOff20 = Math.max(0, writeOffWith26 - writeOff26_1c);
+      const wip20Raw = totalCostNo26 - writeOff20;
 
       const set = (selector, text) => {
         const el = row.querySelector(selector);
@@ -2130,19 +2137,47 @@
       };
 
       set('.total-cost-no26', fmt(totalCostNo26));
-      set('.writeoff-26-1c', fmt(acc26));
-      set('.writeoff-no26', fmt(writeOffNo26));
-      set('.wip-no26', fmt(wip20));
+      set('.writeoff-26-1c', fmt(writeOff26_1c));
+      set('.writeoff-no26', fmt(writeOff20));
+      set('.wip-no26', fmt(wip20Raw));
 
       const statusEl = row.querySelector('.reconcile-status-1c');
-      const hasAcc26 = acc26 > RECONCILE_EPS;
-      const status = hasAcc26 ? '26 отдельно' : 'ОК';
+      const wip20Cell = row.querySelector('.wip-no26');
+      const commentEl = row.querySelector('.reconcile-comment');
 
-      if (statusEl) {
-        statusEl.textContent = status;
-        statusEl.classList.toggle('reconcile-status-ok', !hasAcc26);
-        statusEl.classList.toggle('reconcile-status-warn', hasAcc26);
+      let status;
+      let comment = '';
+
+      if (wip20Cell) {
+        wip20Cell.classList.remove('cell-validate-negative');
+        wip20Cell.removeAttribute('title');
       }
+      if (statusEl) {
+        statusEl.classList.remove(
+          'reconcile-status-ok',
+          'reconcile-status-warn',
+          'reconcile-status-check'
+        );
+      }
+
+      if (wip20Raw < -RECONCILE_EPS) {
+        status = 'Проверить';
+        comment = 'Списание с 20 больше расходов без 26';
+        if (wip20Cell) {
+          wip20Cell.classList.add('cell-validate-negative');
+          wip20Cell.title = comment;
+        }
+        if (statusEl) statusEl.classList.add('reconcile-status-check');
+      } else {
+        const hasAcc26 = acc26 > RECONCILE_EPS;
+        status = hasAcc26 ? '26 отдельно' : 'ОК';
+        if (statusEl) {
+          statusEl.classList.add(hasAcc26 ? 'reconcile-status-warn' : 'reconcile-status-ok');
+        }
+      }
+
+      if (statusEl) statusEl.textContent = status;
+      if (commentEl) commentEl.textContent = comment;
     }
 
     function checkData() {

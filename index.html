@@ -894,6 +894,7 @@
     .import1c-mode-dialog p {
       margin: 0 0 16px;
       line-height: 1.45;
+      white-space: pre-line;
     }
 
     .import1c-mode-actions {
@@ -2038,24 +2039,65 @@
         .trim();
     }
 
+    /** Сравнение названий договоров при импорте: trim, схлопывание пробелов (без смены регистра в хранимом значении) */
+    function normalizeOrderKey(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/от\s+\d{2}\.\d{2}\.\d{4}/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function ordersMatchForImport(a, b) {
+      const ka = normalizeOrderKey(a).toLowerCase();
+      const kb = normalizeOrderKey(b).toLowerCase();
+      return !!(ka && kb && ka === kb);
+    }
+
+    function create1cImportStats() {
+      return { loaded: 0, updated: 0, added: 0, skippedDupes: 0 };
+    }
+
+    function format1cImportStatsMessage(stats) {
+      return (
+        'Загружено строк из файла: ' +
+        stats.loaded +
+        '. Обновлено существующих строк: ' +
+        stats.updated +
+        '. Добавлено новых строк: ' +
+        stats.added +
+        '. Пропущено дублей: ' +
+        stats.skippedDupes +
+        '.'
+      );
+    }
+
+    function tableHasNonZeroWipStart() {
+      return getRows().some(tr => {
+        const w = tr.querySelector('.wip-start');
+        return w && num(w.value) > 0.01;
+      });
+    }
+
+    function rowWipStartValue(row) {
+      const el = row && row.querySelector('.wip-start');
+      return el ? num(el.value) : 0;
+    }
+
     function findRowByOrderName(orderRaw) {
       const raw = String(orderRaw == null ? '' : orderRaw).trim();
       if (!raw) return null;
-      const orderNorm = normalizeOrder(raw);
-      const list = [...document.querySelectorAll('#ordersTable tbody tr')];
-      if (orderNorm) {
-        return (
-          list.find(tr => {
-            const input = tr.querySelector('.order-name');
-            if (!input) return false;
-            return normalizeOrder(input.value) === orderNorm;
-          }) || null
-        );
-      }
+      const list = getRows();
+      const byKey = list.find(tr => {
+        const input = tr.querySelector('.order-name');
+        if (!input) return false;
+        return ordersMatchForImport(input.value, raw);
+      });
+      if (byKey) return byKey;
       return (
         list.find(tr => {
           const input = tr.querySelector('.order-name');
-          return input && (input.value || '').trim() === raw;
+          return input && normalizeOrderKey(input.value) === normalizeOrderKey(raw);
         }) || null
       );
     }
@@ -2120,31 +2162,47 @@
       materials,
       processing,
       other,
-      _salary,
-      wipStart
+      salary,
+      wipStart,
+      options
     ) {
       if (!targetRow) return;
+      options = options || {};
+      const merge = !!options.merge;
+      const inputMode = merge ? 'merge' : 'new';
 
       setInputValue(
         targetRow,
         '.materials input, input.materials',
         materials,
-        'mat'
+        'mat',
+        inputMode
       );
       setInputValue(
         targetRow,
         '.processing input, input.processing',
         processing,
-        'proc'
+        'proc',
+        inputMode
       );
       setInputValue(
         targetRow,
         '.other input, input.other, input.other-direct',
         other,
-        'oth'
+        'oth',
+        inputMode
+      );
+      setInputValue(
+        targetRow,
+        '.salary input, input.salary',
+        salary,
+        'salary',
+        inputMode
       );
 
+      const preserveWip = merge && rowWipStartValue(targetRow) > 0.01;
       if (
+        !preserveWip &&
         wipStart !== undefined &&
         wipStart !== null &&
         String(wipStart).trim() !== ''
@@ -2153,12 +2211,13 @@
           targetRow,
           '.wip-start input, input.wip-start',
           wipStart,
-          'wip'
+          'wip',
+          inputMode
         );
       }
     }
 
-    function apply1cParts(parts, sourceExcelRow) {
+    function apply1cParts(parts, sourceExcelRow, stats) {
       const p = parts.slice();
       while (p.length < 4) p.push('');
       while (p.length < 6) p.push('');
@@ -2167,8 +2226,9 @@
 
       const orderRaw = String(p[0] == null ? '' : p[0]).trim();
       if (is1cSkippedServiceRow(orderRaw)) return;
+      if (stats) stats.loaded++;
 
-      const orderNorm = normalizeOrder(orderRaw);
+      const orderNorm = normalizeOrderKey(orderRaw);
       const materials =
         p[1] !== undefined && p[1] !== null ? String(p[1]).trim() : '';
       const processing =
@@ -2219,8 +2279,13 @@
           processing,
           other,
           salary,
-          wipStart
+          wipStart,
+          { merge: true }
         );
+        if (stats) {
+          stats.updated++;
+          stats.skippedDupes++;
+        }
         return;
       }
 
@@ -2233,18 +2298,22 @@
         processing,
         other,
         salary,
-        wipStart
+        wipStart,
+        { merge: false }
       );
+      if (stats) stats.added++;
     }
 
     function loadFrom1cCsv(text) {
+      const stats = create1cImportStats();
       const raw = text.replace(/^\uFEFF/, '');
       const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
       for (let i = 0; i < lines.length; i++) {
         const parts = lines[i].split(';').map(c => c.trim());
-        apply1cParts(parts);
+        apply1cParts(parts, null, stats);
       }
+      return stats;
     }
 
     function normalize1cSheetRow(row) {
@@ -2269,7 +2338,7 @@
       return false;
     }
 
-    function setInputValue(rowEl, selector, value, fieldTag) {
+    function setInputValue(rowEl, selector, value, fieldTag, inputMode) {
       let el = null;
       for (const sel of String(selector)
         .split(',')
@@ -2288,6 +2357,7 @@
       );
       const currentN = Number.isFinite(current) ? current : num(el.value);
       const incomingN = Number.isFinite(incoming) ? incoming : num(value);
+      const merge = inputMode === 'merge';
 
       console.log(
         'FIELD:',
@@ -2295,10 +2365,28 @@
         'CURRENT:',
         currentN,
         'NEW:',
-        incomingN
+        incomingN,
+        'MODE:',
+        inputMode || 'new'
       );
 
       if (fieldTag === 'wip') {
+        if (merge) {
+          if (currentN > 0.01) return;
+          if (incomingN === 0) return;
+          el.value = String(incomingN);
+          initTableNumDisplay(el);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          return;
+        }
+        if (incomingN === 0) return;
+        el.value = String(currentN + incomingN);
+        initTableNumDisplay(el);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (merge) {
         if (incomingN === 0) return;
         el.value = String(currentN + incomingN);
         initTableNumDisplay(el);
@@ -2341,16 +2429,30 @@
         }
 
         const overlay = document.getElementById('import1cModeOverlay');
+        const titleEl = document.getElementById('import1cModeTitle');
         const replaceBtn = document.getElementById('import1cModeReplace');
         const appendBtn = document.getElementById('import1cModeAppend');
         const cancelBtn = document.getElementById('import1cModeCancel');
 
+        if (titleEl) {
+          let titleText = 'В таблице уже есть строки. Как загрузить файл из 1С?';
+          if (tableHasNonZeroWipStart()) {
+            titleText +=
+              '\n\nИмпорт из 1С обновит существующие договоры и добавит новые. НЗП нач. не будет затёрто.';
+          }
+          titleEl.textContent = titleText;
+        }
+
         if (!overlay || !replaceBtn || !appendBtn || !cancelBtn) {
-          const replace = confirm(
+          let confirmMsg =
             'В таблице уже есть строки. Очистить текущую таблицу перед загрузкой из 1С?\n\n' +
             'ОК — очистить и загрузить заново.\n' +
-            'Отмена — добавить к текущим строкам.'
-          );
+            'Отмена — добавить к текущим строкам.';
+          if (tableHasNonZeroWipStart()) {
+            confirmMsg +=
+              '\n\nИмпорт из 1С обновит существующие договоры и добавит новые. НЗП нач. не будет затёрто.';
+          }
+          const replace = confirm(confirmMsg);
           resolve(replace ? 'replace' : 'append');
           return;
         }
@@ -2375,7 +2477,9 @@
       });
     }
 
-    function process1cExcelRowDistribution(rowArrays) {
+    function process1cExcelRowDistribution(rowArrays, stats) {
+      if (!stats) stats = create1cImportStats();
+
       for (let i = 0; i < rowArrays.length; i++) {
         const parts = normalize1cSheetRow(rowArrays[i]);
         if (!parts.some(p => String(p).trim())) continue;
@@ -2384,6 +2488,9 @@
 
         const orderRaw = String(parts[0] ?? '').trim();
         if (!orderRaw) continue;
+        if (is1cSkippedServiceRow(orderRaw)) continue;
+
+        stats.loaded++;
 
         while (parts.length < 6) parts.push('');
 
@@ -2392,18 +2499,32 @@
         const processing = parts[3];
         const other = parts[4];
 
-        const tr = addOrderRow({ order: orderRaw });
-        if (!tr) continue;
+        let tr = findRowByOrderName(orderRaw);
+        const isMerge = !!tr;
+        if (isMerge) {
+          stats.updated++;
+          stats.skippedDupes++;
+        } else {
+          tr = addOrderRow({ order: orderRaw });
+          if (!tr) continue;
+          stats.added++;
+        }
 
-        apply1cExpenseFieldsToRow(tr, materials, processing, other, '', wip);
+        apply1cExpenseFieldsToRow(tr, materials, processing, other, '', wip, {
+          merge: isMerge
+        });
       }
+
+      return stats;
     }
 
     function loadFrom1cRows(rowArrays) {
-      process1cExcelRowDistribution(rowArrays);
+      const stats = create1cImportStats();
+      process1cExcelRowDistribution(rowArrays, stats);
       calculateAll();
       refreshAllOrderNameTitles();
       populateOrderSelect();
+      return stats;
     }
 
     function clearOrderRowValidation(row) {
@@ -5536,25 +5657,19 @@
             ordersBody.innerHTML = '';
           }
 
-          loadFrom1cRows(rows);
+          const importStats = loadFrom1cRows(rows);
           autoSave();
 
           if (statusEl) {
-            const modeNote =
-              mode === 'replace'
-                ? 'таблица заменена'
-                : 'строки добавлены к текущей таблице';
             statusEl.textContent =
-              'Загружено: «' +
+              format1cImportStatsMessage(importStats) +
+              ' Файл: «' +
               file.name +
               '», лист «' +
               sheetName +
-              '», строк в файле: ' +
-              rows.length +
-              ' (' +
-              modeNote +
-              ').';
+              '».';
           }
+          alert(format1cImportStatsMessage(importStats));
           console.log('Загруженные данные:', rows);
         } catch (err) {
           if (statusEl) statusEl.textContent = '';

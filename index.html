@@ -1045,9 +1045,10 @@
       <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         <button id="checkWipChainBtn" type="button" class="secondary">Проверить цепочку НЗП</button>
         <button id="applyWipChainBtn" type="button" class="secondary">Применить исправления по цепочке</button>
+        <button id="pullWipFromPrevBtn" type="button" class="secondary">Подтянуть НЗП из предыдущего периода</button>
       </div>
       <div class="hint" id="wipChainSourceHint" style="margin-top: 8px;">
-        Цепочка НЗП проверяется по локально сохранённым периодам (localStorage). Google Sheets не изменяется автоматически.
+        Цепочка НЗП и подтягивание из предыдущего периода используют «НЗП на 20 сч.» (без 26 сч.). Данные берутся из localStorage; Google Sheets не изменяется автоматически.
       </div>
       <div id="wipChainReportPanel" hidden></div>
 
@@ -4367,6 +4368,270 @@
       return listLocalStoragePeriods().filter(p => p > start);
     }
 
+    function getPreviousPeriod(period) {
+      const pn = normalizePeriodStr(period);
+      if (!pn || !/^\d{4}-\d{2}$/.test(pn)) return '';
+      const parts = pn.split('-');
+      let year = parseInt(parts[0], 10);
+      let month = parseInt(parts[1], 10) - 1;
+      if (month < 1) {
+        month = 12;
+        year -= 1;
+      }
+      return year + '-' + String(month).padStart(2, '0');
+    }
+
+    function getCurrentTableOrderMap() {
+      const map = new Map();
+      getRows().forEach(tr => {
+        const order = String(tr.querySelector('.order-name')?.value ?? '').trim();
+        if (!order) return;
+        map.set(order, {
+          tr,
+          wipStart: num(tr.querySelector('.wip-start')?.value)
+        });
+      });
+      return map;
+    }
+
+    function analyzePullWipFromPreviousPeriod(currentPeriod) {
+      const cur = normalizePeriodStr(currentPeriod);
+      if (!cur || !/^\d{4}-\d{2}$/.test(cur)) {
+        return { ok: false, error: 'Укажите период в формате YYYY-MM' };
+      }
+
+      const prevPeriod = getPreviousPeriod(cur);
+      const prevData = getPeriodDataForChain(prevPeriod);
+      if (!prevData) {
+        return {
+          ok: false,
+          error:
+            'Предыдущий период ' +
+            prevPeriod +
+            ' не найден в локально сохранённых периодах.'
+        };
+      }
+
+      const prevClone = clonePeriodData(prevData);
+      prevClone._chainPeriod = prevPeriod;
+      recalculatePeriodDataInMemory(prevClone);
+      const prevWipEnd = buildOrderWipEndMap(prevClone);
+      const currentOrders = getCurrentTableOrderMap();
+      const items = [];
+
+      prevWipEnd.forEach((wipEnd, order) => {
+        if (wipEnd <= WIP_CHAIN_EPS) return;
+
+        const existing = currentOrders.get(order);
+        if (!existing) {
+          items.push({
+            order,
+            prevWipEnd: wipEnd,
+            action: 'add',
+            actionLabel: 'добавить'
+          });
+        } else if (Math.abs(existing.wipStart - wipEnd) > WIP_CHAIN_EPS) {
+          items.push({
+            order,
+            prevWipEnd: wipEnd,
+            currentWipStart: existing.wipStart,
+            action: 'update',
+            actionLabel: 'обновить'
+          });
+        } else {
+          items.push({
+            order,
+            prevWipEnd: wipEnd,
+            currentWipStart: existing.wipStart,
+            action: 'exists',
+            actionLabel: 'уже есть'
+          });
+        }
+      });
+
+      items.sort((a, b) => a.order.localeCompare(b.order, 'ru'));
+
+      return {
+        ok: true,
+        currentPeriod: cur,
+        prevPeriod,
+        items,
+        toAdd: items.filter(i => i.action === 'add'),
+        toUpdate: items.filter(i => i.action === 'update'),
+        alreadyOk: items.filter(i => i.action === 'exists')
+      };
+    }
+
+    function buildPullWipFromPrevPreviewHtml(result) {
+      if (!result.items.length) {
+        return (
+          '<p>В предыдущем периоде <strong>' +
+          escapeHtmlForReport(result.prevPeriod) +
+          '</strong> нет заказов с переходящим НЗП (НЗП на 20 сч. &gt; 0,01).</p>'
+        );
+      }
+
+      let html =
+        '<p>Из предыдущего периода <strong>' +
+        escapeHtmlForReport(result.prevPeriod) +
+        '</strong> будут добавлены заказы с переходящим НЗП (источник — «НЗП на 20 сч.» пред. периода, без 26 сч.):</p>';
+      html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
+      html +=
+        '<th>Заказ</th><th>НЗП на 20 сч. пред. периода</th><th>Действие</th>';
+      html += '</tr></thead><tbody>';
+
+      result.items.forEach(item => {
+        let actionCell = item.actionLabel;
+        if (item.action === 'update') {
+          actionCell =
+            'обновить (сейчас ' + fmt(item.currentWipStart) + ')';
+        }
+        html +=
+          '<tr><td>' +
+          escapeHtmlForReport(item.order) +
+          '</td><td>' +
+          fmt(item.prevWipEnd) +
+          '</td><td>' +
+          escapeHtmlForReport(actionCell) +
+          '</td></tr>';
+      });
+
+      html += '</tbody></table></div>';
+
+      const addCount = result.toAdd.length;
+      const updCount = result.toUpdate.length;
+      if (addCount || updCount) {
+        html += '<p class="hint">';
+        if (addCount) html += 'Будет добавлено строк: ' + addCount + '. ';
+        if (updCount) {
+          html += 'Будет обновлено НЗП нач.: ' + updCount + ' заказ(ов).';
+        }
+        html += '</p>';
+      } else {
+        html +=
+          '<p class="hint">Все заказы с переходящим НЗП уже есть в таблице с корректным НЗП нач.</p>';
+      }
+
+      return html;
+    }
+
+    function applyPullWipFromPreviousPeriod(preview) {
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      if (!ordersTableHasNonEmptyRows()) {
+        ordersBody.innerHTML = '';
+      }
+
+      preview.toAdd.forEach(item => {
+        createRow({
+          order: item.order,
+          wipStart: formatWipStartStorage(item.prevWipEnd),
+          shipmentVat: '0',
+          materials: '0',
+          processing: '0',
+          other: '0',
+          salary: '0',
+          profitPercent: '0',
+          manualWriteoff: ''
+        });
+        addedCount++;
+      });
+
+      preview.toUpdate.forEach(item => {
+        getRows().forEach(tr => {
+          const order = String(tr.querySelector('.order-name')?.value ?? '').trim();
+          if (order !== item.order) return;
+          const wipEl = tr.querySelector('.wip-start');
+          if (!wipEl) return;
+          wipEl.value = formatWipStartStorage(item.prevWipEnd);
+          sanitizeTableNumInput(wipEl);
+          updatedCount++;
+        });
+      });
+
+      calculateAll();
+      populateOrderSelect();
+      setupOrdersTableScrollSync();
+      refreshAllOrderNameTitles();
+
+      let msg = 'Добавлено строк из переходящего НЗП: ' + addedCount;
+      if (updatedCount) {
+        msg += '\nОбновлено НЗП нач.: ' + updatedCount;
+      }
+      alert(msg);
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) {
+        statusEl.textContent =
+          'Подтягивание НЗП: добавлено ' +
+          addedCount +
+          (updatedCount ? ', обновлено НЗП нач. ' + updatedCount : '');
+      }
+
+      if (confirm('Сохранить период локально?')) {
+        savePeriod(true);
+      }
+    }
+
+    function showPullWipFromPrevDialog(preview, onConfirm) {
+      const overlay = document.getElementById('pullWipFromPrevOverlay');
+      const content = document.getElementById('pullWipFromPrevContent');
+      const confirmBtn = document.getElementById('pullWipFromPrevConfirmBtn');
+      const cancelBtn = document.getElementById('pullWipFromPrevCancelBtn');
+      if (!overlay || !content || !confirmBtn || !cancelBtn) {
+        onConfirm(false);
+        return;
+      }
+
+      content.innerHTML = buildPullWipFromPrevPreviewHtml(preview);
+      const canApply = preview.toAdd.length + preview.toUpdate.length > 0;
+      confirmBtn.disabled = !canApply;
+      confirmBtn.textContent = canApply ? 'Применить' : 'Нечего применять';
+
+      const finish = confirmed => {
+        overlay.hidden = true;
+        confirmBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        onConfirm(confirmed);
+      };
+      const onOk = () => {
+        if (!canApply) return;
+        finish(true);
+      };
+      const onCancel = () => finish(false);
+
+      confirmBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      overlay.hidden = false;
+    }
+
+    function runPullWipFromPreviousPeriod() {
+      if (isPeriodFinal()) {
+        alert(
+          'Закрытый период нельзя редактировать. Сначала верните период в работу.'
+        );
+        return;
+      }
+
+      const currentPeriod = getCurrentPeriod();
+      if (!currentPeriod) {
+        alert('Укажите текущий период в поле «Период»');
+        return;
+      }
+
+      const preview = analyzePullWipFromPreviousPeriod(currentPeriod);
+      if (!preview.ok) {
+        alert(preview.error);
+        return;
+      }
+
+      showPullWipFromPrevDialog(preview, confirmed => {
+        if (!confirmed) return;
+        applyPullWipFromPreviousPeriod(preview);
+      });
+    }
+
     function clonePeriodData(data) {
       return JSON.parse(JSON.stringify(data));
     }
@@ -4472,6 +4737,9 @@
       if (writeOff < 0) writeOff = 0;
 
       const wipEnd = totalCost - writeOff;
+      const totalCostNo26 = totalCost - acc26;
+      const writeOff20 = writeOff - acc26;
+      const wip20 = totalCostNo26 - writeOff20;
       const profitRub = shipmentNoVat - writeOff;
       const marginPct = shipmentNoVat > 0 ? (profitRub / shipmentNoVat) * 100 : 0;
       const profitWith26 = profitRub - acc26;
@@ -4494,7 +4762,9 @@
         profitWith26: fmt(profitWith26),
         profitMargin: marginPct.toFixed(1) + '%',
         marginWith26: marginWith26Pct.toFixed(1) + '%',
-        wipEndNum: wipEnd
+        wipEndNum: wipEnd,
+        wip20Num: wip20,
+        wipNo26: fmt(wip20)
       };
     }
 
@@ -4520,6 +4790,7 @@
           periodCost: m.periodCost,
           writeOff: m.writeOff,
           wipEnd: m.wipEnd,
+          wipNo26: m.wipNo26,
           profitRub: m.profitRub,
           profitWith26: m.profitWith26,
           profitMargin: m.profitMargin,
@@ -4544,12 +4815,28 @@
       return m.wipEndNum;
     }
 
+    /** НЗП на 20 сч. (вкладка «НЗП для 1С») — источник для переходящего НЗП между периодами */
+    function getRowWip20(row, data) {
+      const isFinal = data.periodStatus === 'final';
+      if (isFinal && row.snapshot && row.snapshot.wipNo26 != null && row.snapshot.wipNo26 !== '') {
+        return num(row.snapshot.wipNo26);
+      }
+      const totals = computePeriodTotals(data);
+      const m = computeFullRowMetrics(
+        row,
+        data.globals,
+        totals.totalShipmentNoVat,
+        totals.totalSalary
+      );
+      return m.wip20Num;
+    }
+
     function buildOrderWipEndMap(data) {
       const map = new Map();
       (data.rows || []).forEach(row => {
         const order = String(row.order != null ? row.order : '').trim();
         if (!order) return;
-        map.set(order, getRowWipEnd(row, data));
+        map.set(order, getRowWip20(row, data));
       });
       return map;
     }
@@ -4590,14 +4877,14 @@
           warnings.push({
             type: 'missing_in_next',
             order,
-            message: 'Заказ отсутствует в следующем периоде, хотя НЗП конец > 0'
+            message: 'Заказ отсутствует в следующем периоде, хотя НЗП на 20 сч. > 0'
           });
         }
         if (inNext && actual > WIP_CHAIN_EPS && (!inPrev || expected <= WIP_CHAIN_EPS)) {
           warnings.push({
             type: 'unexpected_start',
             order,
-            message: 'В текущем периоде есть НЗП нач., но в предыдущем НЗП конец = 0 или заказ отсутствует'
+            message: 'В текущем периоде есть НЗП нач., но в предыдущем НЗП на 20 сч. = 0 или заказ отсутствует'
           });
         }
         if (inPrev && inNext && Math.abs(expected - actual) > WIP_CHAIN_EPS) {
@@ -4746,7 +5033,7 @@
 
       html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
       html +=
-        '<th>Период</th><th>Заказ</th><th>НЗП конец пред.</th><th>НЗП нач. было</th><th>НЗП нач. новое</th><th>Разница</th><th>Статус</th><th>Примечание</th>';
+        '<th>Период</th><th>Заказ</th><th>НЗП на 20 сч. пред.</th><th>НЗП нач. было</th><th>НЗП нач. новое</th><th>Разница</th><th>Статус</th><th>Примечание</th>';
       html += '</tr></thead><tbody>';
 
       result.links.forEach(link => {
@@ -5422,6 +5709,11 @@
       applyWipChainBtn.addEventListener('click', () => runApplyWipChain());
     }
 
+    const pullWipFromPrevBtn = document.getElementById('pullWipFromPrevBtn');
+    if (pullWipFromPrevBtn) {
+      pullWipFromPrevBtn.addEventListener('click', () => runPullWipFromPreviousPeriod());
+    }
+
     const closePeriodBtnEl = document.getElementById('closePeriodBtn');
     if (closePeriodBtnEl) {
       closePeriodBtnEl.addEventListener('click', () => closePeriodWithConfirm());
@@ -5523,6 +5815,18 @@
       <div class="wip-chain-actions">
         <button type="button" id="wipChainApplyConfirmBtn">Применить</button>
         <button type="button" id="wipChainApplyCancelBtn" class="secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pullWipFromPrevOverlay" class="wip-chain-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pullWipFromPrevTitle">
+    <div class="wip-chain-dialog">
+      <h3 id="pullWipFromPrevTitle">Подтянуть НЗП из предыдущего периода</h3>
+      <p class="hint">Будут добавлены только отсутствующие заказы или обновлено «НЗП нач.» по расхождениям. Источник — «НЗП на 20 сч.» предыдущего периода (без 26 сч.). Отгрузка, расходы и ЗП существующих строк не меняются.</p>
+      <div id="pullWipFromPrevContent"></div>
+      <div class="wip-chain-actions">
+        <button type="button" id="pullWipFromPrevConfirmBtn">Применить</button>
+        <button type="button" id="pullWipFromPrevCancelBtn" class="secondary">Отмена</button>
       </div>
     </div>
   </div>

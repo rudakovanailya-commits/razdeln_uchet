@@ -934,17 +934,18 @@
 
       <div class="orders-tab-bar" id="ordersTabBar" role="tablist" aria-label="Разделы таблицы заказов">
         <button type="button" class="orders-tab-btn active" data-orders-tab="expenses" role="tab" aria-selected="true">
-          Расходы / база
+          Расходы по заказам
         </button>
         <button type="button" class="orders-tab-btn" data-orders-tab="economist" role="tab" aria-selected="false">
-          Расчёт экономиста
+          План списания и НЗП
         </button>
         <button type="button" class="orders-tab-btn" data-orders-tab="reconcile" role="tab" aria-selected="false">
-          Сверка с 1С
+          НЗП для 1С
         </button>
       </div>
       <div class="hint" id="ordersTabReconcileHint" hidden>
-        26 в 1С закрывается отдельно. НЗП 20 = расходы без 26 минус списание с 20.
+        26 счёт в 1С закрывается отдельно. Для инвентаризации НЗП ориентир — колонка «НЗП на 20 сч.».
+        Если «Списание с 20 сч.» получилось минусом, значит общее списание меньше 26 счёта — проверьте расчёт.
       </div>
 
       <div class="orders-table-scroll-outer">
@@ -971,11 +972,11 @@
               <th class="orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" title="26 распределённый">26 распред.</th>
               <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
               <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
-              <th class="orders-col-w col-total-cost-no26 tab-v-reconcile">Итого без 26</th>
-              <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="В 1С 26 закрывается полностью в периоде">Списано 26</th>
-              <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списано с 20</th>
-              <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП 20</th>
-              <th class="orders-col-w col-reconcile-status-1c tab-v-reconcile">Статус</th>
+              <th class="orders-col-w col-total-cost-no26 tab-v-reconcile">Расходы без 26</th>
+              <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="В 1С 26 счёт закрывается полностью в периоде">26 сч. списывается</th>
+              <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списание с 20 сч.</th>
+              <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП на 20 сч.</th>
+              <th class="orders-col-w col-reconcile-status-1c tab-v-reconcile">Контроль</th>
               <th class="orders-col-w col-writeoff-share tab-v-internal" title="writeOffWith26 / totalCostWith26">% спис.</th>
               <th class="orders-col-w col-period-cost tab-v-internal">Затраты периода</th>
               <th class="orders-col-w col-profit-pct tab-v-economist">% списания</th>
@@ -1515,7 +1516,7 @@
       'col-acc26': {
         expenses: '26 распред.',
         economist: '26 распред.',
-        reconcile: '26'
+        reconcile: '26 сч. распределён'
       },
       'col-acc44': {
         expenses: '44 / трансп.',
@@ -1524,12 +1525,27 @@
       },
       'col-total-cost': {
         expenses: 'Итого с 26',
-        economist: 'Итого с 26',
-        reconcile: 'Итого с 26'
+        economist: 'Расходы всего с 26',
+        reconcile: 'Расходы всего с 26'
+      },
+      'col-total-cost-no26': {
+        reconcile: 'Расходы без 26'
+      },
+      'col-writeoff-26-1c': {
+        reconcile: '26 сч. списывается'
+      },
+      'col-writeoff-no26': {
+        reconcile: 'Списание с 20 сч.'
+      },
+      'col-wip-no26': {
+        reconcile: 'НЗП на 20 сч.'
+      },
+      'col-reconcile-status-1c': {
+        reconcile: 'Контроль'
       },
       'col-writeoff': {
         expenses: 'Списание с 26',
-        economist: 'Списание с 26',
+        economist: 'Списание всего',
         reconcile: 'Списание с 26'
       },
       'col-wip-end': {
@@ -1546,16 +1562,30 @@
         const th = table.querySelector('thead th.' + colClass);
         if (!th) return;
         const labels = ORDERS_TAB_HEADER_LABELS[colClass];
-        const text = labels[tabId] || labels.expenses;
+        const text = labels[tabId];
+        if (text === undefined) return;
         th.textContent = text;
-        if (labels.reconcile && labels.reconcile !== text) {
-          th.title = labels.reconcile;
-        } else if (colClass === 'col-acc26') {
-          th.title = '26 распределённый';
+        if (colClass === 'col-acc26') {
+          th.title =
+            tabId === 'reconcile'
+              ? '26 счёт, распределённый по заказу'
+              : '26 распределённый';
         } else if (colClass === 'col-acc44') {
           th.title = '44 / транспортные';
         } else if (colClass === 'col-total-cost') {
-          th.title = 'Итого расходов с 26';
+          th.title = 'Расходы всего с 26 счётом';
+        } else if (colClass === 'col-total-cost-no26') {
+          th.title = 'Расходы без 26 счёта';
+        } else if (colClass === 'col-writeoff-26-1c') {
+          th.title = 'В 1С 26 счёт закрывается полностью в периоде';
+        } else if (colClass === 'col-writeoff-no26') {
+          th.title = 'Списание с 20 счёта после закрытия 26';
+        } else if (colClass === 'col-wip-no26') {
+          th.title = 'Ориентир НЗП для инвентаризации на 20 счёте';
+        } else if (colClass === 'col-reconcile-status-1c') {
+          th.title = 'Результат проверки расчёта для 1С';
+        } else if (colClass === 'col-writeoff' && tabId === 'economist') {
+          th.title = 'Общее списание по заказу';
         }
       });
     }

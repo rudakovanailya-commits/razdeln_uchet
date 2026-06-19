@@ -4,7 +4,8 @@
  *
  * doGet:  ?action=getRows → JSON-массив объектов со всеми полями.
  *         ?action=deletePeriod → { ok: false, error: "delete_not_allowed_via_get", deleted: 0 }
- * doPost: { "action": "upsert", "rows": [ {...}, ... ] } — upsert по period + order.
+ * doPost: { "action": "replacePeriod", "period": "YYYY-MM", "rows": [...] } — заменить все строки периода.
+ *         { "action": "upsert", "rows": [ {...}, ... ] } — upsert по period + order (устаревший).
  *         { "action": "deletePeriod", "period": "YYYY-MM", "token": "..." } — удаление периода (только admin).
  *
  * Токен: Script Properties → ADMIN_DELETE_TOKEN
@@ -191,6 +192,76 @@ function sheetRowArrayFromPayload(row) {
   return arr;
 }
 
+function sortDataSheetByPeriodAndOrder(sheet) {
+  ensureHeaders(sheet);
+  var lastRow = sheet.getLastRow();
+  var n = SHEET_COLUMNS.length;
+  if (lastRow < 2) return;
+  sheet.getRange(2, 1, lastRow, n).sort([
+    { column: 1, ascending: true },
+    { column: 2, ascending: true }
+  ]);
+}
+
+/** Удалить все строки периода (для replacePeriod; без проверки final). */
+function deleteAllRowsForPeriod(sheet, periodParam) {
+  ensureHeaders(sheet);
+  var period = normalizePeriodCell(periodParam);
+  if (!period) return 0;
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return 0;
+  var idx = headerIndex(sheet);
+  var pCol = idx['period'];
+  if (pCol === undefined) return 0;
+  var toDelete = [];
+  for (var r = 1; r < data.length; r++) {
+    if (normalizePeriodCell(data[r][pCol]) === period) {
+      toDelete.push(r + 1);
+    }
+  }
+  if (!toDelete.length) return 0;
+  toDelete.sort(function(a, b) {
+    return b - a;
+  });
+  for (var i = 0; i < toDelete.length; i++) {
+    sheet.deleteRow(toDelete[i]);
+  }
+  return toDelete.length;
+}
+
+function replacePeriodRows(sheet, periodParam, rows) {
+  ensureHeaders(sheet);
+  var period = normalizePeriodCell(periodParam);
+  if (!period) {
+    return jsonOut({ ok: false, error: 'period_required', deleted: 0, written: 0 });
+  }
+  rows = rows || [];
+  var deleted = deleteAllRowsForPeriod(sheet, period);
+  var n = SHEET_COLUMNS.length;
+  var values = [];
+  var written = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i] || {};
+    var order = String(row.order == null ? '' : row.order).trim();
+    if (!order) continue;
+    row.period = period;
+    values.push(sheetRowArrayFromPayload(row));
+    written++;
+  }
+  if (values.length) {
+    var startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, startRow + values.length - 1, n).setValues(values);
+  }
+  sortDataSheetByPeriodAndOrder(sheet);
+  return jsonOut({
+    ok: true,
+    period: period,
+    deleted: deleted,
+    written: written,
+    sorted: true
+  });
+}
+
 function upsertRows(sheet, rows) {
   ensureHeaders(sheet);
   var data = sheet.getDataRange().getValues();
@@ -243,6 +314,9 @@ function doPost(e) {
   }
   if (body && body.action === 'deletePeriod') {
     return deletePeriodPost(sheet, body);
+  }
+  if (body && body.action === 'replacePeriod') {
+    return replacePeriodRows(sheet, body.period, body.rows);
   }
   if (body && body.action === 'upsert' && Array.isArray(body.rows)) {
     return upsertRows(sheet, body.rows);

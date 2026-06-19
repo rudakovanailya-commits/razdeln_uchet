@@ -980,6 +980,25 @@
       border: 1px solid #e2e8f0;
     }
 
+    .wip-chain-auto-hint.wip-chain-auto-warn {
+      color: #b45309;
+    }
+
+    .wip-chain-auto-hint.wip-chain-auto-danger {
+      color: #b91c1c;
+      font-weight: 500;
+    }
+
+    .wip-chain-auto-hint.wip-chain-auto-ok {
+      color: #15803d;
+    }
+
+    #applyWipChainBtn.wip-chain-action-needed {
+      box-shadow: 0 0 0 2px #d97706;
+      background: #fffbeb;
+      border-color: #d97706;
+    }
+
     .period-status-display {
       padding: 10px 12px;
       border: 1px solid #d1d5db;
@@ -1051,6 +1070,7 @@
       <div class="hint" id="wipChainSourceHint" style="margin-top: 8px;">
         Цепочка НЗП и подтягивание из предыдущего периода используют «НЗП на 20 сч.» (без 26 сч.). Данные берутся из localStorage; Google Sheets не изменяется автоматически.
       </div>
+      <div class="hint wip-chain-auto-hint" id="wipChainAutoHint" hidden style="margin-top: 8px;"></div>
       <div id="wipChainReportPanel" hidden></div>
 
       <div class="top-grid">
@@ -3064,6 +3084,8 @@
       if (!period || !/^\d{4}-\d{2}$/.test(period)) return;
       if (period === loadedPeriodOnScreen) return;
 
+      clearWipChainAutoHint();
+
       const hadData = ordersTableHasNonEmptyRows();
       const prev = loadedPeriodOnScreen;
       const inStorage = !!localStorage.getItem(getStorageKey(period));
@@ -3199,6 +3221,8 @@
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = msg;
       alert(msg);
+
+      autoCheckWipChainAfterPeriodChange(period, { showAlert: true });
     }
 
     function collectRowData(tr) {
@@ -3583,6 +3607,16 @@
       if (showAlert) {
         alert('Сохранено');
       }
+
+      const shouldCheckWipChain =
+        options.checkWipChainAfter === true ||
+        (showAlert && options.checkWipChainAfter !== false);
+      if (shouldCheckWipChain) {
+        autoCheckWipChainAfterPeriodChange(period, {
+          showAlert: options.wipChainShowAlert !== false
+        });
+      }
+
       return true;
     }
 
@@ -3809,6 +3843,48 @@
         .filter(Boolean);
     }
 
+    async function postCloudSaveRequest(payload) {
+      const res = await fetch(CLOUD_SAVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Ответ сервера не JSON');
+      }
+      if (!data || data.ok !== true) {
+        throw new Error(
+          (data && data.error) || 'Ошибка сохранения в Google Sheets'
+        );
+      }
+      return data;
+    }
+
+    async function replacePeriodInCloud(period, rows) {
+      const pn = normalizePeriodStr(period);
+      if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
+        throw new Error('Некорректный период: ' + period);
+      }
+      if (!rows || !rows.length) {
+        throw new Error('Нет строк для отправки периода ' + pn);
+      }
+      const normalizedRows = rows.map(r =>
+        Object.assign({}, r, { period: pn })
+      );
+      return postCloudSaveRequest({
+        action: 'replacePeriod',
+        period: pn,
+        rows: normalizedRows
+      });
+    }
+
     async function saveStoredPeriodToCloud(period) {
       const pn = normalizePeriodStr(period);
       const raw = localStorage.getItem(getStorageKey(pn));
@@ -3826,11 +3902,7 @@
         throw new Error('Нет строк для отправки периода ' + pn);
       }
 
-      await fetch(CLOUD_SAVE_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({ action: 'upsert', rows })
-      });
+      return replacePeriodInCloud(pn, rows);
     }
 
     async function saveUnsyncedPeriodsToCloud() {
@@ -3846,6 +3918,7 @@
       }
 
       let savedCount = 0;
+      const savedPeriods = [];
       const errors = [];
 
       for (let i = 0; i < list.length; i++) {
@@ -3854,6 +3927,7 @@
           await saveStoredPeriodToCloud(period);
           removeUnsyncedChangedPeriod(period);
           savedCount++;
+          savedPeriods.push(period);
         } catch (err) {
           errors.push(
             period +
@@ -3870,7 +3944,12 @@
             : 'Не удалось сохранить периоды в Google Sheets';
       }
 
-      let msg = 'В Google Sheets сохранено периодов: ' + savedCount;
+      let msg =
+        savedCount > 0
+          ? 'В Google Sheets сохранены периоды: ' +
+            savedPeriods.join(', ') +
+            '. Таблица отсортирована.'
+          : 'Не удалось сохранить периоды в Google Sheets';
       if (errors.length) {
         msg += '\n\nОшибки:\n' + errors.join('\n');
       }
@@ -4301,30 +4380,31 @@
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
-        const st = getPeriodStatus();
-        const data = {
-          action: 'upsert',
-          rows: getCloudPayloadRows(period)
-        };
-
-        console.log('SENDING DATA:', data);
-
-        await fetch(CLOUD_SAVE_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          body: JSON.stringify(data)
-        });
-
-        console.log('REQUEST SENT');
+        const rows = getCloudPayloadRows(period);
+        const result = await replacePeriodInCloud(period, rows);
 
         removeUnsyncedChangedPeriod(period);
+        const deleted =
+          result.deleted != null ? Number(result.deleted) : 0;
+        const written =
+          result.written != null ? Number(result.written) : rows.length;
         const msg =
-          'Период ' + period + ' сохранён в Google Sheets со статусом ' + st + '.';
+          'Период ' +
+          period +
+          ' сохранён в Google Sheets. Удалено старых строк: ' +
+          deleted +
+          '. Записано строк: ' +
+          written +
+          '. Таблица отсортирована.';
         if (statusEl) statusEl.textContent = msg;
         alert(msg);
       } catch (err) {
         console.error('ERROR:', err);
-        alert('Ошибка сети');
+        if (statusEl) statusEl.textContent = '';
+        alert(
+          'Не удалось сохранить в Google Sheets: ' +
+            (err && err.message ? err.message : String(err))
+        );
       }
     }
 
@@ -5244,6 +5324,150 @@
       return html;
     }
 
+    function clearWipChainAutoHint() {
+      const hint = document.getElementById('wipChainAutoHint');
+      const applyBtn = document.getElementById('applyWipChainBtn');
+      if (hint) {
+        hint.hidden = true;
+        hint.textContent = '';
+        hint.className = 'hint wip-chain-auto-hint';
+      }
+      if (applyBtn) applyBtn.classList.remove('wip-chain-action-needed');
+    }
+
+    function updateWipChainAutoHint(period, result) {
+      const hint = document.getElementById('wipChainAutoHint');
+      const applyBtn = document.getElementById('applyWipChainBtn');
+      const pn = normalizePeriodStr(period);
+
+      if (!hint || !result) {
+        clearWipChainAutoHint();
+        return;
+      }
+
+      const subsequent = pn ? getSubsequentPeriods(pn) : [];
+      if (!pn || !subsequent.length) {
+        clearWipChainAutoHint();
+        return;
+      }
+
+      hint.hidden = false;
+
+      if (!result.ok) {
+        hint.className = 'hint wip-chain-auto-hint wip-chain-auto-warn';
+        hint.textContent =
+          'Период ' +
+          pn +
+          ' изменён. Есть последующие сохранённые периоды (' +
+          subsequent.join(', ') +
+          '). Проверьте цепочку НЗП от периода ' +
+          pn +
+          '.';
+        if (applyBtn) applyBtn.classList.remove('wip-chain-action-needed');
+        return;
+      }
+
+      if (result.totalDiscrepancies > 0) {
+        hint.className = 'hint wip-chain-auto-hint wip-chain-auto-danger';
+        hint.textContent =
+          'Период ' +
+          pn +
+          ' изменён. Есть расхождения переходящего НЗП в последующих периодах. Нажмите «Применить исправления по цепочке».';
+        if (applyBtn) applyBtn.classList.add('wip-chain-action-needed');
+        return;
+      }
+
+      hint.className = 'hint wip-chain-auto-hint wip-chain-auto-ok';
+      hint.textContent =
+        'Период ' +
+        pn +
+        ' изменён. Цепочка НЗП проверена — расхождений в последующих периодах не найдено.';
+      if (applyBtn) applyBtn.classList.remove('wip-chain-action-needed');
+    }
+
+    function autoCheckWipChainAfterPeriodChange(period, options) {
+      options = options || {};
+      const pn = normalizePeriodStr(period);
+      if (!pn) return null;
+
+      const subsequent = getSubsequentPeriods(pn);
+      if (!subsequent.length) {
+        clearWipChainAutoHint();
+        return null;
+      }
+
+      const result = checkWipChainFromPeriod(pn);
+      lastWipChainCheckResult = result;
+
+      if (!result.ok) {
+        updateWipChainAutoHint(pn, result);
+        if (options.showAlert !== false) {
+          alert(
+            'У периода ' +
+              pn +
+              ' есть последующие сохранённые периоды: ' +
+              subsequent.join(', ') +
+              '.\n\n' +
+              (result.error ||
+                'Не удалось проверить цепочку НЗП. Проверьте цепочку вручную от периода ' +
+                  pn +
+                  '.')
+          );
+        }
+        return result;
+      }
+
+      showWipChainReportPanel(result);
+      updateWipChainAutoHint(pn, result);
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) {
+        if (result.totalDiscrepancies > 0) {
+          statusEl.textContent =
+            'Период ' +
+            pn +
+            ': найдены расхождения переходящего НЗП (' +
+            result.totalDiscrepancies +
+            ' по заказам в ' +
+            result.periodsWithChanges.length +
+            ' периодах)';
+        } else {
+          statusEl.textContent =
+            'Период ' +
+            pn +
+            ': цепочка НЗП проверена, расхождений нет (' +
+            result.periodsChecked.length +
+            ' последующих периодов)';
+        }
+      }
+
+      if (options.showAlert !== false) {
+        if (result.totalDiscrepancies > 0) {
+          alert(
+            'У периода ' +
+              pn +
+              ' есть последующие сохранённые периоды: ' +
+              subsequent.join(', ') +
+              '.\n\n' +
+              'Изменение НЗП может повлиять на них.\n\n' +
+              'Найдены расхождения переходящего НЗП в последующих периодах. ' +
+              'Нужно применить исправления по цепочке.'
+          );
+        } else {
+          alert(
+            'У периода ' +
+              pn +
+              ' есть последующие сохранённые периоды: ' +
+              subsequent.join(', ') +
+              '.\n\n' +
+              'Цепочка НЗП проверена. Расхождений в последующих периодах не найдено.'
+          );
+        }
+      }
+
+      return result;
+    }
+
     function showWipChainReportPanel(result) {
       const panel = document.getElementById('wipChainReportPanel');
       if (!panel) return;
@@ -5263,6 +5487,7 @@
         return;
       }
       showWipChainReportPanel(result);
+      updateWipChainAutoHint(normalizePeriodStr(startPeriod), result);
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) {
         statusEl.textContent =
@@ -5479,6 +5704,10 @@
               msg += '\n\n' + applyReport.warnings.join('\n');
             }
             alert(msg);
+            updateWipChainAutoHint(
+              normalizePeriodStr(startPeriod),
+              lastWipChainCheckResult
+            );
             const statusEl = document.getElementById('periodActionStatus');
             if (statusEl) {
               let st =

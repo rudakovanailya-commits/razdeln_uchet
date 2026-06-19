@@ -2,10 +2,14 @@
  * Google Apps Script для веб-приложения «Раздельный учёт».
  * Лист: первая строка — заголовки (см. SHEET_COLUMNS).
  *
- * doGet:  ?action=getRows       → JSON-массив объектов со всеми полями.
- *         ?action=deletePeriod&period=YYYY-MM → { ok: true, deleted: N }
- * doPost: тело JSON { "action": "upsert", "rows": [ {...}, ... ] }
- *         upsert по паре period + order (обновление строки или append).
+ * doGet:  ?action=getRows → JSON-массив объектов со всеми полями.
+ *         ?action=deletePeriod → { ok: false, error: "delete_not_allowed_via_get", deleted: 0 }
+ * doPost: { "action": "upsert", "rows": [ {...}, ... ] } — upsert по period + order.
+ *         { "action": "deletePeriod", "period": "YYYY-MM", "token": "..." } — удаление периода (только admin).
+ *
+ * Токен: Script Properties → ADMIN_DELETE_TOKEN
+ * (Project Settings → Script properties или однократно в редакторе:
+ *  PropertiesService.getScriptProperties().setProperty('ADMIN_DELETE_TOKEN', 'ваш-секрет'); )
  */
 
 var SHEET_COLUMNS = [
@@ -30,6 +34,16 @@ function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+function getAdminDeleteToken() {
+  return PropertiesService.getScriptProperties().getProperty('ADMIN_DELETE_TOKEN') || '';
+}
+
+function isValidDeleteToken(token) {
+  var expected = getAdminDeleteToken();
+  if (!expected) return false;
+  return String(token == null ? '' : token) === expected;
 }
 
 function ensureHeaders(sheet) {
@@ -89,11 +103,23 @@ function normalizePeriodCell(p) {
   return s;
 }
 
-function deletePeriodRows(sheet, periodParam) {
+function periodHasFinalStatusInSheet(data, idx, pCol, sCol, period) {
+  if (sCol === undefined) return false;
+  for (var r = 1; r < data.length; r++) {
+    if (normalizePeriodCell(data[r][pCol]) !== period) continue;
+    var st = String(data[r][sCol] == null ? '' : data[r][sCol])
+      .trim()
+      .toLowerCase();
+    if (st === 'final') return true;
+  }
+  return false;
+}
+
+function deletePeriodRowsAuthorized(sheet, periodParam) {
   ensureHeaders(sheet);
   var period = normalizePeriodCell(periodParam);
   if (!period) {
-    return jsonOut({ ok: false, error: 'missing period', deleted: 0 });
+    return jsonOut({ ok: false, error: 'period_required', deleted: 0 });
   }
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) {
@@ -101,8 +127,12 @@ function deletePeriodRows(sheet, periodParam) {
   }
   var idx = headerIndex(sheet);
   var pCol = idx['period'];
+  var sCol = idx['status'];
   if (pCol === undefined) {
     return jsonOut({ ok: false, error: 'missing period column', deleted: 0 });
+  }
+  if (periodHasFinalStatusInSheet(data, idx, pCol, sCol, period)) {
+    return jsonOut({ ok: false, error: 'period_final', deleted: 0 });
   }
   var toDelete = [];
   for (var r = 1; r < data.length; r++) {
@@ -122,15 +152,23 @@ function deletePeriodRows(sheet, periodParam) {
   return jsonOut({ ok: true, deleted: toDelete.length });
 }
 
+function deletePeriodPost(sheet, body) {
+  body = body || {};
+  if (!isValidDeleteToken(body.token)) {
+    return jsonOut({ ok: false, error: 'forbidden', deleted: 0 });
+  }
+  return deletePeriodRowsAuthorized(sheet, body.period);
+}
+
 function doGet(e) {
   e = e || { parameter: {} };
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   if (e.parameter.action === 'deletePeriod') {
-    return deletePeriodRows(sheet, e.parameter.period);
+    return jsonOut({ ok: false, error: 'delete_not_allowed_via_get', deleted: 0 });
   }
   if (e.parameter.action !== 'getRows') {
     return jsonOut({ ok: true });
   }
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   ensureHeaders(sheet);
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) {
@@ -202,6 +240,9 @@ function doPost(e) {
     body = JSON.parse(e.postData.contents);
   } catch (err) {
     return jsonOut({ error: 'invalid json' });
+  }
+  if (body && body.action === 'deletePeriod') {
+    return deletePeriodPost(sheet, body);
   }
   if (body && body.action === 'upsert' && Array.isArray(body.rows)) {
     return upsertRows(sheet, body.rows);

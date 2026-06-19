@@ -906,6 +906,83 @@
       margin: 0;
       width: 100%;
     }
+
+    .wip-chain-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10001;
+      padding: 16px;
+    }
+
+    .wip-chain-overlay[hidden] {
+      display: none;
+    }
+
+    .wip-chain-dialog {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 24px;
+      max-width: 920px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .wip-chain-dialog h3 {
+      margin: 0 0 12px;
+    }
+
+    .wip-chain-scroll {
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    .wip-chain-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .wip-chain-table th,
+    .wip-chain-table td {
+      border: 1px solid #d1d5db;
+      padding: 6px 8px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .wip-chain-table th {
+      background: #e0f2e8;
+    }
+
+    .wip-chain-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .wip-chain-actions button {
+      margin: 0;
+    }
+
+    #wipChainReportPanel {
+      margin-top: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .unsynced-cloud-warning {
+      color: #b45309;
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -943,7 +1020,10 @@
         <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
         <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
         <button id="deleteCloudPeriodBtn" type="button" class="secondary">Удалить из Google Sheets</button>
+        <button id="saveUnsyncedCloudBtn" type="button" class="secondary" hidden>Сохранить изменённые периоды в Google Sheets</button>
       </div>
+
+      <div class="hint unsynced-cloud-warning" id="unsyncedCloudWarning" hidden style="margin-top: 8px;"></div>
 
       <div class="hint" style="margin-top: 8px;">
         Сохранённые периоды — локальные копии в браузере. Google Sheets хранится отдельно. Удаление локального периода не удаляет данные из Google Sheets.
@@ -951,6 +1031,15 @@
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+
+      <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <button id="checkWipChainBtn" type="button" class="secondary">Проверить цепочку НЗП</button>
+        <button id="applyWipChainBtn" type="button" class="secondary">Применить исправления по цепочке</button>
+      </div>
+      <div class="hint" id="wipChainSourceHint" style="margin-top: 8px;">
+        Цепочка НЗП проверяется по локально сохранённым периодам (localStorage). Google Sheets не изменяется автоматически.
+      </div>
+      <div id="wipChainReportPanel" hidden></div>
 
       <div class="top-grid">
         <div class="field">
@@ -3029,6 +3118,8 @@
         alert('Укажите период');
         return;
       }
+      if (!confirmIfUnsyncedCloudLoad()) return;
+
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Загрузка из облака…';
       try {
@@ -3335,7 +3426,210 @@
     const CLOUD_DATA_URL =
       'https://script.google.com/macros/s/AKfycbzevbcYIAH6-YgAthMDW58RjJEOULACRQmbHyM5h3E-pecLiTBTotlKmVYKWgtp4lNxYw/exec';
 
+    const UNSYNCED_CLOUD_STORAGE_KEY = 'razdelny_uchet_unsynced_cloud';
+
     let allData = [];
+
+    function loadUnsyncedChangedPeriods() {
+      try {
+        const raw = localStorage.getItem(UNSYNCED_CLOUD_STORAGE_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr
+          .map(p => normalizePeriodStr(p))
+          .filter(p => /^\d{4}-\d{2}$/.test(p))
+          .sort();
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveUnsyncedChangedPeriods(periods) {
+      const unique = [
+        ...new Set(
+          (periods || [])
+            .map(p => normalizePeriodStr(p))
+            .filter(p => /^\d{4}-\d{2}$/.test(p))
+        )
+      ].sort();
+      if (unique.length) {
+        localStorage.setItem(UNSYNCED_CLOUD_STORAGE_KEY, JSON.stringify(unique));
+      } else {
+        localStorage.removeItem(UNSYNCED_CLOUD_STORAGE_KEY);
+      }
+      updateUnsyncedCloudWarningUI();
+    }
+
+    function addUnsyncedChangedPeriods(periods) {
+      if (!periods || !periods.length) return;
+      const cur = loadUnsyncedChangedPeriods();
+      periods.forEach(p => {
+        const pn = normalizePeriodStr(p);
+        if (pn && !cur.includes(pn)) cur.push(pn);
+      });
+      saveUnsyncedChangedPeriods(cur);
+    }
+
+    function removeUnsyncedChangedPeriod(period) {
+      const pn = normalizePeriodStr(period);
+      saveUnsyncedChangedPeriods(loadUnsyncedChangedPeriods().filter(p => p !== pn));
+    }
+
+    function hasUnsyncedCloudChanges() {
+      return loadUnsyncedChangedPeriods().length > 0;
+    }
+
+    function updateUnsyncedCloudWarningUI() {
+      const list = loadUnsyncedChangedPeriods();
+      const warn = document.getElementById('unsyncedCloudWarning');
+      const btn = document.getElementById('saveUnsyncedCloudBtn');
+      if (!list.length) {
+        if (warn) {
+          warn.hidden = true;
+          warn.textContent = '';
+        }
+        if (btn) btn.hidden = true;
+        return;
+      }
+      const text =
+        'Есть локальные изменения, не отправленные в Google Sheets: ' + list.join(', ');
+      if (warn) {
+        warn.hidden = false;
+        warn.textContent = text;
+      }
+      if (btn) btn.hidden = false;
+    }
+
+    function confirmIfUnsyncedCloudLoad() {
+      if (!hasUnsyncedCloudChanges()) return true;
+      return confirm(
+        'Есть локальные изменения после пересчёта цепочки НЗП, ещё не сохранённые в Google Sheets. Загрузка из Google Sheets может перезаписать актуальные данные. Продолжить?'
+      );
+    }
+
+    function getCloudPayloadRowsFromStoredPeriod(period) {
+      const pn = normalizePeriodStr(period);
+      const raw = localStorage.getItem(getStorageKey(pn));
+      if (!raw) return null;
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+      if (!data || !Array.isArray(data.rows)) return null;
+
+      recalculatePeriodDataInMemory(data);
+      const totals = computePeriodTotals(data);
+      const st = data.periodStatus === 'final' ? 'final' : 'draft';
+
+      return data.rows
+        .map(row => {
+          const order = String(row.order != null ? row.order : '').trim();
+          if (!order) return null;
+          const m = computeFullRowMetrics(
+            row,
+            data.globals,
+            totals.totalShipmentNoVat,
+            totals.totalSalary
+          );
+          return {
+            period: pn,
+            order,
+            shipment: num(row.shipmentVat),
+            materials: num(row.materials),
+            processing: num(row.processing),
+            other: num(row.other),
+            salary: num(row.salary),
+            account25: num(m.acc25),
+            account26: num(m.acc26),
+            account44: num(m.acc44),
+            total_cost: num(m.totalCost),
+            writeoff: num(m.writeOff),
+            profit: num(m.profitRub),
+            profit_percent: num(m.profitMargin),
+            status: st
+          };
+        })
+        .filter(Boolean);
+    }
+
+    async function saveStoredPeriodToCloud(period) {
+      const pn = normalizePeriodStr(period);
+      const raw = localStorage.getItem(getStorageKey(pn));
+      if (!raw) {
+        throw new Error('Период ' + pn + ' не найден в localStorage');
+      }
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        throw new Error('Повреждённые данные периода ' + pn);
+      }
+      if (data && data.periodStatus === 'final') {
+        throw new Error('Период ' + pn + ' закрыт (final)');
+      }
+
+      const rows = getCloudPayloadRowsFromStoredPeriod(pn);
+      if (!rows || !rows.length) {
+        throw new Error('Нет строк для отправки периода ' + pn);
+      }
+
+      await fetch(CLOUD_SAVE_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: 'upsert', rows })
+      });
+    }
+
+    async function saveUnsyncedPeriodsToCloud() {
+      const list = loadUnsyncedChangedPeriods();
+      if (!list.length) {
+        alert('Нет периодов, ожидающих отправки в Google Sheets.');
+        return;
+      }
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Отправка в Google Sheets: ' + list.join(', ') + '…';
+      }
+
+      let savedCount = 0;
+      const errors = [];
+
+      for (let i = 0; i < list.length; i++) {
+        const period = list[i];
+        try {
+          await saveStoredPeriodToCloud(period);
+          removeUnsyncedChangedPeriod(period);
+          savedCount++;
+        } catch (err) {
+          errors.push(
+            period +
+              ': ' +
+              (err && err.message ? err.message : String(err))
+          );
+        }
+      }
+
+      if (statusEl) {
+        statusEl.textContent =
+          savedCount > 0
+            ? 'В Google Sheets сохранено периодов: ' + savedCount
+            : 'Не удалось сохранить периоды в Google Sheets';
+      }
+
+      let msg = 'В Google Sheets сохранено периодов: ' + savedCount;
+      if (errors.length) {
+        msg += '\n\nОшибки:\n' + errors.join('\n');
+      }
+      const remaining = loadUnsyncedChangedPeriods();
+      if (remaining.length) {
+        msg += '\n\nОстались несинхронизированные периоды: ' + remaining.join(', ');
+      }
+      alert(msg);
+    }
 
     function getCloudPeriodReportFetchUrl() {
       return CLOUD_DATA_URL;
@@ -3384,7 +3678,7 @@
     async function deletePeriodFromCloud() {
       const period = getCurrentPeriod();
       if (!period) {
-        alert('Укажите период для удаления из Google Sheets.');
+        alert('Укажите период');
         return;
       }
 
@@ -3402,12 +3696,29 @@
       );
       if (!ok) return;
 
+      const tokenRaw = prompt(
+        'Введите код администратора для удаления из Google Sheets'
+      );
+      if (tokenRaw === null) return;
+      const token = String(tokenRaw).trim();
+      if (!token) {
+        alert('Неверный код администратора');
+        return;
+      }
+
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Удаление из Google Sheets…';
 
       try {
-        const url = getCloudApiUrl('deletePeriod', { period });
-        const res = await fetch(url, { method: 'GET' });
+        const res = await fetch(CLOUD_DATA_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'deletePeriod',
+            period,
+            token
+          })
+        });
         if (!res.ok) {
           throw new Error('HTTP ' + res.status);
         }
@@ -3417,6 +3728,22 @@
           data = JSON.parse(text);
         } catch (e) {
           throw new Error('Ответ не JSON');
+        }
+
+        if (data && data.error === 'forbidden') {
+          if (statusEl) statusEl.textContent = '';
+          alert('Неверный код администратора');
+          return;
+        }
+        if (data && data.error === 'period_final') {
+          if (statusEl) statusEl.textContent = '';
+          alert('Закрытый период нельзя удалить из Google Sheets');
+          return;
+        }
+        if (data && data.error === 'period_required') {
+          if (statusEl) statusEl.textContent = '';
+          alert('Не указан период');
+          return;
         }
         if (!data || data.ok !== true) {
           throw new Error((data && data.error) || 'Ошибка удаления');
@@ -3744,6 +4071,7 @@
 
         console.log('REQUEST SENT');
 
+        removeUnsyncedChangedPeriod(period);
         alert('Данные отправлены');
       } catch (err) {
         console.error('ERROR:', err);
@@ -3914,8 +4242,731 @@
       if (writeOff < 0) writeOff = 0;
 
       const profitRub = shipmentNoVat - writeOff;
+      const wipEnd = totalCost - writeOff;
 
-      return { shipmentNoVat, shipmentVat, writeOff, profitRub };
+      return { shipmentNoVat, shipmentVat, writeOff, profitRub, wipEnd, totalCost };
+    }
+
+    const WIP_CHAIN_EPS = 0.01;
+    let lastWipChainCheckResult = null;
+
+    function listLocalStoragePeriods() {
+      return Object.keys(localStorage)
+        .filter(key => key.startsWith('razdelny_uchet_'))
+        .map(key => key.replace('razdelny_uchet_', ''))
+        .filter(p => /^\d{4}-\d{2}$/.test(p))
+        .sort();
+    }
+
+    function getSubsequentPeriods(startPeriod) {
+      const start = normalizePeriodStr(startPeriod);
+      return listLocalStoragePeriods().filter(p => p > start);
+    }
+
+    function clonePeriodData(data) {
+      return JSON.parse(JSON.stringify(data));
+    }
+
+    function ensurePeriodMeta(data) {
+      if (!data.meta || typeof data.meta !== 'object') {
+        data.meta = {};
+      }
+      if (data.meta.version == null) data.meta.version = 0;
+      return data.meta;
+    }
+
+    function getPeriodDataForChain(period) {
+      const pn = normalizePeriodStr(period);
+      if (!pn) return null;
+      if (normalizePeriodStr(getCurrentPeriod()) === pn) {
+        return collectData();
+      }
+      const raw = localStorage.getItem(getStorageKey(pn));
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function computePeriodTotals(data) {
+      const g = data.globals || {};
+      const vatRate = num(g.vatRate);
+      let totalShipmentNoVat = 0;
+      let totalSalary = 0;
+      (data.rows || []).forEach(r => {
+        totalShipmentNoVat += num(r.shipmentVat) / (1 + vatRate / 100);
+        totalSalary += num(r.salary);
+      });
+      return { totalShipmentNoVat, totalSalary };
+    }
+
+    function formatWipStartStorage(n) {
+      if (!Number.isFinite(n) || Math.abs(n) < 1e-9) return '0';
+      const out = formatNumber(String(n));
+      return out === '' ? '0' : out;
+    }
+
+    function computeFullRowMetrics(row, globals, totalShipmentNoVat, totalSalary) {
+      const vatRate = num(globals.vatRate);
+      const totalInsurance = num(globals.totalInsurance);
+      const totalSick = num(globals.totalSick);
+      const total25 = num(globals.total25);
+      const total26 = num(globals.total26);
+      const total44 = num(globals.total44);
+
+      const shipmentVat = num(row.shipmentVat);
+      const shipmentNoVat = shipmentVat / (1 + vatRate / 100);
+      const wipStart = num(row.wipStart);
+      const materials = num(row.materials);
+      const processing = num(row.processing);
+      const otherDirect = num(row.other);
+      const salary = num(row.salary);
+      const profitPercent = num(row.profitPercent);
+
+      const shipmentShare = totalShipmentNoVat ? shipmentNoVat / totalShipmentNoVat : 0;
+      const salaryShare = totalSalary ? salary / totalSalary : 0;
+
+      const insurance = totalInsurance * salaryShare;
+      const sick = totalSick * salaryShare;
+      const acc25 = total25 * salaryShare;
+      const acc26 = total26 * shipmentShare;
+      const acc44 = total44 * shipmentShare;
+
+      const totalCost =
+        wipStart +
+        materials +
+        processing +
+        otherDirect +
+        salary +
+        insurance +
+        sick +
+        acc25 +
+        acc26 +
+        acc44;
+
+      const periodCost =
+        materials +
+        processing +
+        otherDirect +
+        salary +
+        insurance +
+        acc25 +
+        acc26 +
+        acc44;
+
+      let writeOffRaw;
+      if (manualWriteoffSavedHasValue(row.manualWriteoff)) {
+        writeOffRaw = num(row.manualWriteoff);
+      } else {
+        writeOffRaw = shipmentNoVat * (profitPercent / 100);
+      }
+
+      let writeOff = writeOffRaw;
+      if (writeOff > totalCost) writeOff = totalCost;
+      if (writeOff < 0) writeOff = 0;
+
+      const wipEnd = totalCost - writeOff;
+      const profitRub = shipmentNoVat - writeOff;
+      const marginPct = shipmentNoVat > 0 ? (profitRub / shipmentNoVat) * 100 : 0;
+      const profitWith26 = profitRub - acc26;
+      const marginWith26Pct = shipmentNoVat > 0 ? (profitWith26 / shipmentNoVat) * 100 : 0;
+
+      return {
+        shipmentNoVat: fmt(shipmentNoVat),
+        shipmentPercent: (shipmentShare * 100).toFixed(2) + '%',
+        salaryShare: (salaryShare * 100).toFixed(2) + '%',
+        insurance: fmt(insurance),
+        sick: fmt(sick),
+        acc25: fmt(acc25),
+        acc26: fmt(acc26),
+        acc44: fmt(acc44),
+        totalCost: fmt(totalCost),
+        periodCost: fmt(periodCost),
+        writeOff: fmt(writeOff),
+        wipEnd: fmt(wipEnd),
+        profitRub: fmt(profitRub),
+        profitWith26: fmt(profitWith26),
+        profitMargin: marginPct.toFixed(1) + '%',
+        marginWith26: marginWith26Pct.toFixed(1) + '%',
+        wipEndNum: wipEnd
+      };
+    }
+
+    function recalculatePeriodDataInMemory(data) {
+      const totals = computePeriodTotals(data);
+      (data.rows || []).forEach(row => {
+        const m = computeFullRowMetrics(
+          row,
+          data.globals,
+          totals.totalShipmentNoVat,
+          totals.totalSalary
+        );
+        row.snapshot = {
+          shipmentNoVat: m.shipmentNoVat,
+          shipmentPercent: m.shipmentPercent,
+          salaryShare: m.salaryShare,
+          insurance: m.insurance,
+          sick: m.sick,
+          acc25: m.acc25,
+          acc26: m.acc26,
+          acc44: m.acc44,
+          totalCost: m.totalCost,
+          periodCost: m.periodCost,
+          writeOff: m.writeOff,
+          wipEnd: m.wipEnd,
+          profitRub: m.profitRub,
+          profitWith26: m.profitWith26,
+          profitMargin: m.profitMargin,
+          marginWith26: m.marginWith26
+        };
+      });
+      return data;
+    }
+
+    function getRowWipEnd(row, data) {
+      const isFinal = data.periodStatus === 'final';
+      if (isFinal && row.snapshot && row.snapshot.wipEnd != null && row.snapshot.wipEnd !== '') {
+        return num(row.snapshot.wipEnd);
+      }
+      const totals = computePeriodTotals(data);
+      const m = computeFullRowMetrics(
+        row,
+        data.globals,
+        totals.totalShipmentNoVat,
+        totals.totalSalary
+      );
+      return m.wipEndNum;
+    }
+
+    function buildOrderWipEndMap(data) {
+      const map = new Map();
+      (data.rows || []).forEach(row => {
+        const order = String(row.order != null ? row.order : '').trim();
+        if (!order) return;
+        map.set(order, getRowWipEnd(row, data));
+      });
+      return map;
+    }
+
+    function buildOrderWipStartMap(data) {
+      const map = new Map();
+      (data.rows || []).forEach(row => {
+        const order = String(row.order != null ? row.order : '').trim();
+        if (!order) return;
+        map.set(order, num(row.wipStart));
+      });
+      return map;
+    }
+
+    function findRowByOrderInData(data, order) {
+      const target = String(order).trim();
+      return (data.rows || []).find(r => String(r.order != null ? r.order : '').trim() === target) || null;
+    }
+
+    function compareWipChainLink(prevData, nextData, nextPeriod) {
+      const prevPeriod =
+        prevData && prevData._chainPeriod
+          ? prevData._chainPeriod
+          : '';
+      const prevWipEnd = buildOrderWipEndMap(prevData);
+      const nextWipStart = buildOrderWipStartMap(nextData);
+      const discrepancies = [];
+      const warnings = [];
+      const allOrders = new Set([...prevWipEnd.keys(), ...nextWipStart.keys()]);
+
+      allOrders.forEach(order => {
+        const expected = prevWipEnd.has(order) ? prevWipEnd.get(order) : 0;
+        const actual = nextWipStart.has(order) ? nextWipStart.get(order) : 0;
+        const inPrev = prevWipEnd.has(order);
+        const inNext = nextWipStart.has(order);
+
+        if (inPrev && expected > WIP_CHAIN_EPS && !inNext) {
+          warnings.push({
+            type: 'missing_in_next',
+            order,
+            message: 'Заказ отсутствует в следующем периоде, хотя НЗП конец > 0'
+          });
+        }
+        if (inNext && actual > WIP_CHAIN_EPS && (!inPrev || expected <= WIP_CHAIN_EPS)) {
+          warnings.push({
+            type: 'unexpected_start',
+            order,
+            message: 'В текущем периоде есть НЗП нач., но в предыдущем НЗП конец = 0 или заказ отсутствует'
+          });
+        }
+        if (inPrev && inNext && Math.abs(expected - actual) > WIP_CHAIN_EPS) {
+          discrepancies.push({
+            order,
+            expected,
+            oldStart: actual,
+            diff: expected - actual
+          });
+        }
+      });
+
+      return {
+        period: nextPeriod,
+        prevPeriod,
+        periodStatus: nextData.periodStatus || 'draft',
+        isFinal: (nextData.periodStatus || 'draft') === 'final',
+        discrepancies,
+        warnings,
+        hasChanges: discrepancies.length > 0
+      };
+    }
+
+    function checkWipChainFromPeriod(startPeriod) {
+      const start = normalizePeriodStr(startPeriod);
+      if (!start || !/^\d{4}-\d{2}$/.test(start)) {
+        return { ok: false, error: 'Укажите период в формате YYYY-MM' };
+      }
+
+      const subsequent = getSubsequentPeriods(start);
+      if (!subsequent.length) {
+        return {
+          ok: false,
+          error: 'После периода ' + start + ' нет локально сохранённых периодов'
+        };
+      }
+
+      let prevData = getPeriodDataForChain(start);
+      if (!prevData) {
+        return {
+          ok: false,
+          error:
+            'Стартовый период ' +
+            start +
+            ' не найден в localStorage. Сохраните его локально или откройте на экране.'
+        };
+      }
+      prevData = clonePeriodData(prevData);
+      prevData._chainPeriod = start;
+      recalculatePeriodDataInMemory(prevData);
+
+      const links = [];
+      const finalPeriodsInChain = [];
+
+      for (let i = 0; i < subsequent.length; i++) {
+        const nextPeriod = subsequent[i];
+        const nextData = getPeriodDataForChain(nextPeriod);
+        if (!nextData) {
+          links.push({
+            period: nextPeriod,
+            prevPeriod: i === 0 ? start : subsequent[i - 1],
+            skipped: true,
+            skipReason: 'Период не найден в localStorage',
+            periodStatus: 'unknown',
+            isFinal: false,
+            discrepancies: [],
+            warnings: [],
+            hasChanges: false
+          });
+          continue;
+        }
+
+        const link = compareWipChainLink(prevData, nextData, nextPeriod);
+        link.prevPeriod = i === 0 ? start : subsequent[i - 1];
+        links.push(link);
+
+        if (link.isFinal) {
+          finalPeriodsInChain.push(nextPeriod);
+        }
+
+        prevData = clonePeriodData(nextData);
+        prevData._chainPeriod = nextPeriod;
+        recalculatePeriodDataInMemory(prevData);
+      }
+
+      const result = {
+        ok: true,
+        startPeriod: start,
+        source: 'localStorage',
+        periodsChecked: subsequent,
+        links,
+        finalPeriodsInChain,
+        totalDiscrepancies: links.reduce((s, l) => s + (l.discrepancies ? l.discrepancies.length : 0), 0),
+        periodsWithChanges: links.filter(l => l.hasChanges).map(l => l.period),
+        finalWithChanges: links.filter(l => l.isFinal && l.hasChanges).map(l => l.period)
+      };
+
+      lastWipChainCheckResult = result;
+      return result;
+    }
+
+    function savePeriodDataToLocalStorage(period, data, metaPatch) {
+      const pn = normalizePeriodStr(period);
+      let prevMeta = {};
+      const existing = localStorage.getItem(getStorageKey(pn));
+      if (existing) {
+        try {
+          prevMeta = JSON.parse(existing).meta || {};
+        } catch (e) {
+          prevMeta = {};
+        }
+      }
+      ensurePeriodMeta(data);
+      data.meta = Object.assign({}, prevMeta, data.meta || {}, metaPatch || {});
+      data.meta.updatedAt = new Date().toISOString();
+      data.meta.updatedBy = data.meta.updatedBy || 'user';
+      data.meta.version = (Number(data.meta.version) || 0) + 1;
+      localStorage.setItem(getStorageKey(pn), JSON.stringify(data));
+    }
+
+    function reopenFinalPeriodData(data, reopenComment) {
+      ensurePeriodMeta(data);
+      data.meta.wasFinal = true;
+      data.meta.reopenedAt = new Date().toISOString();
+      data.meta.reopenComment = reopenComment || '';
+      data.periodStatus = 'draft';
+      return data;
+    }
+
+    function renderWipChainReportHtml(result) {
+      if (!result || !result.ok) {
+        return '<p class="danger">' + escapeHtmlForReport(result.error || 'Ошибка') + '</p>';
+      }
+
+      let html =
+        '<p><strong>Стартовый период:</strong> ' +
+        escapeHtmlForReport(result.startPeriod) +
+        ' · <strong>Источник:</strong> localStorage · <strong>Проверено периодов:</strong> ' +
+        result.periodsChecked.length +
+        '</p>';
+
+      if (!result.totalDiscrepancies && !result.links.some(l => l.warnings && l.warnings.length)) {
+        html += '<p>Расхождений по цепочке НЗП не найдено.</p>';
+        return html;
+      }
+
+      html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
+      html +=
+        '<th>Период</th><th>Заказ</th><th>НЗП конец пред.</th><th>НЗП нач. было</th><th>НЗП нач. новое</th><th>Разница</th><th>Статус</th><th>Примечание</th>';
+      html += '</tr></thead><tbody>';
+
+      result.links.forEach(link => {
+        if (link.skipped) {
+          html +=
+            '<tr><td>' +
+            escapeHtmlForReport(link.period) +
+            '</td><td colspan="7">' +
+            escapeHtmlForReport(link.skipReason) +
+            '</td></tr>';
+          return;
+        }
+        if (link.discrepancies.length) {
+          link.discrepancies.forEach(d => {
+            html +=
+              '<tr><td>' +
+              escapeHtmlForReport(link.period) +
+              '</td><td>' +
+              escapeHtmlForReport(d.order) +
+              '</td><td>' +
+              fmt(d.expected) +
+              '</td><td>' +
+              fmt(d.oldStart) +
+              '</td><td>' +
+              fmt(d.expected) +
+              '</td><td>' +
+              fmt(d.diff) +
+              '</td><td>' +
+              escapeHtmlForReport(link.periodStatus) +
+              '</td><td>будет пересчитан</td></tr>';
+          });
+        }
+        if (link.warnings && link.warnings.length) {
+          link.warnings.forEach(w => {
+            html +=
+              '<tr><td>' +
+              escapeHtmlForReport(link.period) +
+              '</td><td>' +
+              escapeHtmlForReport(w.order || '—') +
+              '</td><td colspan="5"></td><td>' +
+              escapeHtmlForReport(link.periodStatus) +
+              '</td><td>' +
+              escapeHtmlForReport(w.message) +
+              '</td></tr>';
+          });
+        }
+        if (!link.discrepancies.length && !(link.warnings && link.warnings.length)) {
+          html +=
+            '<tr><td>' +
+            escapeHtmlForReport(link.period) +
+            '</td><td colspan="7">OK</td></tr>';
+        }
+      });
+
+      html += '</tbody></table></div>';
+
+      if (result.finalWithChanges && result.finalWithChanges.length) {
+        html +=
+          '<p class="danger"><strong>Закрытые периоды с расхождениями:</strong> ' +
+          escapeHtmlForReport(result.finalWithChanges.join(', ')) +
+          '</p>';
+      }
+
+      return html;
+    }
+
+    function showWipChainReportPanel(result) {
+      const panel = document.getElementById('wipChainReportPanel');
+      if (!panel) return;
+      panel.hidden = false;
+      panel.innerHTML = renderWipChainReportHtml(result);
+    }
+
+    function runCheckWipChain() {
+      const startPeriod = getCurrentPeriod();
+      if (!startPeriod) {
+        alert('Укажите стартовый период в поле «Период»');
+        return;
+      }
+      const result = checkWipChainFromPeriod(startPeriod);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      showWipChainReportPanel(result);
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) {
+        statusEl.textContent =
+          'Проверка цепочки НЗП: ' +
+          result.periodsChecked.length +
+          ' периодов, расхождений по заказам: ' +
+          result.totalDiscrepancies;
+      }
+    }
+
+    function buildWipChainPreviewHtml(result) {
+      return renderWipChainReportHtml(result);
+    }
+
+    async function applyWipChainFixes(startPeriod, options) {
+      options = options || {};
+      const reopenComment = options.reopenComment || '';
+      const allowReopenFinal = !!options.allowReopenFinal;
+
+      const applyReport = {
+        periodsChecked: 0,
+        periodsModified: 0,
+        ordersUpdated: 0,
+        reopenedFromFinal: [],
+        stoppedAt: null,
+        warnings: []
+      };
+
+      let prevData = getPeriodDataForChain(startPeriod);
+      if (!prevData) {
+        throw new Error('Стартовый период не найден');
+      }
+      prevData = clonePeriodData(prevData);
+      prevData._chainPeriod = startPeriod;
+      recalculatePeriodDataInMemory(prevData);
+
+      const subsequent = getSubsequentPeriods(startPeriod);
+      const changeComment =
+        'Обновление переходящего НЗП после изменения периода ' + startPeriod;
+      const modifiedPeriods = [];
+
+      for (let i = 0; i < subsequent.length; i++) {
+        const nextPeriod = subsequent[i];
+        let nextData = getPeriodDataForChain(nextPeriod);
+        if (!nextData) {
+          applyReport.warnings.push('Период ' + nextPeriod + ' пропущен — нет в localStorage');
+          continue;
+        }
+
+        applyReport.periodsChecked++;
+
+        const link = compareWipChainLink(prevData, nextData, nextPeriod);
+        if (!link.hasChanges) {
+          prevData = clonePeriodData(nextData);
+          prevData._chainPeriod = nextPeriod;
+          recalculatePeriodDataInMemory(prevData);
+          continue;
+        }
+
+        if (link.isFinal && !allowReopenFinal) {
+          applyReport.stoppedAt = nextPeriod;
+          break;
+        }
+
+        nextData = clonePeriodData(nextData);
+
+        if (link.isFinal && allowReopenFinal) {
+          reopenFinalPeriodData(nextData, reopenComment);
+          applyReport.reopenedFromFinal.push(nextPeriod);
+        }
+
+        const prevWipEnd = buildOrderWipEndMap(prevData);
+        link.discrepancies.forEach(d => {
+          const row = findRowByOrderInData(nextData, d.order);
+          if (row) {
+            row.wipStart = formatWipStartStorage(d.expected);
+            applyReport.ordersUpdated++;
+          }
+        });
+
+        recalculatePeriodDataInMemory(nextData);
+        savePeriodDataToLocalStorage(nextPeriod, nextData, {
+          changeComment,
+          updatedBy: 'user'
+        });
+        applyReport.periodsModified++;
+        modifiedPeriods.push(nextPeriod);
+
+        prevData = clonePeriodData(nextData);
+        prevData._chainPeriod = nextPeriod;
+      }
+
+      updatePeriodList();
+
+      const cur = normalizePeriodStr(getCurrentPeriod());
+      if (modifiedPeriods.includes(cur)) {
+        const refreshed = getPeriodDataForChain(cur);
+        if (refreshed) {
+          applyData(refreshed);
+          const inputEl = getElementByIdDeep('periodInput');
+          if (inputEl) inputEl.value = cur;
+        }
+      }
+
+      lastWipChainCheckResult = checkWipChainFromPeriod(startPeriod);
+      showWipChainReportPanel(lastWipChainCheckResult);
+
+      applyReport.changedPeriods = modifiedPeriods.slice();
+      if (modifiedPeriods.length) {
+        addUnsyncedChangedPeriods(modifiedPeriods);
+      }
+
+      return applyReport;
+    }
+
+    function showWipChainApplyDialog(result, onConfirm) {
+      const overlay = document.getElementById('wipChainApplyOverlay');
+      const content = document.getElementById('wipChainApplyContent');
+      const confirmBtn = document.getElementById('wipChainApplyConfirmBtn');
+      const cancelBtn = document.getElementById('wipChainApplyCancelBtn');
+      if (!overlay || !content || !confirmBtn || !cancelBtn) {
+        onConfirm(false);
+        return;
+      }
+
+      content.innerHTML = buildWipChainPreviewHtml(result);
+
+      const finish = confirmed => {
+        overlay.hidden = true;
+        confirmBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        onConfirm(confirmed);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+
+      confirmBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      overlay.hidden = false;
+    }
+
+    function runApplyWipChain() {
+      const startPeriod = getCurrentPeriod();
+      if (!startPeriod) {
+        alert('Укажите стартовый период в поле «Период»');
+        return;
+      }
+
+      let result = lastWipChainCheckResult;
+      if (!result || result.startPeriod !== normalizePeriodStr(startPeriod)) {
+        result = checkWipChainFromPeriod(startPeriod);
+      }
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      if (!result.totalDiscrepancies) {
+        alert('Расхождений по цепочке НЗП нет — применять нечего.');
+        return;
+      }
+
+      showWipChainApplyDialog(result, confirmed => {
+        if (!confirmed) return;
+
+        let allowReopenFinal = true;
+        let reopenComment = '';
+
+        if (result.finalWithChanges && result.finalWithChanges.length) {
+          const reopenOk = confirm(
+            'В цепочке есть закрытые периоды с расхождениями: ' +
+              result.finalWithChanges.join(', ') +
+              '.\n\nВернуть затронутые закрытые периоды в работу и применить исправления?'
+          );
+          if (!reopenOk) {
+            allowReopenFinal = false;
+          } else {
+            reopenComment = prompt('Причина возврата закрытых периодов в работу', '');
+            if (reopenComment === null) return;
+            reopenComment = String(reopenComment).trim();
+          }
+        }
+
+        applyWipChainFixes(startPeriod, { allowReopenFinal, reopenComment })
+          .then(applyReport => {
+            const changed = applyReport.changedPeriods || [];
+            let msg =
+              'Цепочка НЗП применена.\n' +
+              'Проверено периодов: ' +
+              applyReport.periodsChecked +
+              '\n' +
+              'Изменено периодов: ' +
+              applyReport.periodsModified +
+              '\n' +
+              'Обновлено заказов (НЗП нач.): ' +
+              applyReport.ordersUpdated;
+            if (changed.length) {
+              msg +=
+                '\n\nИзменены периоды: ' +
+                changed.join(', ') +
+                '.\nИзменения сохранены локально, но ещё не отправлены в Google Sheets.';
+            }
+            if (applyReport.reopenedFromFinal.length) {
+              msg +=
+                '\nВозвращены из final в работу: ' +
+                applyReport.reopenedFromFinal.join(', ');
+            }
+            if (applyReport.stoppedAt) {
+              msg +=
+                '\n\nЦепочка остановлена, потому что период ' +
+                applyReport.stoppedAt +
+                ' закрыт.';
+            }
+            if (applyReport.warnings.length) {
+              msg += '\n\n' + applyReport.warnings.join('\n');
+            }
+            alert(msg);
+            const statusEl = document.getElementById('periodActionStatus');
+            if (statusEl) {
+              let st =
+                'Цепочка НЗП: изменено периодов ' +
+                applyReport.periodsModified +
+                ', заказов ' +
+                applyReport.ordersUpdated;
+              if (changed.length) {
+                st += '; не синхронизировано с Google Sheets: ' + changed.join(', ');
+              }
+              if (applyReport.stoppedAt) {
+                st += '; остановка на ' + applyReport.stoppedAt;
+              }
+              statusEl.textContent = st;
+            }
+          })
+          .catch(err => {
+            alert(
+              'Ошибка применения цепочки: ' +
+                (err && err.message ? err.message : String(err))
+            );
+          });
+      });
     }
 
     function buildOrderReport() {
@@ -4244,6 +5295,29 @@
       });
     }
 
+    const saveUnsyncedCloudBtn = document.getElementById('saveUnsyncedCloudBtn');
+    if (saveUnsyncedCloudBtn) {
+      saveUnsyncedCloudBtn.addEventListener('click', () => {
+        requestAnimationFrame(() => saveUnsyncedPeriodsToCloud());
+      });
+    }
+
+    window.addEventListener('beforeunload', e => {
+      if (!hasUnsyncedCloudChanges()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
+    const checkWipChainBtn = document.getElementById('checkWipChainBtn');
+    if (checkWipChainBtn) {
+      checkWipChainBtn.addEventListener('click', () => runCheckWipChain());
+    }
+
+    const applyWipChainBtn = document.getElementById('applyWipChainBtn');
+    if (applyWipChainBtn) {
+      applyWipChainBtn.addEventListener('click', () => runApplyWipChain());
+    }
+
     const periodStatusSelectEl = document.getElementById('periodStatusSelect');
     if (periodStatusSelectEl) {
       periodStatusSelectEl.addEventListener('change', () => {
@@ -4313,6 +5387,7 @@
 
     refreshAllGlobalNums();
     setupPeriodMonthInputs();
+    updateUnsyncedCloudWarningUI();
     setupOrderNameTooltipHandlers();
     setupOrdersTableTabs();
     setupPeriodSummaryToggle();
@@ -4332,6 +5407,18 @@
       setupOrdersTableScrollSync();
     })();
   </script>
+
+  <div id="wipChainApplyOverlay" class="wip-chain-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="wipChainApplyTitle">
+    <div class="wip-chain-dialog">
+      <h3 id="wipChainApplyTitle">Применить исправления по цепочке НЗП</h3>
+      <p class="hint">Будут изменены только поля «НЗП нач.» в последующих периодах. Остальные данные не меняются. Изменения сохраняются в localStorage.</p>
+      <div id="wipChainApplyContent"></div>
+      <div class="wip-chain-actions">
+        <button type="button" id="wipChainApplyConfirmBtn">Применить</button>
+        <button type="button" id="wipChainApplyCancelBtn" class="secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
 
   <div id="import1cModeOverlay" class="import1c-mode-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="import1cModeTitle">
     <div class="import1c-mode-dialog">

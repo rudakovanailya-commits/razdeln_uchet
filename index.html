@@ -979,9 +979,18 @@
       border: 1px solid #e2e8f0;
     }
 
-    .unsynced-cloud-warning {
-      color: #b45309;
+    .period-status-display {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #f8fafc;
       font-weight: 500;
+      min-height: 1.2em;
+    }
+
+    .period-status-display.period-status-final {
+      background: #fef3c7;
+      color: #92400e;
     }
   </style>
 </head>
@@ -1005,17 +1014,17 @@
           </select>
         </div>
 
-        <div class="field" style="width: 220px;">
-          <label for="periodStatusSelect">Статус периода</label>
-          <select id="periodStatusSelect">
-            <option value="draft">В работе (draft)</option>
-            <option value="final">Закрыт (final)</option>
-          </select>
+        <div class="field" style="width: 160px;">
+          <label>Статус периода</label>
+          <input type="hidden" id="periodStatusValue" value="draft">
+          <div id="periodStatusDisplay" class="period-status-display">В работе</div>
         </div>
+
+        <button id="closePeriodBtn" type="button" class="secondary">Закрыть период</button>
+        <button id="returnToDraftBtn" type="button" class="secondary" hidden>Вернуть в работу</button>
 
         <button id="saveBtn" type="button">Сохранить локально</button>
         <button id="saveCloudBtn" type="button" class="secondary">Сохранить в Google Sheets</button>
-        <button id="returnToDraftBtn" type="button" class="secondary" hidden>Вернуть в работу</button>
         <button id="deletePeriodBtn" type="button">Удалить локальный период</button>
         <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
         <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
@@ -1026,8 +1035,9 @@
       <div class="hint unsynced-cloud-warning" id="unsyncedCloudWarning" hidden style="margin-top: 8px;"></div>
 
       <div class="hint" style="margin-top: 8px;">
-        Сохранённые периоды — локальные копии в браузере. Google Sheets хранится отдельно. Удаление локального периода не удаляет данные из Google Sheets.
+        Локальное сохранение хранится в браузере. Google Sheets — облачная копия. Закрытие периода сначала сохраняется локально. Чтобы статус закрытия попал в Google Sheets, нажмите «Сохранить в Google Sheets».
       </div>
+      <div class="hint" id="periodDataMismatchHint" hidden style="margin-top: 8px; color: #b45309;"></div>
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
@@ -2855,15 +2865,99 @@
     }
 
     function getPeriodStatus() {
-      const el = document.getElementById('periodStatusSelect');
+      const el = document.getElementById('periodStatusValue');
       const v = el && el.value ? el.value : 'draft';
       return v === 'final' ? 'final' : 'draft';
     }
 
     function setPeriodStatus(status) {
-      const el = document.getElementById('periodStatusSelect');
-      if (!el) return;
-      el.value = status === 'final' ? 'final' : 'draft';
+      const el = document.getElementById('periodStatusValue');
+      if (el) el.value = status === 'final' ? 'final' : 'draft';
+      updatePeriodStatusUI();
+    }
+
+    function updatePeriodStatusUI() {
+      const display = document.getElementById('periodStatusDisplay');
+      const closeBtn = document.getElementById('closePeriodBtn');
+      const isFinal = isPeriodFinal();
+      if (display) {
+        display.textContent = isFinal ? 'Закрыт' : 'В работе';
+        display.classList.toggle('period-status-final', isFinal);
+      }
+      if (closeBtn) closeBtn.hidden = isFinal;
+    }
+
+    let loadedPeriodOnScreen = '';
+
+    function markLoadedPeriodOnScreen(period) {
+      loadedPeriodOnScreen = normalizePeriodStr(period) || '';
+      hidePeriodDataMismatchHint();
+    }
+
+    function hidePeriodDataMismatchHint() {
+      const hint = document.getElementById('periodDataMismatchHint');
+      if (hint) {
+        hint.hidden = true;
+        hint.textContent = '';
+      }
+    }
+
+    function showPeriodDataMismatchHint(prevPeriod, newPeriod) {
+      const hint = document.getElementById('periodDataMismatchHint');
+      if (!hint) return;
+      hint.hidden = false;
+      hint.textContent =
+        'Вы изменили период на ' +
+        newPeriod +
+        '. Данные на экране могут относиться к ' +
+        (prevPeriod || 'предыдущей загрузке') +
+        '. Загрузите сохранённый период или очистите таблицу для нового периода.';
+    }
+
+    function handlePeriodFieldCommitted() {
+      const period = getCurrentPeriod();
+      if (!period || !/^\d{4}-\d{2}$/.test(period)) return;
+      if (period === loadedPeriodOnScreen) return;
+
+      const hadData = ordersTableHasNonEmptyRows();
+      const prev = loadedPeriodOnScreen;
+      const inStorage = !!localStorage.getItem(getStorageKey(period));
+
+      if (prev && prev !== period && hadData) {
+        if (inStorage) {
+          const ok = confirm(
+            'Вы изменили период. Загрузить сохранённые данные за ' +
+              period +
+              '?\n\nТекущие данные на экране могут относиться к периоду ' +
+              prev +
+              '.'
+          );
+          if (!ok) {
+            showPeriodDataMismatchHint(prev, period);
+            setPeriodStatus('draft');
+            applyPeriodEditMode();
+            return;
+          }
+        } else {
+          alert(
+            'Вы изменили период. Данные на экране могут относиться к предыдущей загрузке (' +
+              (prev || '—') +
+              '). Загрузите сохранённый период или очистите таблицу для нового периода.'
+          );
+          setPeriodStatus('draft');
+          applyPeriodEditMode();
+          markLoadedPeriodOnScreen(period);
+          return;
+        }
+      }
+
+      if (inStorage) {
+        loadPeriod(false);
+      } else {
+        setPeriodStatus('draft');
+        applyPeriodEditMode();
+        markLoadedPeriodOnScreen(period);
+      }
     }
 
     function isPeriodFinal() {
@@ -2900,26 +2994,23 @@
         inp.disabled = locked;
       });
 
-      ['addRowBtn', 'clearBtn', 'import1cBtn', 'saveBtn', 'saveCloudBtn', 'deletePeriodBtn', 'deleteCloudPeriodBtn'].forEach(id => {
+      ['addRowBtn', 'clearBtn', 'import1cBtn', 'saveBtn', 'deletePeriodBtn', 'deleteCloudPeriodBtn'].forEach(id => {
         setButtonDisabled(id, locked);
       });
 
       const fin = document.getElementById('fileInput');
       if (fin) fin.disabled = locked;
 
-      const statusSelect = document.getElementById('periodStatusSelect');
-      if (statusSelect) statusSelect.disabled = locked;
-
       const returnBtn = document.getElementById('returnToDraftBtn');
       if (returnBtn) returnBtn.hidden = !locked;
+
+      updatePeriodStatusUI();
     }
 
     function returnPeriodToDraft() {
       if (!isPeriodFinal()) return;
 
-      const ok = confirm(
-        'Период закрыт. Вернуть его в работу и разрешить редактирование?'
-      );
+      const ok = confirm('Вернуть период в работу?');
       if (!ok) return;
 
       setPeriodStatus('draft');
@@ -2932,25 +3023,37 @@
       }
 
       const statusEl = document.getElementById('periodActionStatus');
-      if (statusEl) statusEl.textContent = 'Период возвращён в работу';
+      if (statusEl) {
+        statusEl.textContent =
+          'Период возвращён в работу и сохранён локально. Чтобы обновить Google Sheets, нажмите «Сохранить в Google Sheets».';
+      }
+      alert(
+        'Период возвращён в работу и сохранён локально. Чтобы обновить Google Sheets, нажмите «Сохранить в Google Sheets».'
+      );
     }
 
     function closePeriodWithConfirm() {
+      const period = getCurrentPeriod();
+      if (!period) {
+        alert('Укажите период');
+        return;
+      }
+
       const ok = confirm(
         'Закрыть период? После закрытия редактирование будет заблокировано.'
       );
-      if (!ok) {
-        setPeriodStatus('draft');
-        return;
-      }
+      if (!ok) return;
 
       calculateAll();
       setPeriodStatus('final');
       applyPeriodEditMode();
       savePeriod(false, { allowFinal: true });
 
+      const msg =
+        'Период закрыт и сохранён локально. Чтобы статус закрытия попал в Google Sheets, нажмите «Сохранить в Google Sheets».';
       const statusEl = document.getElementById('periodActionStatus');
-      if (statusEl) statusEl.textContent = 'Период закрыт';
+      if (statusEl) statusEl.textContent = msg;
+      alert(msg);
     }
 
     function collectRowData(tr) {
@@ -3279,6 +3382,7 @@
         applyPeriodEditMode();
         formatAllCalculatedFields();
         populateOrderSelect();
+        markLoadedPeriodOnScreen(getCurrentPeriod());
         return;
       }
 
@@ -3293,6 +3397,7 @@
       refreshAllOrderNameTitles();
       setupOrdersTableScrollSync();
       populateOrderSelect();
+      markLoadedPeriodOnScreen(getCurrentPeriod());
     }
 
     function savePeriod(showAlert = true, options = {}) {
@@ -3352,6 +3457,9 @@
 
       if (!raw) {
         if (showAlert) alert('Нет данных за этот период');
+        setPeriodStatus('draft');
+        applyPeriodEditMode();
+        markLoadedPeriodOnScreen(period);
         return;
       }
 
@@ -3370,6 +3478,7 @@
       if (inputEl) inputEl.value = period;
       updatePeriodList();
       if (selectEl) selectEl.value = period;
+      markLoadedPeriodOnScreen(period);
     }
 
     function updatePeriodList() {
@@ -3504,7 +3613,7 @@
     function confirmIfUnsyncedCloudLoad() {
       if (!hasUnsyncedCloudChanges()) return true;
       return confirm(
-        'Есть локальные изменения после пересчёта цепочки НЗП, ещё не сохранённые в Google Sheets. Загрузка из Google Sheets может перезаписать актуальные данные. Продолжить?'
+        'Есть локальные изменения после пересчёта цепочки НЗП, ещё не сохранённые в Google Sheets. Загрузка из Google Sheets может заменить актуальные локальные данные старыми облачными. Продолжить?'
       );
     }
 
@@ -3567,10 +3676,6 @@
       } catch (e) {
         throw new Error('Повреждённые данные периода ' + pn);
       }
-      if (data && data.periodStatus === 'final') {
-        throw new Error('Период ' + pn + ' закрыт (final)');
-      }
-
       const rows = getCloudPayloadRowsFromStoredPeriod(pn);
       if (!rows || !rows.length) {
         throw new Error('Нет строк для отправки периода ' + pn);
@@ -3627,6 +3732,8 @@
       const remaining = loadUnsyncedChangedPeriods();
       if (remaining.length) {
         msg += '\n\nОстались несинхронизированные периоды: ' + remaining.join(', ');
+      } else if (savedCount > 0 && !errors.length) {
+        msg += '\n\nВсе изменения цепочки НЗП сохранены в Google Sheets.';
       }
       alert(msg);
     }
@@ -4045,17 +4152,11 @@
         return;
       }
 
-      if (isPeriodFinal()) {
-        alert(
-          'Закрытый период нельзя сохранить в Google Sheets. Сначала верните период в работу.'
-        );
-        return;
-      }
-
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
+        const st = getPeriodStatus();
         const data = {
           action: 'upsert',
           rows: getCloudPayloadRows(period)
@@ -4072,7 +4173,10 @@
         console.log('REQUEST SENT');
 
         removeUnsyncedChangedPeriod(period);
-        alert('Данные отправлены');
+        const msg =
+          'Период ' + period + ' сохранён в Google Sheets со статусом ' + st + '.';
+        if (statusEl) statusEl.textContent = msg;
+        alert(msg);
       } catch (err) {
         console.error('ERROR:', err);
         alert('Ошибка сети');
@@ -5318,13 +5422,9 @@
       applyWipChainBtn.addEventListener('click', () => runApplyWipChain());
     }
 
-    const periodStatusSelectEl = document.getElementById('periodStatusSelect');
-    if (periodStatusSelectEl) {
-      periodStatusSelectEl.addEventListener('change', () => {
-        if (getPeriodStatus() === 'final') {
-          closePeriodWithConfirm();
-        }
-      });
+    const closePeriodBtnEl = document.getElementById('closePeriodBtn');
+    if (closePeriodBtnEl) {
+      closePeriodBtnEl.addEventListener('click', () => closePeriodWithConfirm());
     }
 
     const returnToDraftBtnEl = document.getElementById('returnToDraftBtn');
@@ -5379,6 +5479,12 @@
       periodInputEl.addEventListener('input', () => {
         updatePeriodList();
       });
+      periodInputEl.addEventListener('change', () => {
+        handlePeriodFieldCommitted();
+      });
+      periodInputEl.addEventListener('blur', () => {
+        handlePeriodFieldCommitted();
+      });
     }
 
     // =====================
@@ -5388,6 +5494,7 @@
     refreshAllGlobalNums();
     setupPeriodMonthInputs();
     updateUnsyncedCloudWarningUI();
+    updatePeriodStatusUI();
     setupOrderNameTooltipHandlers();
     setupOrdersTableTabs();
     setupPeriodSummaryToggle();

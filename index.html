@@ -1063,6 +1063,7 @@
         <button id="saveBtn" type="button">Сохранить локально</button>
         <button id="saveCloudBtn" type="button" class="secondary">Сохранить в Google Sheets</button>
         <button id="deletePeriodBtn" type="button">Удалить локальный период</button>
+        <button id="cleanupInvalidPeriodsBtn" type="button" class="secondary">Очистить некорректные периоды</button>
         <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
         <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
         <button id="deleteCloudPeriodBtn" type="button" class="secondary">Удалить из Google Sheets</button>
@@ -1072,7 +1073,7 @@
       <div class="hint unsynced-cloud-warning" id="unsyncedCloudWarning" hidden style="margin-top: 8px;"></div>
 
       <div class="hint" style="margin-top: 8px;">
-        Локальное сохранение хранится в браузере. Google Sheets — облачная копия. Закрытие периода сначала сохраняется локально. Чтобы статус закрытия попал в Google Sheets, нажмите «Сохранить в Google Sheets».
+        Локальное сохранение хранится в браузере. Google Sheets — облачная копия. Закрытие периода сначала сохраняется локально. Чтобы статус закрытия попал в Google Sheets, нажмите «Сохранить в Google Sheets». Рабочие периоды: 2020-01 — 2035-12.
       </div>
       <div class="hint" id="periodDataMismatchHint" hidden style="margin-top: 8px; color: #b45309;"></div>
 
@@ -2997,6 +2998,135 @@
         .trim();
     }
 
+    const WORKING_PERIOD_MIN = '2020-01';
+    const WORKING_PERIOD_MAX = '2035-12';
+    const BLOCKED_PERIOD_IDS = ['TEST-9999', '9999-01'];
+    const LOCAL_PERIOD_STORAGE_PREFIX = 'razdelny_uchet_';
+
+    function parsePeriodYm(period) {
+      const p = normalizePeriodStr(period);
+      const m = p.match(/^(\d{4})-(\d{2})$/);
+      if (!m) return null;
+      return {
+        year: parseInt(m[1], 10),
+        month: parseInt(m[2], 10),
+        key: p
+      };
+    }
+
+    function isBlockedPeriodId(period) {
+      const p = normalizePeriodStr(period);
+      if (!p) return false;
+      if (BLOCKED_PERIOD_IDS.indexOf(p) >= 0) return true;
+      const parsed = parsePeriodYm(p);
+      if (!parsed) return true;
+      if (parsed.month < 1 || parsed.month > 12) return true;
+      if (p < WORKING_PERIOD_MIN || p > WORKING_PERIOD_MAX) return true;
+      return false;
+    }
+
+    function isValidWorkingPeriod(period) {
+      const p = normalizePeriodStr(period);
+      return !!p && !isBlockedPeriodId(p);
+    }
+
+    function getWorkingPeriodValidationMessage(period) {
+      const p = normalizePeriodStr(period);
+      if (!p) return 'Укажите период.';
+      if (BLOCKED_PERIOD_IDS.indexOf(p) >= 0) {
+        return 'Период «' + p + '» служебный и недоступен для работы.';
+      }
+      const parsed = parsePeriodYm(p);
+      if (!parsed) {
+        return 'Период «' + p + '» недопустим. Используйте формат YYYY-MM.';
+      }
+      if (parsed.month < 1 || parsed.month > 12) {
+        return 'Некорректный месяц в периоде «' + p + '».';
+      }
+      if (p < WORKING_PERIOD_MIN || p > WORKING_PERIOD_MAX) {
+        return (
+          'Период «' +
+          p +
+          '» вне допустимого диапазона ' +
+          WORKING_PERIOD_MIN +
+          ' — ' +
+          WORKING_PERIOD_MAX +
+          '.'
+        );
+      }
+      return '';
+    }
+
+    function requireValidWorkingPeriod(period, showAlert) {
+      const msg = getWorkingPeriodValidationMessage(period || getCurrentPeriod());
+      if (!msg) return true;
+      if (showAlert !== false) alert(msg);
+      return false;
+    }
+
+    function listStoredPeriodKeys() {
+      return Object.keys(localStorage).filter(function(key) {
+        if (!key.startsWith(LOCAL_PERIOD_STORAGE_PREFIX)) return false;
+        if (key === 'razdelny_uchet_unsynced_cloud') return false;
+        return true;
+      });
+    }
+
+    function periodFromStorageKey(key) {
+      return key.slice(LOCAL_PERIOD_STORAGE_PREFIX.length);
+    }
+
+    function listInvalidStoredPeriods() {
+      return listStoredPeriodKeys()
+        .map(periodFromStorageKey)
+        .filter(isBlockedPeriodId)
+        .sort();
+    }
+
+    function cleanupInvalidLocalPeriods(options) {
+      options = options || {};
+      const invalid = listInvalidStoredPeriods();
+      if (!invalid.length) {
+        if (options.showAlert !== false) {
+          alert('Некорректных локальных периодов не найдено.');
+        }
+        return { removed: [], cancelled: false };
+      }
+      if (options.confirm !== false) {
+        const ok = confirm(
+          'Удалить из localStorage некорректные периоды?\n\n' + invalid.join(', ')
+        );
+        if (!ok) return { removed: [], cancelled: true };
+      }
+      invalid.forEach(function(p) {
+        localStorage.removeItem(getStorageKey(p));
+      });
+      if (typeof saveUnsyncedChangedPeriods === 'function') {
+        saveUnsyncedChangedPeriods(
+          loadUnsyncedChangedPeriods().filter(function(p) {
+            return !isBlockedPeriodId(p);
+          })
+        );
+      }
+      updatePeriodList();
+      const cur = getCurrentPeriod();
+      if (cur && isBlockedPeriodId(cur)) {
+        const inputEl = getElementByIdDeep('periodInput');
+        const selectEl = getElementByIdDeep('periodSelect');
+        if (inputEl) inputEl.value = '';
+        if (selectEl) selectEl.value = '';
+        clearAll(true);
+      }
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Удалены некорректные периоды: ' + invalid.join(', ');
+      }
+      if (options.showAlert !== false) {
+        alert('Удалено некорректных периодов: ' + invalid.length + '\n\n' + invalid.join(', '));
+      }
+      return { removed: invalid, cancelled: false };
+    }
+
     function isMonthInputTypeSupported() {
       try {
         const el = document.createElement('input');
@@ -3407,6 +3537,7 @@
         alert('Укажите период');
         return;
       }
+      if (!requireValidWorkingPeriod(period)) return;
       if (!confirmIfUnsyncedCloudLoad()) return;
 
       const statusEl = document.getElementById('periodActionStatus');
@@ -3599,6 +3730,10 @@
         return false;
       }
 
+      if (!requireValidWorkingPeriod(period, showAlert)) {
+        return false;
+      }
+
       if (isPeriodFinal() && !allowFinal) {
         if (showAlert) {
           alert(
@@ -3688,10 +3823,11 @@
       select.innerHTML = '<option value="">—</option>';
 
       Object.keys(localStorage)
-        .filter(key => key.startsWith('razdelny_uchet_'))
+        .filter(key => key.startsWith(LOCAL_PERIOD_STORAGE_PREFIX) && key !== UNSYNCED_CLOUD_STORAGE_KEY)
         .sort()
         .forEach(key => {
-          const p = key.replace('razdelny_uchet_', '');
+          const p = periodFromStorageKey(key);
+          if (isBlockedPeriodId(p)) return;
           const option = document.createElement('option');
           option.value = p;
           option.textContent = p;
@@ -3699,7 +3835,7 @@
         });
 
       function ensureOption(val) {
-        if (!val) return;
+        if (!val || isBlockedPeriodId(val)) return;
         let found = false;
         for (let i = 0; i < select.options.length; i++) {
           if (select.options[i].value === val) {
@@ -3743,7 +3879,7 @@
         if (!Array.isArray(arr)) return [];
         return arr
           .map(p => normalizePeriodStr(p))
-          .filter(p => /^\d{4}-\d{2}$/.test(p))
+          .filter(p => isValidWorkingPeriod(p))
           .sort();
       } catch (e) {
         return [];
@@ -3755,7 +3891,7 @@
         ...new Set(
           (periods || [])
             .map(p => normalizePeriodStr(p))
-            .filter(p => /^\d{4}-\d{2}$/.test(p))
+            .filter(p => isValidWorkingPeriod(p))
         )
       ].sort();
       if (unique.length) {
@@ -3771,7 +3907,7 @@
       const cur = loadUnsyncedChangedPeriods();
       periods.forEach(p => {
         const pn = normalizePeriodStr(p);
-        if (pn && !cur.includes(pn)) cur.push(pn);
+        if (pn && isValidWorkingPeriod(pn) && !cur.includes(pn)) cur.push(pn);
       });
       saveUnsyncedChangedPeriods(cur);
     }
@@ -3976,6 +4112,9 @@
 
     async function saveStoredPeriodToCloud(period) {
       const pn = normalizePeriodStr(period);
+      if (!isValidWorkingPeriod(pn)) {
+        throw new Error(getWorkingPeriodValidationMessage(pn));
+      }
       const raw = localStorage.getItem(getStorageKey(pn));
       if (!raw) {
         throw new Error('Период ' + pn + ' не найден в localStorage');
@@ -4467,6 +4606,7 @@
         alert('Укажите период');
         return;
       }
+      if (!requireValidWorkingPeriod(period)) return;
 
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
@@ -4931,6 +5071,7 @@
         alert('Укажите текущий период в поле «Период»');
         return;
       }
+      if (!requireValidWorkingPeriod(currentPeriod)) return;
 
       const preview = analyzePullWipFromPreviousPeriod(currentPeriod);
       if (!preview.ok) {
@@ -5569,6 +5710,7 @@
         alert('Укажите стартовый период в поле «Период»');
         return;
       }
+      if (!requireValidWorkingPeriod(startPeriod)) return;
       const result = checkWipChainFromPeriod(startPeriod);
       if (!result.ok) {
         alert(result.error);
@@ -6179,7 +6321,9 @@
       returnToDraftBtnEl.addEventListener('click', () => returnPeriodToDraft());
     }
 
-    document.getElementById('deletePeriodBtn').addEventListener('click', function() {
+    const deletePeriodBtnEl = document.getElementById('deletePeriodBtn');
+    if (deletePeriodBtnEl) {
+      deletePeriodBtnEl.addEventListener('click', function() {
       const period = getCurrentPeriod();
 
       if (!period) {
@@ -6211,7 +6355,15 @@
 
       const periodStatusEl = document.getElementById('periodActionStatus');
       if (periodStatusEl) periodStatusEl.textContent = 'Период удалён';
-    });
+      });
+    }
+
+    const cleanupInvalidPeriodsBtn = document.getElementById('cleanupInvalidPeriodsBtn');
+    if (cleanupInvalidPeriodsBtn) {
+      cleanupInvalidPeriodsBtn.addEventListener('click', () => {
+        cleanupInvalidLocalPeriods({ confirm: true, showAlert: true });
+      });
+    }
 
     const periodSelectEl = getElementByIdDeep('periodSelect');
     const periodInputEl = getElementByIdDeep('periodInput');

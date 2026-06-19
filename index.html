@@ -2168,8 +2168,9 @@
     ) {
       if (!targetRow) return;
       options = options || {};
-      const merge = !!options.merge;
-      const inputMode = merge ? 'merge' : 'new';
+      const replace = !!options.replace;
+      const merge = !!options.merge && !replace;
+      const inputMode = replace ? 'replace' : merge ? 'merge' : 'new';
 
       setInputValue(
         targetRow,
@@ -2200,7 +2201,8 @@
         inputMode
       );
 
-      const preserveWip = merge && rowWipStartValue(targetRow) > 0.01;
+      const preserveWip =
+        (replace || merge) && rowWipStartValue(targetRow) > 0.01;
       if (
         !preserveWip &&
         wipStart !== undefined &&
@@ -2217,102 +2219,143 @@
       }
     }
 
-    function apply1cParts(parts, sourceExcelRow, stats) {
+    function parse1cFieldNum(value) {
+      if (value === undefined || value === null || String(value).trim() === '') {
+        return 0;
+      }
+      return num(String(value).replace(/\s/g, '').replace(/,/g, '.'));
+    }
+
+    function importOrderMapKey(orderRaw) {
+      return normalizeOrderKey(orderRaw).toLowerCase();
+    }
+
+    function accumulate1cOrderRow(map, orderRaw, rowData, stats) {
+      const key = importOrderMapKey(orderRaw);
+      if (!key) return null;
+
+      let agg = map.get(key);
+      if (agg) {
+        if (stats) stats.skippedDupes++;
+      } else {
+        agg = {
+          order: String(orderRaw).trim(),
+          materials: 0,
+          processing: 0,
+          other: 0,
+          salary: 0,
+          wipStart: 0
+        };
+        map.set(key, agg);
+      }
+
+      agg.materials += parse1cFieldNum(rowData.materials);
+      agg.processing += parse1cFieldNum(rowData.processing);
+      agg.other += parse1cFieldNum(rowData.other);
+      agg.salary += parse1cFieldNum(rowData.salary);
+      agg.wipStart += parse1cFieldNum(rowData.wipStart);
+      return agg;
+    }
+
+    function aggregate1cCsvParts(parts, map, stats) {
       const p = parts.slice();
       while (p.length < 4) p.push('');
       while (p.length < 6) p.push('');
 
-      if (is1cCsvHeaderRow(p)) return;
+      if (is1cCsvHeaderRow(p)) return false;
 
       const orderRaw = String(p[0] == null ? '' : p[0]).trim();
-      if (is1cSkippedServiceRow(orderRaw)) return;
+      if (is1cSkippedServiceRow(orderRaw)) return false;
       if (stats) stats.loaded++;
 
-      const orderNorm = normalizeOrderKey(orderRaw);
-      const materials =
-        p[1] !== undefined && p[1] !== null ? String(p[1]).trim() : '';
-      const processing =
-        p[2] !== undefined && p[2] !== null ? String(p[2]).trim() : '';
-      const other =
-        p[3] !== undefined && p[3] !== null ? String(p[3]).trim() : '';
-      const salary =
-        p[4] !== undefined && p[4] !== null ? String(p[4]).trim() : '';
-      const wipStart =
-        p[5] !== undefined && p[5] !== null ? String(p[5]).trim() : '';
-
-      console.log(
-        '[1C import] исходная строка',
-        sourceExcelRow != null ? sourceExcelRow : p
-      );
-      console.log('PARSED EXCEL ROW', sourceExcelRow != null ? sourceExcelRow : p);
-      console.log('[1C import] orderRaw=', orderRaw, 'orderNorm=', orderNorm);
-      console.log('[1C import] расходы из файла', {
-        materials,
-        processing,
-        other,
-        salary,
-        wipStart
-      });
-
-      let existingRow = findRowByOrderName(orderRaw);
-      console.log('[1C import] existingRow найден=', !!existingRow);
-
-      if (existingRow) {
-        logImportRowInputs(existingRow, '[1C import] inputs в строке');
-      }
-
-      console.log('IMPORT ROW', {
+      accumulate1cOrderRow(
+        map,
         orderRaw,
-        orderNorm,
-        materials,
-        processing,
-        other,
-        salary,
-        wipStart,
-        foundExisting: !!existingRow
-      });
-
-      if (existingRow) {
-        apply1cExpenseFieldsToRow(
-          existingRow,
-          materials,
-          processing,
-          other,
-          salary,
-          wipStart,
-          { merge: true }
-        );
-        if (stats) {
-          stats.updated++;
-          stats.skippedDupes++;
-        }
-        return;
-      }
-
-      const newRow = addOrderRow({ order: orderRaw, shipment: 0 });
-      console.log('NEW ROW FOUND', !!newRow);
-      if (newRow) logImportRowInputs(newRow, '[1C import] inputs в новой строке');
-      apply1cExpenseFieldsToRow(
-        newRow,
-        materials,
-        processing,
-        other,
-        salary,
-        wipStart,
-        { merge: false }
+        {
+          materials: p[1],
+          processing: p[2],
+          other: p[3],
+          salary: p[4],
+          wipStart: p[5]
+        },
+        stats
       );
-      if (stats) stats.added++;
+      return true;
+    }
+
+    function aggregate1cExcelRow(parts, map, stats) {
+      if (!parts.some(p => String(p).trim())) return false;
+      if (is1cExcelParserSkipRow(parts)) return false;
+      if (is1cCsvHeaderRow(parts)) return false;
+
+      const orderRaw = String(parts[0] ?? '').trim();
+      if (!orderRaw || is1cSkippedServiceRow(orderRaw)) return false;
+      if (stats) stats.loaded++;
+
+      while (parts.length < 6) parts.push('');
+
+      accumulate1cOrderRow(
+        map,
+        orderRaw,
+        {
+          wipStart: parts[1],
+          materials: parts[2],
+          processing: parts[3],
+          other: parts[4],
+          salary: ''
+        },
+        stats
+      );
+      return true;
+    }
+
+    function applyAggregated1cImportToTable(aggregatedMap, stats) {
+      aggregatedMap.forEach(agg => {
+        let tr = findRowByOrderName(agg.order);
+        if (tr) {
+          apply1cExpenseFieldsToRow(
+            tr,
+            agg.materials,
+            agg.processing,
+            agg.other,
+            agg.salary,
+            agg.wipStart,
+            { replace: true }
+          );
+          if (stats) stats.updated++;
+          return;
+        }
+
+        tr = addOrderRow({ order: agg.order });
+        if (!tr) return;
+        apply1cExpenseFieldsToRow(
+          tr,
+          agg.materials,
+          agg.processing,
+          agg.other,
+          agg.salary,
+          agg.wipStart,
+          { replace: true }
+        );
+        if (stats) stats.added++;
+      });
     }
 
     function loadFrom1cCsv(text) {
       const stats = create1cImportStats();
+      const map = new Map();
       const raw = text.replace(/^\uFEFF/, '');
       const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
       for (let i = 0; i < lines.length; i++) {
         const parts = lines[i].split(';').map(c => c.trim());
-        apply1cParts(parts, null, stats);
+        aggregate1cCsvParts(parts, map, stats);
       }
+
+      applyAggregated1cImportToTable(map, stats);
+      calculateAll();
+      refreshAllOrderNameTitles();
+      populateOrderSelect();
       return stats;
     }
 
@@ -2358,6 +2401,7 @@
       const currentN = Number.isFinite(current) ? current : num(el.value);
       const incomingN = Number.isFinite(incoming) ? incoming : num(value);
       const merge = inputMode === 'merge';
+      const replace = inputMode === 'replace';
 
       console.log(
         'FIELD:',
@@ -2371,7 +2415,7 @@
       );
 
       if (fieldTag === 'wip') {
-        if (merge) {
+        if (replace || merge) {
           if (currentN > 0.01) return;
           if (incomingN === 0) return;
           el.value = String(incomingN);
@@ -2381,6 +2425,13 @@
         }
         if (incomingN === 0) return;
         el.value = String(currentN + incomingN);
+        initTableNumDisplay(el);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (replace) {
+        el.value = String(incomingN);
         initTableNumDisplay(el);
         el.dispatchEvent(new Event('input', { bubbles: true }));
         return;
@@ -2477,50 +2528,22 @@
       });
     }
 
-    function process1cExcelRowDistribution(rowArrays, stats) {
+    function aggregate1cExcelRows(rowArrays, stats) {
       if (!stats) stats = create1cImportStats();
+      const map = new Map();
 
       for (let i = 0; i < rowArrays.length; i++) {
         const parts = normalize1cSheetRow(rowArrays[i]);
-        if (!parts.some(p => String(p).trim())) continue;
-        if (is1cExcelParserSkipRow(parts)) continue;
-        if (is1cCsvHeaderRow(parts)) continue;
-
-        const orderRaw = String(parts[0] ?? '').trim();
-        if (!orderRaw) continue;
-        if (is1cSkippedServiceRow(orderRaw)) continue;
-
-        stats.loaded++;
-
-        while (parts.length < 6) parts.push('');
-
-        const wip = parts[1];
-        const materials = parts[2];
-        const processing = parts[3];
-        const other = parts[4];
-
-        let tr = findRowByOrderName(orderRaw);
-        const isMerge = !!tr;
-        if (isMerge) {
-          stats.updated++;
-          stats.skippedDupes++;
-        } else {
-          tr = addOrderRow({ order: orderRaw });
-          if (!tr) continue;
-          stats.added++;
-        }
-
-        apply1cExpenseFieldsToRow(tr, materials, processing, other, '', wip, {
-          merge: isMerge
-        });
+        aggregate1cExcelRow(parts, map, stats);
       }
 
-      return stats;
+      return map;
     }
 
     function loadFrom1cRows(rowArrays) {
       const stats = create1cImportStats();
-      process1cExcelRowDistribution(rowArrays, stats);
+      const aggregated = aggregate1cExcelRows(rowArrays, stats);
+      applyAggregated1cImportToTable(aggregated, stats);
       calculateAll();
       refreshAllOrderNameTitles();
       populateOrderSelect();

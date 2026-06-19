@@ -68,6 +68,10 @@
       font-size: 15px;
     }
 
+    .field input[type="month"] {
+      min-width: 140px;
+    }
+
     button {
       border: none;
       background: #2f855a;
@@ -862,6 +866,46 @@
         grid-template-columns: 1fr 1fr;
       }
     }
+
+    .import1c-mode-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 16px;
+    }
+
+    .import1c-mode-overlay[hidden] {
+      display: none;
+    }
+
+    .import1c-mode-dialog {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 24px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    }
+
+    .import1c-mode-dialog p {
+      margin: 0 0 16px;
+      line-height: 1.45;
+    }
+
+    .import1c-mode-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .import1c-mode-actions button {
+      margin: 0;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -873,8 +917,8 @@
 
       <div class="period-row">
         <div class="field" style="width: 180px;">
-          <label for="periodInput">Период (YYYY-MM)</label>
-          <input id="periodInput" type="text" placeholder="2025-03" autocomplete="off">
+          <label for="periodInput">Период</label>
+          <input id="periodInput" type="text" placeholder="YYYY-MM" autocomplete="off">
         </div>
 
         <div class="field" style="width: 180px;">
@@ -892,11 +936,16 @@
           </select>
         </div>
 
-        <button id="saveBtn" type="button">Сохранить</button>
-        <button id="saveCloudBtn" type="button" class="secondary">Сохранить в облако</button>
-        <button id="deletePeriodBtn" type="button">Удалить период</button>
-        <button id="loadBtn" type="button" class="secondary">Загрузить</button>
-        <button id="loadCloudBtn" type="button" class="secondary">Загрузить из облака</button>
+        <button id="saveBtn" type="button">Сохранить локально</button>
+        <button id="saveCloudBtn" type="button" class="secondary">Сохранить в Google Sheets</button>
+        <button id="returnToDraftBtn" type="button" class="secondary" hidden>Вернуть в работу</button>
+        <button id="deletePeriodBtn" type="button">Удалить локальный период</button>
+        <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
+        <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
+      </div>
+
+      <div class="hint" style="margin-top: 8px;">
+        Локальное сохранение хранится в браузере. Google Sheets — облачная копия. Удаление локального периода не удаляет строки из Google Sheets.
       </div>
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
@@ -1025,24 +1074,24 @@
             <tr>
               <td class="readonly orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Итого</td>
               <td class="readonly orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"></td>
-              <td class="readonly orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootShipmentNoVat">0.00</td>
               <td class="readonly orders-col-w col-pct-shipment tab-v-expenses"></td>
-              <td class="readonly orders-col-w col-wip-start tab-v-expenses"></td>
+              <td class="readonly orders-col-w col-wip-start tab-v-expenses" id="ordersFootWipStart">0.00</td>
               <td class="readonly orders-col-w col-materials tab-v-expenses" id="ordersFootMaterials">0.00</td>
               <td class="readonly orders-col-w col-processing tab-v-expenses" id="ordersFootProcessing">0.00</td>
               <td class="readonly orders-col-w col-other tab-v-expenses" id="ordersFootOther">0.00</td>
               <td class="readonly orders-col-w col-salary tab-v-expenses" id="ordersFootSalary">0.00</td>
               <td class="readonly orders-col-w col-salary-share tab-v-internal"></td>
-              <td class="readonly orders-col-w col-insurance tab-v-expenses"></td>
-              <td class="readonly orders-col-w col-sick tab-v-expenses"></td>
+              <td class="readonly orders-col-w col-insurance tab-v-expenses" id="ordersFootInsurance">0.00</td>
+              <td class="readonly orders-col-w col-sick tab-v-expenses" id="ordersFootSick">0.00</td>
               <td class="readonly orders-col-w col-acc25 tab-v-expenses" id="ordersFootAcc25">0.00</td>
               <td class="readonly orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
               <td class="readonly orders-col-w col-acc44 tab-v-expenses" id="ordersFootAcc44">0.00</td>
               <td class="readonly orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
-              <td class="readonly orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile"></td>
-              <td class="readonly orders-col-w col-writeoff-26-1c tab-v-reconcile"></td>
-              <td class="readonly orders-col-w col-writeoff-no26 tab-v-reconcile"></td>
-              <td class="readonly orders-col-w col-wip-no26 tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile" id="ordersFootTotalCostNo26">0.00</td>
+              <td class="readonly orders-col-w col-writeoff-26-1c tab-v-reconcile" id="ordersFootWriteOff26_1c">0.00</td>
+              <td class="readonly orders-col-w col-writeoff-no26 tab-v-reconcile" id="ordersFootWriteOff20">0.00</td>
+              <td class="readonly orders-col-w col-wip-no26 tab-v-reconcile" id="ordersFootWip20">0.00</td>
               <td class="readonly orders-col-w col-reconcile-status-1c tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-writeoff-share tab-v-internal"></td>
               <td class="readonly orders-col-w col-period-cost tab-v-internal" id="ordersFootPeriodCost">0.00</td>
@@ -1050,7 +1099,7 @@
               <td class="readonly orders-col-w col-manual-writeoff tab-v-economist"></td>
               <td class="readonly orders-col-w col-writeoff tab-v-economist" id="ordersFootWriteOff">0.00</td>
               <td class="readonly orders-col-w col-writeoff-26 tab-v-internal"></td>
-              <td class="readonly orders-col-w col-wip-end tab-v-economist"></td>
+              <td class="readonly orders-col-w col-wip-end tab-v-economist" id="ordersFootWipEnd">0.00</td>
               <td class="readonly orders-col-w col-wip-26 tab-v-internal"></td>
               <td class="readonly orders-col-w col-wip-with26-check tab-v-internal"></td>
               <td class="readonly orders-col-w col-reconcile-diff tab-v-internal"></td>
@@ -1058,7 +1107,7 @@
               <td class="readonly orders-col-w col-reconcile-comment tab-v-internal"></td>
               <td class="readonly orders-col-w col-profit tab-v-economist" id="ordersFootProfit">0.00</td>
               <td class="readonly orders-col-w col-profit-with26 tab-v-internal" id="ordersFootProfitWith26">0.00</td>
-              <td class="readonly orders-col-w col-margin tab-v-economist"></td>
+              <td class="readonly orders-col-w col-margin tab-v-economist" id="ordersFootMargin"></td>
               <td class="readonly orders-col-w col-margin-with26 tab-v-internal"></td>
               <td class="readonly orders-col-w col-delete tab-v-common"></td>
             </tr>
@@ -1101,12 +1150,12 @@
         </div>
         <div class="period-report-controls">
           <div class="field" style="width: 160px;">
-            <label for="reportPeriodFrom">Период с (YYYY-MM)</label>
-            <input id="reportPeriodFrom" type="text" placeholder="2025-01" autocomplete="off">
+            <label for="reportPeriodFrom">Отчёт с</label>
+            <input id="reportPeriodFrom" type="text" placeholder="YYYY-MM" autocomplete="off">
           </div>
           <div class="field" style="width: 160px;">
-            <label for="reportPeriodTo">Период по (YYYY-MM)</label>
-            <input id="reportPeriodTo" type="text" placeholder="2025-03" autocomplete="off">
+            <label for="reportPeriodTo">Отчёт по</label>
+            <input id="reportPeriodTo" type="text" placeholder="YYYY-MM" autocomplete="off">
           </div>
           <button id="buildPeriodReportBtn" type="button" class="secondary">Сформировать сводку</button>
           <button type="button" class="secondary" onclick="clearReport()">Очистить</button>
@@ -1850,6 +1899,7 @@
       tr.querySelectorAll('input.table-num').forEach(initTableNumDisplay);
 
       tr.querySelector('.delete-row').addEventListener('click', () => {
+        if (isPeriodFinal()) return;
         tr.remove();
         calculateAll();
         autoSave();
@@ -2165,6 +2215,65 @@
       }
     }
 
+    function isOrderRowNonEmpty(row) {
+      if (!row) return false;
+      const order = String(row.querySelector('.order-name')?.value ?? '').trim();
+      if (order) return true;
+      const inputs = row.querySelectorAll('input.table-num');
+      for (let i = 0; i < inputs.length; i++) {
+        const el = inputs[i];
+        if (el.classList.contains('manual-writeoff') && !manualWriteoffHasValue(el)) continue;
+        if (num(el.value) !== 0) return true;
+      }
+      return false;
+    }
+
+    function ordersTableHasNonEmptyRows() {
+      return getRows().some(isOrderRowNonEmpty);
+    }
+
+    function ask1cImportMode() {
+      return new Promise(resolve => {
+        if (!ordersTableHasNonEmptyRows()) {
+          resolve('replace');
+          return;
+        }
+
+        const overlay = document.getElementById('import1cModeOverlay');
+        const replaceBtn = document.getElementById('import1cModeReplace');
+        const appendBtn = document.getElementById('import1cModeAppend');
+        const cancelBtn = document.getElementById('import1cModeCancel');
+
+        if (!overlay || !replaceBtn || !appendBtn || !cancelBtn) {
+          const replace = confirm(
+            'В таблице уже есть строки. Очистить текущую таблицу перед загрузкой из 1С?\n\n' +
+            'ОК — очистить и загрузить заново.\n' +
+            'Отмена — добавить к текущим строкам.'
+          );
+          resolve(replace ? 'replace' : 'append');
+          return;
+        }
+
+        const finish = mode => {
+          overlay.hidden = true;
+          replaceBtn.removeEventListener('click', onReplace);
+          appendBtn.removeEventListener('click', onAppend);
+          cancelBtn.removeEventListener('click', onCancel);
+          resolve(mode);
+        };
+        const onReplace = () => finish('replace');
+        const onAppend = () => finish('append');
+        const onCancel = () => finish('cancel');
+
+        replaceBtn.addEventListener('click', onReplace);
+        appendBtn.addEventListener('click', onAppend);
+        cancelBtn.addEventListener('click', onCancel);
+
+        overlay.hidden = false;
+        replaceBtn.focus();
+      });
+    }
+
     function process1cExcelRowDistribution(rowArrays) {
       for (let i = 0; i < rowArrays.length; i++) {
         const parts = normalize1cSheetRow(rowArrays[i]);
@@ -2284,7 +2393,9 @@
     }
 
     function checkData() {
-      calculateAll();
+      if (!isPeriodFinal()) {
+        calculateAll();
+      }
 
       const rows = getRows();
       const warnings = [];
@@ -2359,12 +2470,20 @@
       let sumFootProcessing = 0;
       let sumFootOther = 0;
       let sumFootSalary = 0;
+      let sumFootWipStart = 0;
+      let sumFootInsurance = 0;
+      let sumFootSick = 0;
       let sumFootAcc25 = 0;
       let sumFootAcc26 = 0;
       let sumFootAcc44 = 0;
       let sumFootTotalCost = 0;
+      let sumFootTotalCostNo26 = 0;
+      let sumFootWriteOff26_1c = 0;
+      let sumFootWriteOff20 = 0;
+      let sumFootWip20 = 0;
       let sumFootPeriodCost = 0;
       let sumFootWriteOff = 0;
+      let sumFootWipEnd = 0;
       let sumFootProfit = 0;
       let sumFootProfitWith26 = 0;
 
@@ -2485,12 +2604,20 @@
         sumFootProcessing += processing;
         sumFootOther += otherDirect;
         sumFootSalary += salary;
+        sumFootWipStart += wipStart;
+        sumFootInsurance += insurance;
+        sumFootSick += sick;
         sumFootAcc25 += acc25;
         sumFootAcc26 += acc26;
         sumFootAcc44 += acc44;
         sumFootTotalCost += totalCost;
+        sumFootTotalCostNo26 += totalCost - acc26;
+        sumFootWriteOff26_1c += acc26;
+        sumFootWriteOff20 += writeOff - acc26;
+        sumFootWip20 += (totalCost - acc26) - (writeOff - acc26);
         sumFootPeriodCost += periodCost;
         sumFootWriteOff += writeOff;
+        sumFootWipEnd += wipEnd;
         sumFootProfit += profitRub;
         sumFootProfitWith26 += profitWith26;
 
@@ -2502,18 +2629,36 @@
         const el = document.getElementById(id);
         if (el) el.textContent = fmt(v);
       };
+      const setFootPct = (id, pct) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = pct.toFixed(1) + '%';
+      };
+
+      setFoot('ordersFootShipmentNoVat', totalShipmentNoVat);
+      setFoot('ordersFootWipStart', sumFootWipStart);
       setFoot('ordersFootMaterials', sumFootMaterials);
       setFoot('ordersFootProcessing', sumFootProcessing);
       setFoot('ordersFootOther', sumFootOther);
       setFoot('ordersFootSalary', sumFootSalary);
+      setFoot('ordersFootInsurance', sumFootInsurance);
+      setFoot('ordersFootSick', sumFootSick);
       setFoot('ordersFootAcc25', sumFootAcc25);
       setFoot('ordersFootAcc26', sumFootAcc26);
       setFoot('ordersFootAcc44', sumFootAcc44);
       setFoot('ordersFootTotalCost', sumFootTotalCost);
+      setFoot('ordersFootTotalCostNo26', sumFootTotalCostNo26);
+      setFoot('ordersFootWriteOff26_1c', sumFootWriteOff26_1c);
+      setFoot('ordersFootWriteOff20', sumFootWriteOff20);
+      setFoot('ordersFootWip20', sumFootWip20);
       setFoot('ordersFootPeriodCost', sumFootPeriodCost);
       setFoot('ordersFootWriteOff', sumFootWriteOff);
+      setFoot('ordersFootWipEnd', sumFootWipEnd);
       setFoot('ordersFootProfit', sumFootProfit);
       setFoot('ordersFootProfitWith26', sumFootProfitWith26);
+      setFootPct(
+        'ordersFootMargin',
+        totalShipmentNoVat > 0 ? (sumFootProfit / totalShipmentNoVat) * 100 : 0
+      );
 
       document.getElementById('totalShipmentNoVat').textContent = fmt(totalShipmentNoVat);
       document.getElementById('totalSalaryValue').textContent = fmt(totalSalary);
@@ -2570,6 +2715,32 @@
         .trim();
     }
 
+    function isMonthInputTypeSupported() {
+      try {
+        const el = document.createElement('input');
+        el.setAttribute('type', 'month');
+        return el.type === 'month';
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /** type="month" при поддержке браузером; иначе остаётся text + placeholder YYYY-MM */
+    function setupPeriodMonthInputs() {
+      const ids = ['periodInput', 'reportPeriodFrom', 'reportPeriodTo'];
+      if (!isMonthInputTypeSupported()) return;
+
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const v = normalizePeriodStr(el.value);
+        el.type = 'month';
+        if (v && /^\d{4}-\d{2}$/.test(v)) {
+          el.value = v;
+        }
+      });
+    }
+
     function normalizePeriodFromSheet(p) {
       if (!p) return '';
 
@@ -2605,6 +2776,10 @@
       el.value = status === 'final' ? 'final' : 'draft';
     }
 
+    function isPeriodFinal() {
+      return getPeriodStatus() === 'final';
+    }
+
     function setTableReadOnlyMode(locked) {
       if (!ordersBody) return;
       ordersBody.querySelectorAll('input').forEach(inp => {
@@ -2616,13 +2791,76 @@
         b.style.opacity = locked ? '0.5' : '1';
         b.style.pointerEvents = locked ? 'none' : '';
       });
-      const addBtn = document.getElementById('addRowBtn');
-      if (addBtn) addBtn.disabled = locked;
-      const imp = document.getElementById('import1cBtn');
-      if (imp) imp.disabled = locked;
+    }
+
+    function setButtonDisabled(id, disabled) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.disabled = disabled;
+      el.style.opacity = disabled ? '0.5' : '1';
+    }
+
+    function applyPeriodEditMode() {
+      const locked = isPeriodFinal();
+
+      setTableReadOnlyMode(locked);
+
+      document.querySelectorAll('input.global-num').forEach(inp => {
+        inp.readOnly = locked;
+        inp.disabled = locked;
+      });
+
+      ['addRowBtn', 'clearBtn', 'import1cBtn', 'saveBtn', 'saveCloudBtn', 'deletePeriodBtn'].forEach(id => {
+        setButtonDisabled(id, locked);
+      });
+
       const fin = document.getElementById('fileInput');
-      if (fin && locked) fin.disabled = true;
-      else if (fin) fin.disabled = false;
+      if (fin) fin.disabled = locked;
+
+      const statusSelect = document.getElementById('periodStatusSelect');
+      if (statusSelect) statusSelect.disabled = locked;
+
+      const returnBtn = document.getElementById('returnToDraftBtn');
+      if (returnBtn) returnBtn.hidden = !locked;
+    }
+
+    function returnPeriodToDraft() {
+      if (!isPeriodFinal()) return;
+
+      const ok = confirm(
+        'Период закрыт. Вернуть его в работу и разрешить редактирование?'
+      );
+      if (!ok) return;
+
+      setPeriodStatus('draft');
+      applyPeriodEditMode();
+      calculateAll();
+
+      const period = getCurrentPeriod();
+      if (period) {
+        savePeriod(false);
+      }
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) statusEl.textContent = 'Период возвращён в работу';
+    }
+
+    function closePeriodWithConfirm() {
+      const ok = confirm(
+        'Закрыть период? После закрытия редактирование будет заблокировано.'
+      );
+      if (!ok) {
+        setPeriodStatus('draft');
+        return;
+      }
+
+      calculateAll();
+      setPeriodStatus('final');
+      applyPeriodEditMode();
+      savePeriod(false, { allowFinal: true });
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) statusEl.textContent = 'Период закрыт';
     }
 
     function collectRowData(tr) {
@@ -2941,14 +3179,18 @@
 
       if (isFinal && !hasAnySnapshot) {
         setTableReadOnlyMode(false);
+        document.querySelectorAll('input.global-num').forEach(inp => {
+          inp.readOnly = false;
+          inp.disabled = false;
+        });
         calculateAll();
-        setTableReadOnlyMode(true);
+        applyPeriodEditMode();
         formatAllCalculatedFields();
         populateOrderSelect();
         return;
       }
 
-      setTableReadOnlyMode(isFinal);
+      applyPeriodEditMode();
 
       if (!isFinal) {
         calculateAll();
@@ -2961,8 +3203,9 @@
       populateOrderSelect();
     }
 
-    function savePeriod(showAlert = true) {
+    function savePeriod(showAlert = true, options = {}) {
       const period = getCurrentPeriod();
+      const allowFinal = options && options.allowFinal;
 
       if (!period) {
         if (showAlert) {
@@ -2970,7 +3213,16 @@
             'Укажите период: введите в поле «Период» дату в формате YYYY-MM (серый текст в поле — только подсказка, его нужно заменить вводом) или выберите сохранённый период в списке.'
           );
         }
-        return;
+        return false;
+      }
+
+      if (isPeriodFinal() && !allowFinal) {
+        if (showAlert) {
+          alert(
+            'Закрытый период нельзя перезаписать. Сначала верните период в работу.'
+          );
+        }
+        return false;
       }
 
       if (showAlert) {
@@ -2989,6 +3241,7 @@
       if (showAlert) {
         alert('Сохранено');
       }
+      return true;
     }
 
     function loadPeriod(showAlert = true) {
@@ -3113,6 +3366,7 @@
         if (hint) hint.textContent = 'Нет данных';
         createRow();
         calculateAll();
+        applyPeriodEditMode();
         return;
       }
       if (hint) hint.textContent = 'Загружено строк: ' + data.length;
@@ -3352,6 +3606,13 @@
         return;
       }
 
+      if (isPeriodFinal()) {
+        alert(
+          'Закрытый период нельзя сохранить в Google Sheets. Сначала верните период в работу.'
+        );
+        return;
+      }
+
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
@@ -3379,6 +3640,13 @@
     }
 
     function clearAll(skipAutoSave) {
+      if (isPeriodFinal()) {
+        alert(
+          'Закрытый период нельзя очистить. Сначала верните период в работу.'
+        );
+        return;
+      }
+
       ordersBody.innerHTML = '';
 
       document.getElementById('vatRate').value = '22';
@@ -3388,7 +3656,7 @@
       document.getElementById('total26').value = '0';
       document.getElementById('total44').value = '0';
       setPeriodStatus('draft');
-      setTableReadOnlyMode(false);
+      applyPeriodEditMode();
 
       refreshAllGlobalNums();
       createRow();
@@ -3648,6 +3916,7 @@
     function autoSave() {
       const period = getCurrentPeriod();
       if (!period) return;
+      if (isPeriodFinal()) return;
       savePeriod(false);
     }
 
@@ -3656,6 +3925,7 @@
     // =====================
 
     addRowBtn.addEventListener('click', () => {
+      if (isPeriodFinal()) return;
       createRow();
       calculateAll();
       autoSave();
@@ -3674,6 +3944,14 @@
       const file = input.files[0];
       if (!file) return;
 
+      if (isPeriodFinal()) {
+        alert(
+          'Закрытый период нельзя импортировать из 1С. Сначала верните период в работу.'
+        );
+        input.value = '';
+        return;
+      }
+
       const statusEl = document.getElementById('import1cStatus');
       if (statusEl) statusEl.textContent = 'Читаю файл…';
 
@@ -3686,7 +3964,7 @@
 
       const reader = new FileReader();
 
-      reader.onload = function(evt) {
+      reader.onload = async function(evt) {
         try {
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
@@ -3694,10 +3972,24 @@
           const sheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
+          const mode = await ask1cImportMode();
+          if (mode === 'cancel') {
+            if (statusEl) statusEl.textContent = 'Импорт отменён';
+            input.value = '';
+            return;
+          }
+          if (mode === 'replace') {
+            ordersBody.innerHTML = '';
+          }
+
           loadFrom1cRows(rows);
           autoSave();
 
           if (statusEl) {
+            const modeNote =
+              mode === 'replace'
+                ? 'таблица заменена'
+                : 'строки добавлены к текущей таблице';
             statusEl.textContent =
               'Загружено: «' +
               file.name +
@@ -3705,7 +3997,9 @@
               sheetName +
               '», строк в файле: ' +
               rows.length +
-              ' (данные по заказам перенесены в таблицу).';
+              ' (' +
+              modeNote +
+              ').';
           }
           console.log('Загруженные данные:', rows);
         } catch (err) {
@@ -3730,7 +4024,9 @@
         return;
       }
 
-      calculateAll();
+      if (!isPeriodFinal()) {
+        calculateAll();
+      }
 
       const header = [
         'Заказ',
@@ -3828,17 +4124,15 @@
     const periodStatusSelectEl = document.getElementById('periodStatusSelect');
     if (periodStatusSelectEl) {
       periodStatusSelectEl.addEventListener('change', () => {
-        const final = getPeriodStatus() === 'final';
-        if (final) {
-          calculateAll();
-          setTableReadOnlyMode(true);
-          formatAllCalculatedFields();
-        } else {
-          setTableReadOnlyMode(false);
-          calculateAll();
+        if (getPeriodStatus() === 'final') {
+          closePeriodWithConfirm();
         }
-        autoSave();
       });
+    }
+
+    const returnToDraftBtnEl = document.getElementById('returnToDraftBtn');
+    if (returnToDraftBtnEl) {
+      returnToDraftBtnEl.addEventListener('click', () => returnPeriodToDraft());
     }
 
     document.getElementById('deletePeriodBtn').addEventListener('click', function() {
@@ -3849,7 +4143,14 @@
         return;
       }
 
-      const ok = confirm('Удалить период ' + period + '?');
+      if (isPeriodFinal()) {
+        alert(
+          'Закрытый период нельзя удалить. Сначала верните период в работу.'
+        );
+        return;
+      }
+
+      const ok = confirm('Удалить локальный период ' + period + '?');
 
       if (!ok) return;
 
@@ -3888,6 +4189,7 @@
     // =====================
 
     refreshAllGlobalNums();
+    setupPeriodMonthInputs();
     setupOrderNameTooltipHandlers();
     setupOrdersTableTabs();
     setupPeriodSummaryToggle();
@@ -3907,5 +4209,16 @@
       setupOrdersTableScrollSync();
     })();
   </script>
+
+  <div id="import1cModeOverlay" class="import1c-mode-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="import1cModeTitle">
+    <div class="import1c-mode-dialog">
+      <p id="import1cModeTitle">В таблице уже есть строки. Как загрузить файл из 1С?</p>
+      <div class="import1c-mode-actions">
+        <button type="button" id="import1cModeReplace">Заменить текущую таблицу</button>
+        <button type="button" id="import1cModeAppend" class="secondary">Добавить к текущей таблице</button>
+        <button type="button" id="import1cModeCancel" class="secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>  

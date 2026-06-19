@@ -379,10 +379,11 @@
       --orders-col-shipment-no-vat-w: 112px;
     }
 
-    #ordersTable[data-active-tab="economist"] .col-total-cost {
-      width: 132px;
-      min-width: 132px;
-      max-width: 132px;
+    #ordersTable[data-active-tab="economist"] .col-total-cost,
+    #ordersTable[data-active-tab="economist"] .col-total-cost-no26 {
+      width: 118px;
+      min-width: 118px;
+      max-width: 118px;
     }
 
     #ordersTable[data-active-tab="economist"] .col-profit-pct {
@@ -414,6 +415,15 @@
       width: 78px;
       min-width: 78px;
       max-width: 78px;
+    }
+
+    #ordersTable[data-active-tab="economist"] thead th {
+      white-space: normal;
+      line-height: 1.25;
+      word-break: break-word;
+      hyphens: auto;
+      font-size: 11px;
+      padding: 8px 4px;
     }
 
     /* --- Ширины: вкладка «Сверка с 1С» --- */
@@ -972,7 +982,7 @@
               <th class="orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" title="26 распределённый">26 распред.</th>
               <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
               <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
-              <th class="orders-col-w col-total-cost-no26 tab-v-reconcile">Расходы без 26</th>
+              <th class="orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile">Расходы без 26</th>
               <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="В 1С 26 счёт закрывается полностью в периоде">26 сч. списывается</th>
               <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списание с 20 сч.</th>
               <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП на 20 сч.</th>
@@ -1015,7 +1025,7 @@
               <td class="readonly orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
               <td class="readonly orders-col-w col-acc44 tab-v-expenses" id="ordersFootAcc44">0.00</td>
               <td class="readonly orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
-              <td class="readonly orders-col-w col-total-cost-no26 tab-v-reconcile"></td>
+              <td class="readonly orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-writeoff-26-1c tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-writeoff-no26 tab-v-reconcile"></td>
               <td class="readonly orders-col-w col-wip-no26 tab-v-reconcile"></td>
@@ -1529,6 +1539,7 @@
         reconcile: 'Расходы всего с 26'
       },
       'col-total-cost-no26': {
+        economist: 'Расходы без 26',
         reconcile: 'Расходы без 26'
       },
       'col-writeoff-26-1c': {
@@ -1547,6 +1558,9 @@
         expenses: 'Списание с 26',
         economist: 'Списание всего',
         reconcile: 'Списание с 26'
+      },
+      'col-profit-pct': {
+        economist: '% списания от отгрузки'
       },
       'col-wip-end': {
         expenses: 'НЗП конец с 26',
@@ -1586,6 +1600,8 @@
           th.title = 'Результат проверки расчёта для 1С';
         } else if (colClass === 'col-writeoff' && tabId === 'economist') {
           th.title = 'Общее списание по заказу';
+        } else if (colClass === 'col-profit-pct' && tabId === 'economist') {
+          th.title = 'Процент списания от отгрузки без НДС';
         }
       });
     }
@@ -1746,7 +1762,7 @@
         <td class="readonly acc26 orders-col-w col-acc26 tab-v-expenses tab-v-reconcile">0.00</td>
         <td class="readonly acc44 orders-col-w col-acc44 tab-v-expenses">0.00</td>
         <td class="readonly total-cost orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
-        <td class="readonly total-cost-no26 orders-col-w col-total-cost-no26 tab-v-reconcile">0.00</td>
+        <td class="readonly total-cost-no26 orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile">0.00</td>
         <td class="readonly writeoff-26-1c orders-col-w col-writeoff-26-1c tab-v-reconcile">0.00</td>
         <td class="readonly writeoff-no26 orders-col-w col-writeoff-no26 tab-v-reconcile">0.00</td>
         <td class="readonly wip-no26 orders-col-w col-wip-no26 tab-v-reconcile">0.00</td>

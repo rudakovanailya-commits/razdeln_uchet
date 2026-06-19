@@ -789,29 +789,71 @@
       font-weight: bold;
     }
 
+    .period-summary-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+
+    .period-summary-head h2 {
+      margin: 0;
+    }
+
+    .period-report-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      margin-top: 12px;
+    }
+
     #periodReportBox {
+      margin-top: 12px;
+    }
+
+    .period-report-scroll-wrap {
+      overflow-x: auto;
+      max-width: 100%;
       border: 1px solid #c5e4cf;
-      border-radius: 12px;
-      padding: 16px;
+      border-radius: 8px;
       background: #f5fbf7;
     }
 
-    #periodReportBox table {
-      width: 100%;
+    #periodReportTableWrap {
+      min-width: 0;
+    }
+
+    #periodReportTableWrap table {
+      width: max-content;
+      min-width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
+      font-size: 13px;
     }
 
-    #periodReportBox th,
-    #periodReportBox td {
+    #periodReportTableWrap th,
+    #periodReportTableWrap td {
       border-bottom: 1px solid #d1f0db;
-      padding: 8px;
+      padding: 8px 10px;
       text-align: right;
+      white-space: nowrap;
     }
 
-    #periodReportBox th:first-child,
-    #periodReportBox td:first-child {
+    #periodReportTableWrap th:first-child,
+    #periodReportTableWrap td:first-child {
       text-align: left;
+      position: sticky;
+      left: 0;
+      background: #ecf8f0;
+      z-index: 1;
+    }
+
+    #periodReportTableWrap thead th {
+      background: #e0f2e8;
+      color: #14532d;
+      font-weight: 600;
     }
 
     @media (max-width: 900px) {
@@ -859,34 +901,6 @@
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
-
-      <div
-        class="period-report-row"
-        style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;"
-      >
-        <div class="field" style="width: 160px;">
-          <label for="reportPeriodFrom">Отчёт: период С (YYYY-MM)</label>
-          <input id="reportPeriodFrom" type="text" placeholder="2025-01" autocomplete="off">
-        </div>
-        <div class="field" style="width: 160px;">
-          <label for="reportPeriodTo">период ПО (YYYY-MM)</label>
-          <input id="reportPeriodTo" type="text" placeholder="2025-03" autocomplete="off">
-        </div>
-        <button id="buildPeriodReportBtn" type="button" class="secondary">
-          Сформировать отчет
-        </button>
-        <button type="button" class="secondary" onclick="clearReport()">
-          Очистить отчет
-        </button>
-        <button type="button" class="secondary" onclick="downloadCSV()">
-          Скачать CSV
-        </button>
-      </div>
-      <div class="hint" id="periodReportStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
-      <div id="periodReportBox" style="margin-top: 12px; display: none;">
-        <h3 style="margin: 0 0 8px; color: #14532d;">Сводка за период</h3>
-        <div id="periodReportTableWrap"></div>
-      </div>
 
       <div class="top-grid">
         <div class="field">
@@ -1073,6 +1087,38 @@
       </div>
 
       <div class="hint" id="warningBox"></div>
+    </div>
+
+    <div class="card" id="periodSummaryCard">
+      <div class="period-summary-head">
+        <h2>Сводка за период</h2>
+        <button type="button" id="periodSummaryToggle" class="secondary">Показать сводку</button>
+      </div>
+      <div id="periodReportPanel" hidden>
+        <div class="hint" id="periodReportSourceHint" style="margin-top: 12px;">
+          Сводка строится по сохранённым периодам в Google Таблице (doGet?action=getRows).
+          Текущая незаписанная таблица заказов в сводку не попадает — сначала сохраните период в облако.
+        </div>
+        <div class="period-report-controls">
+          <div class="field" style="width: 160px;">
+            <label for="reportPeriodFrom">Период с (YYYY-MM)</label>
+            <input id="reportPeriodFrom" type="text" placeholder="2025-01" autocomplete="off">
+          </div>
+          <div class="field" style="width: 160px;">
+            <label for="reportPeriodTo">Период по (YYYY-MM)</label>
+            <input id="reportPeriodTo" type="text" placeholder="2025-03" autocomplete="off">
+          </div>
+          <button id="buildPeriodReportBtn" type="button" class="secondary">Сформировать сводку</button>
+          <button type="button" class="secondary" onclick="clearReport()">Очистить</button>
+          <button type="button" class="secondary" onclick="downloadCSV()">Скачать CSV</button>
+        </div>
+        <div class="hint" id="periodReportStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+        <div id="periodReportBox" style="display: none;">
+          <div class="period-report-scroll-wrap">
+            <div id="periodReportTableWrap"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
@@ -1645,6 +1691,7 @@
       const t = e.target;
       if (t.matches && t.matches('input.order-name')) {
         syncOrderNameTitle(t);
+        populateOrderSelect();
         if (
           orderNameTooltipEl &&
           !orderNameTooltipEl.hidden &&
@@ -1667,6 +1714,7 @@
       const t = e.target;
       if (t.matches && t.matches('input.order-name')) {
         syncOrderNameTitle(t);
+        populateOrderSelect();
       }
     });
 
@@ -1805,6 +1853,7 @@
         tr.remove();
         calculateAll();
         autoSave();
+        populateOrderSelect();
         setupOrdersTableScrollSync();
       });
 
@@ -2144,6 +2193,7 @@
       process1cExcelRowDistribution(rowArrays);
       calculateAll();
       refreshAllOrderNameTitles();
+      populateOrderSelect();
     }
 
     function clearOrderRowValidation(row) {
@@ -2894,6 +2944,7 @@
         calculateAll();
         setTableReadOnlyMode(true);
         formatAllCalculatedFields();
+        populateOrderSelect();
         return;
       }
 
@@ -2907,6 +2958,7 @@
 
       refreshAllOrderNameTitles();
       setupOrdersTableScrollSync();
+      populateOrderSelect();
     }
 
     function savePeriod(showAlert = true) {
@@ -3122,6 +3174,29 @@
       if (box) {
         box.style.display = 'none';
       }
+      const statusEl = document.getElementById('periodReportStatus');
+      if (statusEl) statusEl.textContent = '';
+    }
+
+    function isPeriodReportPanelOpen() {
+      const panel = document.getElementById('periodReportPanel');
+      return panel && !panel.hidden;
+    }
+
+    function setPeriodReportPanelOpen(open) {
+      const panel = document.getElementById('periodReportPanel');
+      const toggle = document.getElementById('periodSummaryToggle');
+      if (panel) panel.hidden = !open;
+      if (toggle) toggle.textContent = open ? 'Скрыть сводку' : 'Показать сводку';
+    }
+
+    function setupPeriodSummaryToggle() {
+      const toggle = document.getElementById('periodSummaryToggle');
+      if (!toggle || toggle.dataset.bound) return;
+      toggle.dataset.bound = '1';
+      toggle.addEventListener('click', () => {
+        setPeriodReportPanelOpen(!isPeriodReportPanelOpen());
+      });
     }
 
     function downloadCSV() {
@@ -3175,6 +3250,7 @@
       const statusEl = document.getElementById('periodReportStatus');
       const box = document.getElementById('periodReportBox');
       const wrap = document.getElementById('periodReportTableWrap');
+      setPeriodReportPanelOpen(true);
       if (statusEl) statusEl.textContent = 'Загрузка из Google Таблицы…';
       if (wrap) wrap.innerHTML = '';
 
@@ -3227,7 +3303,7 @@
           html +=
             '<tr><td colspan="' +
             colCount +
-            '" style="text-align:center;">Нет данных за выбранный диапазон</td></tr>';
+            '" style="text-align:center;">Нет данных за выбранный диапазон в облаке</td></tr>';
         } else {
           const totals = {};
           PERIOD_REPORT_NUMERIC_KEYS.forEach(k => {
@@ -3253,11 +3329,11 @@
         if (box) box.style.display = 'block';
         if (statusEl) {
           statusEl.textContent = list.length
-            ? 'Строк в диапазоне: ' +
+            ? 'Строк в облаке за диапазон: ' +
               filtered.length +
               ', уникальных заказов: ' +
               list.length
-            : 'Нет строк за выбранный диапазон (проверьте данные в таблице и doGet ?action=getRows).';
+            : 'Нет данных за выбранный диапазон в Google Таблице. Сохраните период в облако или проверьте диапазон дат.';
         }
       } catch (err) {
         if (statusEl) statusEl.textContent = '';
@@ -3318,9 +3394,11 @@
       createRow();
       calculateAll();
       if (!skipAutoSave) autoSave();
+      populateOrderSelect();
     }
 
-    function populateOrderSelect() {
+    /** Заказы из всех периодов localStorage и облака (allData) — для будущего режима «архив». */
+    function populateOrderSelectFromArchive() {
       const sel = document.getElementById('orderSelect');
       if (!sel) return;
 
@@ -3363,6 +3441,40 @@
       if (prev && names.has(prev)) {
         sel.value = prev;
       }
+    }
+
+    function populateOrderSelectFromCurrentTable() {
+      const sel = document.getElementById('orderSelect');
+      if (!sel) return;
+
+      const prev = sel.value;
+      const names = [];
+      const seen = new Set();
+
+      getRows().forEach(row => {
+        const name = String(row.querySelector('.order-name')?.value ?? '').trim();
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        names.push(name);
+      });
+
+      sel.innerHTML = '<option value="">Выбери заказ</option>';
+      names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+
+      if (prev && seen.has(prev)) {
+        sel.value = prev;
+      } else {
+        sel.value = '';
+      }
+    }
+
+    function populateOrderSelect() {
+      populateOrderSelectFromCurrentTable();
     }
 
     function manualWriteoffSavedHasValue(s) {
@@ -3547,6 +3659,7 @@
       createRow();
       calculateAll();
       autoSave();
+      populateOrderSelect();
     });
 
     document.getElementById('checkDataBtn').addEventListener('click', () => checkData());
@@ -3777,6 +3890,7 @@
     refreshAllGlobalNums();
     setupOrderNameTooltipHandlers();
     setupOrdersTableTabs();
+    setupPeriodSummaryToggle();
     (async function initFromCloud() {
       try {
         allData = await loadData();

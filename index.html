@@ -3860,45 +3860,117 @@
         .filter(Boolean);
     }
 
-    async function postCloudSaveRequest(payload) {
-      const res = await fetch(CLOUD_SAVE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
+    function validateCloudPayloadRowsForSave(period, rows) {
+      const pn = normalizePeriodStr(period);
+      if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
+        return { ok: false, error: 'invalid_period', period: pn || '' };
+      }
+      if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return { ok: false, error: 'no_valid_rows', period: pn };
+      }
+      const validRows = rows.filter(r => {
+        const order = String(r && r.order != null ? r.order : '').trim();
+        return !!order;
       });
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
+      if (!validRows.length) {
+        return { ok: false, error: 'no_valid_rows', period: pn };
       }
-      const text = await res.text();
-      let data;
+      for (let i = 0; i < validRows.length; i++) {
+        const rowPeriod = normalizePeriodStr(validRows[i].period);
+        if (rowPeriod && rowPeriod !== pn) {
+          return { ok: false, error: 'period_mismatch', period: pn };
+        }
+      }
+      return {
+        ok: true,
+        period: pn,
+        rows: validRows.map(r => Object.assign({}, r, { period: pn }))
+      };
+    }
+
+    function alertCloudSaveCancelledNoRows(period) {
+      const pn = normalizePeriodStr(period) || period;
+      alert(
+        'Нет строк для сохранения периода ' +
+          pn +
+          '. Отправка в Google Sheets отменена.'
+      );
+    }
+
+    async function postCloudSaveRequest(payload) {
       try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error('Ответ сервера не JSON');
+        await fetch(CLOUD_SAVE_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        throw new Error(err && err.message ? err.message : 'Failed to fetch');
       }
-      if (!data || data.ok !== true) {
-        throw new Error(
-          (data && data.error) || 'Ошибка сохранения в Google Sheets'
-        );
+      return { ok: true, opaque: true };
+    }
+
+    function formatCloudSaveSentMessage(period) {
+      return (
+        'Запрос на сохранение периода ' +
+        period +
+        ' отправлен в Google Sheets. Проверьте таблицу. Если строки не обновились, проверьте деплой Apps Script.'
+      );
+    }
+
+    function offerMarkPeriodsSyncedAfterCloudSend(periods) {
+      const list = [
+        ...new Set(
+          (periods || [])
+            .map(p => normalizePeriodStr(p))
+            .filter(p => /^\d{4}-\d{2}$/.test(p))
+        )
+      ];
+      if (!list.length) return;
+
+      const unsynced = loadUnsyncedChangedPeriods();
+      const relevant = list.filter(p => unsynced.includes(p));
+      if (!relevant.length) return;
+
+      const label = relevant.join(', ');
+      const ok = confirm(
+        'Отметить период' +
+          (relevant.length > 1 ? 'ы' : '') +
+          ' ' +
+          label +
+          ' как синхронизированные с Google Sheets?\n\nДелайте это только после проверки таблицы.'
+      );
+      if (ok) {
+        relevant.forEach(p => removeUnsyncedChangedPeriod(p));
       }
-      return data;
     }
 
     async function replacePeriodInCloud(period, rows) {
-      const pn = normalizePeriodStr(period);
-      if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
-        throw new Error('Некорректный период: ' + period);
+      const check = validateCloudPayloadRowsForSave(period, rows);
+      if (!check.ok) {
+        if (
+          check.error === 'no_valid_rows' ||
+          check.error === 'invalid_period'
+        ) {
+          throw new Error(
+            'Нет строк для сохранения периода ' +
+              (check.period || period) +
+              '. Отправка в Google Sheets отменена.'
+          );
+        }
+        if (check.error === 'period_mismatch') {
+          throw new Error(
+            'Период в строках не совпадает с сохраняемым периодом ' +
+              check.period +
+              '. Отправка отменена.'
+          );
+        }
+        throw new Error('Отправка в Google Sheets отменена.');
       }
-      if (!rows || !rows.length) {
-        throw new Error('Нет строк для отправки периода ' + pn);
-      }
-      const normalizedRows = rows.map(r =>
-        Object.assign({}, r, { period: pn })
-      );
       return postCloudSaveRequest({
         action: 'replacePeriod',
-        period: pn,
-        rows: normalizedRows
+        period: check.period,
+        rows: check.rows
       });
     }
 
@@ -3934,17 +4006,16 @@
         statusEl.textContent = 'Отправка в Google Sheets: ' + list.join(', ') + '…';
       }
 
-      let savedCount = 0;
-      const savedPeriods = [];
+      let sentCount = 0;
+      const sentPeriods = [];
       const errors = [];
 
       for (let i = 0; i < list.length; i++) {
         const period = list[i];
         try {
           await saveStoredPeriodToCloud(period);
-          removeUnsyncedChangedPeriod(period);
-          savedCount++;
-          savedPeriods.push(period);
+          sentCount++;
+          sentPeriods.push(period);
         } catch (err) {
           errors.push(
             period +
@@ -3956,27 +4027,31 @@
 
       if (statusEl) {
         statusEl.textContent =
-          savedCount > 0
-            ? 'В Google Sheets сохранено периодов: ' + savedCount
-            : 'Не удалось сохранить периоды в Google Sheets';
+          sentCount > 0
+            ? 'Запросы отправлены в Google Sheets: ' + sentPeriods.join(', ')
+            : 'Не удалось отправить периоды в Google Sheets';
       }
 
       let msg =
-        savedCount > 0
-          ? 'В Google Sheets сохранены периоды: ' +
-            savedPeriods.join(', ') +
-            '. Таблица отсортирована.'
-          : 'Не удалось сохранить периоды в Google Sheets';
+        sentCount > 0
+          ? 'Запросы на сохранение отправлены в Google Sheets для периодов: ' +
+            sentPeriods.join(', ') +
+            '.\n\nПроверьте таблицу. Если строки не обновились, проверьте деплой Apps Script.'
+          : 'Не удалось отправить периоды в Google Sheets';
       if (errors.length) {
         msg += '\n\nОшибки:\n' + errors.join('\n');
       }
       const remaining = loadUnsyncedChangedPeriods();
-      if (remaining.length) {
-        msg += '\n\nОстались несинхронизированные периоды: ' + remaining.join(', ');
-      } else if (savedCount > 0 && !errors.length) {
-        msg += '\n\nВсе изменения цепочки НЗП сохранены в Google Sheets.';
+      if (remaining.length && sentCount > 0) {
+        msg +=
+          '\n\nНесинхронизированные периоды остаются в списке до подтверждения: ' +
+          remaining.join(', ');
       }
       alert(msg);
+
+      if (sentCount > 0) {
+        offerMarkPeriodsSyncedAfterCloudSend(sentPeriods);
+      }
     }
 
     function getCloudPeriodReportFetchUrl() {
@@ -4398,23 +4473,19 @@
 
       try {
         const rows = getCloudPayloadRows(period);
-        const result = await replacePeriodInCloud(period, rows);
+        const check = validateCloudPayloadRowsForSave(period, rows);
+        if (!check.ok) {
+          if (statusEl) statusEl.textContent = '';
+          alertCloudSaveCancelledNoRows(period);
+          return;
+        }
 
-        removeUnsyncedChangedPeriod(period);
-        const deleted =
-          result.deleted != null ? Number(result.deleted) : 0;
-        const written =
-          result.written != null ? Number(result.written) : rows.length;
-        const msg =
-          'Период ' +
-          period +
-          ' сохранён в Google Sheets. Удалено старых строк: ' +
-          deleted +
-          '. Записано строк: ' +
-          written +
-          '. Таблица отсортирована.';
+        await replacePeriodInCloud(period, check.rows);
+
+        const msg = formatCloudSaveSentMessage(period);
         if (statusEl) statusEl.textContent = msg;
         alert(msg);
+        offerMarkPeriodsSyncedAfterCloudSend([period]);
       } catch (err) {
         console.error('ERROR:', err);
         if (statusEl) statusEl.textContent = '';

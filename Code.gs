@@ -229,35 +229,97 @@ function deleteAllRowsForPeriod(sheet, periodParam) {
   return toDelete.length;
 }
 
-function replacePeriodRows(sheet, periodParam, rows) {
-  ensureHeaders(sheet);
+function prepareValidReplacePeriodRows(periodParam, rows) {
   var period = normalizePeriodCell(periodParam);
   if (!period) {
-    return jsonOut({ ok: false, error: 'period_required', deleted: 0, written: 0 });
+    return { ok: false, error: 'period_required', deleted: 0, inserted: 0 };
   }
-  rows = rows || [];
-  var deleted = deleteAllRowsForPeriod(sheet, period);
-  var n = SHEET_COLUMNS.length;
-  var values = [];
-  var written = 0;
+  if (rows == null || !Array.isArray(rows) || rows.length === 0) {
+    return {
+      ok: false,
+      error: 'no_valid_rows',
+      deleted: 0,
+      inserted: 0,
+      period: period
+    };
+  }
+  var validRows = [];
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i] || {};
     var order = String(row.order == null ? '' : row.order).trim();
     if (!order) continue;
+    var rowPeriod = normalizePeriodCell(row.period);
+    if (rowPeriod && rowPeriod !== period) {
+      return {
+        ok: false,
+        error: 'period_mismatch',
+        deleted: 0,
+        inserted: 0,
+        period: period
+      };
+    }
     row.period = period;
-    values.push(sheetRowArrayFromPayload(row));
-    written++;
+    validRows.push(row);
   }
-  if (values.length) {
-    var startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, startRow + values.length - 1, n).setValues(values);
+  if (validRows.length === 0) {
+    return {
+      ok: false,
+      error: 'no_valid_rows',
+      deleted: 0,
+      inserted: 0,
+      period: period
+    };
   }
+  return { ok: true, period: period, validRows: validRows };
+}
+
+function replacePeriodRows(sheet, periodParam, rows) {
+  ensureHeaders(sheet);
+
+  var prep = prepareValidReplacePeriodRows(periodParam, rows);
+  if (!prep.ok) {
+    Logger.log({
+      action: 'replacePeriod',
+      error: prep.error,
+      period: periodParam,
+      rowsCount: rows && Array.isArray(rows) ? rows.length : 0,
+      validRowsCount: 0
+    });
+    return jsonOut({
+      ok: false,
+      error: prep.error,
+      deleted: prep.deleted || 0,
+      inserted: prep.inserted || 0
+    });
+  }
+
+  var period = prep.period;
+  var validRows = prep.validRows;
+
+  Logger.log({
+    action: 'replacePeriod',
+    period: period,
+    rowsCount: rows.length,
+    validRowsCount: validRows.length
+  });
+
+  var deleted = deleteAllRowsForPeriod(sheet, period);
+  var n = SHEET_COLUMNS.length;
+  var values = [];
+  for (var j = 0; j < validRows.length; j++) {
+    values.push(sheetRowArrayFromPayload(validRows[j]));
+  }
+
+  var startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, startRow + values.length - 1, n).setValues(values);
   sortDataSheetByPeriodAndOrder(sheet);
+
   return jsonOut({
     ok: true,
     period: period,
     deleted: deleted,
-    written: written,
+    inserted: values.length,
+    written: values.length,
     sorted: true
   });
 }

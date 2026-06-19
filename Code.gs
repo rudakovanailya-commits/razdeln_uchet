@@ -2,7 +2,8 @@
  * Google Apps Script для веб-приложения «Раздельный учёт».
  * Лист: первая строка — заголовки (см. SHEET_COLUMNS).
  *
- * doGet:  ?action=getRows  → JSON-массив объектов со всеми полями.
+ * doGet:  ?action=getRows       → JSON-массив объектов со всеми полями.
+ *         ?action=deletePeriod&period=YYYY-MM → { ok: true, deleted: N }
  * doPost: тело JSON { "action": "upsert", "rows": [ {...}, ... ] }
  *         upsert по паре period + order (обновление строки или append).
  */
@@ -88,12 +89,48 @@ function normalizePeriodCell(p) {
   return s;
 }
 
+function deletePeriodRows(sheet, periodParam) {
+  ensureHeaders(sheet);
+  var period = normalizePeriodCell(periodParam);
+  if (!period) {
+    return jsonOut({ ok: false, error: 'missing period', deleted: 0 });
+  }
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) {
+    return jsonOut({ ok: true, deleted: 0 });
+  }
+  var idx = headerIndex(sheet);
+  var pCol = idx['period'];
+  if (pCol === undefined) {
+    return jsonOut({ ok: false, error: 'missing period column', deleted: 0 });
+  }
+  var toDelete = [];
+  for (var r = 1; r < data.length; r++) {
+    if (normalizePeriodCell(data[r][pCol]) === period) {
+      toDelete.push(r + 1);
+    }
+  }
+  if (!toDelete.length) {
+    return jsonOut({ ok: true, deleted: 0 });
+  }
+  toDelete.sort(function(a, b) {
+    return b - a;
+  });
+  for (var i = 0; i < toDelete.length; i++) {
+    sheet.deleteRow(toDelete[i]);
+  }
+  return jsonOut({ ok: true, deleted: toDelete.length });
+}
+
 function doGet(e) {
   e = e || { parameter: {} };
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (e.parameter.action === 'deletePeriod') {
+    return deletePeriodRows(sheet, e.parameter.period);
+  }
   if (e.parameter.action !== 'getRows') {
     return jsonOut({ ok: true });
   }
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   ensureHeaders(sheet);
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) {

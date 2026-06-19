@@ -942,10 +942,11 @@
         <button id="deletePeriodBtn" type="button">Удалить локальный период</button>
         <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
         <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
+        <button id="deleteCloudPeriodBtn" type="button" class="secondary">Удалить из Google Sheets</button>
       </div>
 
       <div class="hint" style="margin-top: 8px;">
-        Локальное сохранение хранится в браузере. Google Sheets — облачная копия. Удаление локального периода не удаляет строки из Google Sheets.
+        Сохранённые периоды — локальные копии в браузере. Google Sheets хранится отдельно. Удаление локального периода не удаляет данные из Google Sheets.
       </div>
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
@@ -2810,7 +2811,7 @@
         inp.disabled = locked;
       });
 
-      ['addRowBtn', 'clearBtn', 'import1cBtn', 'saveBtn', 'saveCloudBtn', 'deletePeriodBtn'].forEach(id => {
+      ['addRowBtn', 'clearBtn', 'import1cBtn', 'saveBtn', 'saveCloudBtn', 'deletePeriodBtn', 'deleteCloudPeriodBtn'].forEach(id => {
         setButtonDisabled(id, locked);
       });
 
@@ -3338,6 +3339,117 @@
 
     function getCloudPeriodReportFetchUrl() {
       return CLOUD_DATA_URL;
+    }
+
+    function getCloudApiUrl(action, params) {
+      const base = CLOUD_DATA_URL;
+      const sep = base.indexOf('?') >= 0 ? '&' : '?';
+      let url = base + sep + 'action=' + encodeURIComponent(action);
+      if (params) {
+        Object.keys(params).forEach(key => {
+          url +=
+            '&' +
+            encodeURIComponent(key) +
+            '=' +
+            encodeURIComponent(params[key] != null ? params[key] : '');
+        });
+      }
+      return url;
+    }
+
+    async function refreshAllDataFromCloud() {
+      try {
+        const res = await fetch(getCloudApiUrl('getRows'), { method: 'GET' });
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status);
+        }
+        const raw = await res.json();
+        const arr = Array.isArray(raw) ? raw : (raw && (raw.rows || raw.data)) || [];
+        allData = arr.map(row => {
+          const r = normalizeSheetRecord(row);
+          const periodNorm = r.period != null ? normalizePeriodFromSheet(r.period) : '';
+          return Object.assign({}, r, { period: periodNorm });
+        });
+        const cloudHint = document.getElementById('cloudDataStatus');
+        if (cloudHint) {
+          cloudHint.textContent = allData.length
+            ? 'Загружено строк: ' + allData.length
+            : 'Нет данных';
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function deletePeriodFromCloud() {
+      const period = getCurrentPeriod();
+      if (!period) {
+        alert('Укажите период для удаления из Google Sheets.');
+        return;
+      }
+
+      if (isPeriodFinal()) {
+        alert(
+          'Закрытый период нельзя удалить из Google Sheets. Сначала верните период в работу.'
+        );
+        return;
+      }
+
+      const ok = confirm(
+        'Удалить период ' +
+          period +
+          ' из Google Sheets? Локальная копия в браузере не будет удалена.'
+      );
+      if (!ok) return;
+
+      const statusEl = document.getElementById('periodActionStatus');
+      if (statusEl) statusEl.textContent = 'Удаление из Google Sheets…';
+
+      try {
+        const url = getCloudApiUrl('deletePeriod', { period });
+        const res = await fetch(url, { method: 'GET' });
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status);
+        }
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          throw new Error('Ответ не JSON');
+        }
+        if (!data || data.ok !== true) {
+          throw new Error((data && data.error) || 'Ошибка удаления');
+        }
+
+        const deleted = data.deleted != null ? Number(data.deleted) : 0;
+        const pn = normalizePeriodStr(period);
+
+        allData = (allData || []).filter(
+          r => normalizePeriodFromSheet(r.period) !== pn
+        );
+        await refreshAllDataFromCloud();
+
+        const hasLocal = !!localStorage.getItem(getStorageKey(period));
+        if (normalizePeriodStr(getCurrentPeriod()) === pn && !hasLocal) {
+          ordersBody.innerHTML = '';
+          createRow();
+          calculateAll();
+          applyPeriodEditMode();
+        }
+        populateOrderSelect();
+
+        if (statusEl) {
+          statusEl.textContent = 'Из Google Sheets удалено строк: ' + deleted;
+        }
+        alert('Из Google Sheets удалено строк: ' + deleted);
+      } catch (err) {
+        if (statusEl) statusEl.textContent = '';
+        alert(
+          'Не удалось удалить из Google Sheets: ' +
+            (err && err.message ? err.message : String(err))
+        );
+      }
     }
 
     async function loadData() {
@@ -4118,6 +4230,17 @@
           inp.blur();
         }
         requestAnimationFrame(() => loadPeriodFromCloud());
+      });
+    }
+
+    const deleteCloudPeriodBtn = document.getElementById('deleteCloudPeriodBtn');
+    if (deleteCloudPeriodBtn) {
+      deleteCloudPeriodBtn.addEventListener('click', () => {
+        const inp = getElementByIdDeep('periodInput');
+        if (inp && document.activeElement === inp) {
+          inp.blur();
+        }
+        requestAnimationFrame(() => deletePeriodFromCloud());
       });
     }
 

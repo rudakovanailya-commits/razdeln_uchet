@@ -994,9 +994,26 @@
     }
 
     #applyWipChainBtn.wip-chain-action-needed {
-      box-shadow: 0 0 0 2px #d97706;
-      background: #fffbeb;
-      border-color: #d97706;
+      background: #d97706;
+      color: #ffffff;
+      border: 2px solid #b45309;
+      box-shadow: 0 2px 6px rgba(180, 83, 9, 0.35);
+      font-weight: 600;
+    }
+
+    #applyWipChainBtn.wip-chain-action-needed:hover {
+      background: #b45309;
+      color: #ffffff;
+    }
+
+    #applyWipChainBtn:disabled {
+      background: #e5e7eb;
+      color: #9ca3af;
+      border: 1px solid #d1d5db;
+      box-shadow: none;
+      cursor: not-allowed;
+      font-weight: normal;
+      opacity: 1;
     }
 
     .period-status-display {

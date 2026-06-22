@@ -489,6 +489,74 @@
       color: #b91c1c;
     }
 
+    /* --- Ширины: вкладка «Списание 20 сч.» --- */
+    #ordersTable[data-active-tab="writeoff20"] {
+      min-width: 1180px;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] thead th {
+      font-size: 13px;
+      line-height: 1.25;
+      white-space: normal;
+      vertical-align: bottom;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-wip-start,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-period-exp,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-total-wip,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-writeoff,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-wip-end,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-profit {
+      min-width: 108px;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-profit-pct,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-manual-writeoff {
+      min-width: 96px;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-margin {
+      min-width: 84px;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-control {
+      min-width: 148px;
+      max-width: 200px;
+      white-space: normal;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] td input.w20-profit-percent,
+    #ordersTable[data-active-tab="writeoff20"] td input.w20-manual-writeoff {
+      width: 100%;
+      min-width: 72px;
+    }
+
+    #ordersTable td.w20-control.w20-status-ok {
+      color: #166534;
+      font-weight: 600;
+    }
+
+    #ordersTable td.w20-control.w20-status-warn {
+      color: #b45309;
+      font-weight: 600;
+    }
+
+    #ordersTable td.w20-control.w20-status-error {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+
+    #ordersTable tr.row-w20-writeoff-over td.w20-writeoff,
+    #ordersTable tr.row-w20-negative-wip td.w20-wip-end {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+
+    #ordersTable.orders-block-table tbody tr.row-w20-writeoff-over:hover td,
+    #ordersTable.orders-block-table tbody tr.row-w20-negative-wip:hover td {
+      background: #fecaca;
+    }
+
 
     /* Общие ширины закреплённых и служебных колонок */
     #ordersTable thead th.orders-col-order,
@@ -626,6 +694,11 @@
 
     #ordersTable[data-active-tab="reconcile"]
       :is(th, td):not(.tab-v-reconcile):not(.tab-v-common) {
+      display: none;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"]
+      :is(th, td):not(.tab-v-writeoff20):not(.tab-v-common) {
       display: none;
     }
 
@@ -1149,6 +1222,9 @@
         <button type="button" class="orders-tab-btn active" data-orders-tab="expenses" role="tab" aria-selected="true">
           Расходы по заказам
         </button>
+        <button type="button" class="orders-tab-btn" data-orders-tab="writeoff20" role="tab" aria-selected="false">
+          Списание 20 сч.
+        </button>
         <button type="button" class="orders-tab-btn" data-orders-tab="economist" role="tab" aria-selected="false">
           План списания и НЗП
         </button>
@@ -1169,9 +1245,19 @@
         <table id="ordersTable" class="orders-block-table" data-active-tab="expenses">
           <thead>
             <tr>
-              <th class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Заказ</th>
+              <th class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Заказ</th>
               <th class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка с НДС</th>
-              <th class="orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка без НДС</th>
+              <th class="orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Отгрузка без НДС</th>
+              <th class="orders-col-w col-w20-wip-start tab-v-writeoff20">НЗП нач. 20</th>
+              <th class="orders-col-w col-w20-period-exp tab-v-writeoff20">Расходы за период 20</th>
+              <th class="orders-col-w col-w20-total-wip tab-v-writeoff20">Всего с НЗП</th>
+              <th class="orders-col-w col-w20-profit-pct tab-v-writeoff20" title="Доля списания от «Всего с НЗП»">% списания</th>
+              <th class="orders-col-w col-w20-manual-writeoff tab-v-writeoff20">Ручное списание</th>
+              <th class="orders-col-w col-w20-writeoff tab-v-writeoff20">Списание 20</th>
+              <th class="orders-col-w col-w20-wip-end tab-v-writeoff20">НЗП конец 20</th>
+              <th class="orders-col-w col-w20-profit tab-v-writeoff20">Прибыль</th>
+              <th class="orders-col-w col-w20-margin tab-v-writeoff20">Маржа %</th>
+              <th class="orders-col-w col-w20-control tab-v-writeoff20">Контроль</th>
               <th class="orders-col-w col-pct-shipment tab-v-expenses">% отгрузки</th>
               <th class="orders-col-w col-wip-start tab-v-expenses">НЗП нач.</th>
               <th class="orders-col-w col-materials tab-v-expenses">Материалы</th>
@@ -1192,7 +1278,7 @@
               <th class="orders-col-w col-reconcile-status-1c tab-v-reconcile">Контроль</th>
               <th class="orders-col-w col-writeoff-share tab-v-internal" title="writeOffWith26 / totalCostWith26">% спис.</th>
               <th class="orders-col-w col-period-cost tab-v-internal">Затраты периода</th>
-              <th class="orders-col-w col-profit-pct tab-v-economist">% списания</th>
+              <th class="orders-col-w col-profit-pct tab-v-economist" title="Процент списания от отгрузки без НДС">% списания</th>
               <th class="orders-col-w col-manual-writeoff tab-v-economist">Ручное списание</th>
               <th class="orders-col-w col-writeoff tab-v-economist">Списание с 26</th>
               <th class="orders-col-w col-writeoff-26 tab-v-internal">26 спис. расч.</th>
@@ -1212,9 +1298,19 @@
           <tbody id="ordersBody"></tbody>
           <tfoot>
             <tr>
-              <td class="readonly orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Итого</td>
+              <td class="readonly orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Итого</td>
               <td class="readonly orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"></td>
-              <td class="readonly orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootShipmentNoVat">0.00</td>
+              <td class="readonly orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20" id="ordersFootShipmentNoVat">0.00</td>
+              <td class="readonly orders-col-w col-w20-wip-start tab-v-writeoff20" id="ordersFootW20WipStart">0.00</td>
+              <td class="readonly orders-col-w col-w20-period-exp tab-v-writeoff20" id="ordersFootW20PeriodExp">0.00</td>
+              <td class="readonly orders-col-w col-w20-total-wip tab-v-writeoff20" id="ordersFootW20TotalWip">0.00</td>
+              <td class="readonly orders-col-w col-w20-profit-pct tab-v-writeoff20"></td>
+              <td class="readonly orders-col-w col-w20-manual-writeoff tab-v-writeoff20"></td>
+              <td class="readonly orders-col-w col-w20-writeoff tab-v-writeoff20" id="ordersFootW20Writeoff">0.00</td>
+              <td class="readonly orders-col-w col-w20-wip-end tab-v-writeoff20" id="ordersFootW20WipEnd">0.00</td>
+              <td class="readonly orders-col-w col-w20-profit tab-v-writeoff20" id="ordersFootW20Profit">0.00</td>
+              <td class="readonly orders-col-w col-w20-margin tab-v-writeoff20" id="ordersFootW20Margin"></td>
+              <td class="readonly orders-col-w col-w20-control tab-v-writeoff20"></td>
               <td class="readonly orders-col-w col-pct-shipment tab-v-expenses"></td>
               <td class="readonly orders-col-w col-wip-start tab-v-expenses" id="ordersFootWipStart">0.00</td>
               <td class="readonly orders-col-w col-materials tab-v-expenses" id="ordersFootMaterials">0.00</td>
@@ -1553,6 +1649,34 @@
       return t !== '' && t !== '.';
     }
 
+    function syncWriteoffPlanInputsInRow(row, sourceEl) {
+      if (!row) return;
+      const mainPct = row.querySelector('input.profit-percent');
+      const w20Pct = row.querySelector('input.w20-profit-percent');
+      const mainManual = row.querySelector('input.manual-writeoff');
+      const w20Manual = row.querySelector('input.w20-manual-writeoff');
+      if (sourceEl === w20Pct && mainPct) {
+        mainPct.value = w20Pct.value;
+      } else if (sourceEl === mainPct && w20Pct) {
+        w20Pct.value = mainPct.value;
+      } else if (sourceEl === w20Manual && mainManual) {
+        mainManual.value = w20Manual.value;
+      } else if (sourceEl === mainManual && w20Manual) {
+        w20Manual.value = mainManual.value;
+      } else if (!sourceEl) {
+        if (mainPct && w20Pct) w20Pct.value = mainPct.value;
+        if (mainManual && w20Manual) w20Manual.value = mainManual.value;
+      }
+    }
+
+    function getManualWriteoffInput(row) {
+      const mainManual = row.querySelector('input.manual-writeoff');
+      const w20Manual = row.querySelector('input.w20-manual-writeoff');
+      if (mainManual && manualWriteoffHasValue(mainManual)) return mainManual;
+      if (w20Manual && manualWriteoffHasValue(w20Manual)) return w20Manual;
+      return mainManual || w20Manual;
+    }
+
     function initGlobalNumDisplay(el) {
       const raw = el.value.replace(/\s/g, '').replace(',', '.');
       if (raw === '' || raw === '.') {
@@ -1851,7 +1975,9 @@
 
       function setOrdersTab(tabId) {
         const id =
-          tabId === 'economist' || tabId === 'reconcile' ? tabId : 'expenses';
+          tabId === 'economist' || tabId === 'reconcile' || tabId === 'writeoff20'
+            ? tabId
+            : 'expenses';
         table.setAttribute('data-active-tab', id);
         bar.querySelectorAll('[data-orders-tab]').forEach(btn => {
           const active = btn.getAttribute('data-orders-tab') === id;
@@ -1859,6 +1985,9 @@
           btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
         if (hint) hint.hidden = id !== 'reconcile';
+        if (id === 'writeoff20') {
+          getRows().forEach(row => syncWriteoffPlanInputsInRow(row));
+        }
         applyOrdersTabHeaderLabels(id);
         requestAnimationFrame(() => setupOrdersTableScrollSync());
       }
@@ -1894,6 +2023,14 @@
       }
       if (t.matches && t.matches('input.table-num')) {
         sanitizeTableNumInput(t);
+        if (
+          t.classList.contains('profit-percent') ||
+          t.classList.contains('w20-profit-percent') ||
+          t.classList.contains('manual-writeoff') ||
+          t.classList.contains('w20-manual-writeoff')
+        ) {
+          syncWriteoffPlanInputsInRow(t.closest('tr'), t);
+        }
         calculateAll();
         autoSave();
       }
@@ -1916,6 +2053,14 @@
       const t = e.target;
       if (t.matches && t.matches('input.table-num')) {
         onTableNumBlur(t);
+        if (
+          t.classList.contains('profit-percent') ||
+          t.classList.contains('w20-profit-percent') ||
+          t.classList.contains('manual-writeoff') ||
+          t.classList.contains('w20-manual-writeoff')
+        ) {
+          syncWriteoffPlanInputsInRow(t.closest('tr'), t);
+        }
         calculateAll();
         autoSave();
       }
@@ -1983,9 +2128,19 @@
       tr.className = 'order-item';
 
       tr.innerHTML = `
-        <td class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"><input class="text order-name" type="text" placeholder="Заказ"></td>
+        <td class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20"><input class="text order-name" type="text" placeholder="Заказ"></td>
         <td class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
-        <td class="readonly shipment-no-vat orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
+        <td class="readonly shipment-no-vat orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">0.00</td>
+        <td class="readonly w20-wip-start orders-col-w col-w20-wip-start tab-v-writeoff20">0.00</td>
+        <td class="readonly w20-period-exp orders-col-w col-w20-period-exp tab-v-writeoff20">0.00</td>
+        <td class="readonly w20-total-wip orders-col-w col-w20-total-wip tab-v-writeoff20">0.00</td>
+        <td class="orders-col-w col-w20-profit-pct tab-v-writeoff20"><input class="w20-profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-w col-w20-manual-writeoff tab-v-writeoff20"><input class="w20-manual-writeoff table-num" type="text" inputmode="decimal"></td>
+        <td class="readonly w20-writeoff orders-col-w col-w20-writeoff tab-v-writeoff20">0.00</td>
+        <td class="readonly w20-wip-end orders-col-w col-w20-wip-end tab-v-writeoff20">0.00</td>
+        <td class="readonly w20-profit orders-col-w col-w20-profit tab-v-writeoff20">0.00</td>
+        <td class="readonly w20-margin orders-col-w col-w20-margin tab-v-writeoff20">0.0%</td>
+        <td class="readonly w20-control orders-col-w col-w20-control tab-v-writeoff20">ОК</td>
         <td class="readonly shipment-percent orders-col-w col-pct-shipment tab-v-expenses">0.00%</td>
         <td class="orders-col-w col-wip-start tab-v-expenses"><input class="wip-start table-num" type="text" inputmode="decimal" value="0"></td>
         <td class="orders-col-w col-materials tab-v-expenses"><input class="materials table-num" type="text" inputmode="decimal" value="0"></td>
@@ -2032,6 +2187,7 @@
       if (data.salary) tr.querySelector('.salary').value = data.salary;
       if (data.profitPercent) tr.querySelector('.profit-percent').value = data.profitPercent;
       if ('manualWriteoff' in data) tr.querySelector('.manual-writeoff').value = data.manualWriteoff;
+      syncWriteoffPlanInputsInRow(tr);
 
       const orderInput = tr.querySelector('.order-name');
       syncOrderNameTitle(orderInput);
@@ -2500,7 +2656,13 @@
       const inputs = row.querySelectorAll('input.table-num');
       for (let i = 0; i < inputs.length; i++) {
         const el = inputs[i];
-        if (el.classList.contains('manual-writeoff') && !manualWriteoffHasValue(el)) continue;
+        if (
+          (el.classList.contains('manual-writeoff') ||
+            el.classList.contains('w20-manual-writeoff')) &&
+          !manualWriteoffHasValue(el)
+        ) {
+          continue;
+        }
         if (num(el.value) !== 0) return true;
       }
       return false;
@@ -2593,7 +2755,9 @@
         'row-validate-writeoff',
         'row-negative-margin',
         'row-negative-profit-with26',
-        'row-negative-wip-end'
+        'row-negative-wip-end',
+        'row-w20-writeoff-over',
+        'row-w20-negative-wip'
       );
       row.querySelectorAll('input, td').forEach(el => {
         el.classList.remove(
@@ -2673,6 +2837,72 @@
 
       if (statusEl) statusEl.textContent = status;
       if (commentEl) commentEl.textContent = comment;
+    }
+
+    function applyWriteoff20RowMetrics(
+      row,
+      wipStart,
+      periodExp20,
+      totalWithWip20,
+      writeOff20,
+      wipEnd20,
+      profit20,
+      margin20Pct
+    ) {
+      if (!row) return;
+
+      const set = (selector, text) => {
+        const el = row.querySelector(selector);
+        if (el) el.textContent = text;
+      };
+
+      set('.w20-wip-start', fmt(wipStart));
+      set('.w20-period-exp', fmt(periodExp20));
+      set('.w20-total-wip', fmt(totalWithWip20));
+      set('.w20-writeoff', fmt(writeOff20));
+      set('.w20-wip-end', fmt(wipEnd20));
+      set('.w20-profit', fmt(profit20));
+      set('.w20-margin', margin20Pct.toFixed(1) + '%');
+
+      const statusEl = row.querySelector('.w20-control');
+      const writeOffCell = row.querySelector('.w20-writeoff');
+      const wipEndCell = row.querySelector('.w20-wip-end');
+
+      if (writeOffCell) {
+        writeOffCell.classList.remove('cell-validate-negative');
+        writeOffCell.removeAttribute('title');
+      }
+      if (wipEndCell) {
+        wipEndCell.classList.remove('cell-validate-negative');
+        wipEndCell.removeAttribute('title');
+      }
+      if (statusEl) {
+        statusEl.classList.remove('w20-status-ok', 'w20-status-warn', 'w20-status-error');
+        statusEl.removeAttribute('title');
+      }
+
+      let status = 'ОК';
+      if (writeOff20 > totalWithWip20 + RECONCILE_EPS) {
+        status = 'Списание больше затрат';
+        row.classList.add('row-w20-writeoff-over');
+        if (writeOffCell) {
+          writeOffCell.classList.add('cell-validate-negative');
+          writeOffCell.title = status;
+        }
+        if (statusEl) statusEl.classList.add('w20-status-error');
+      } else if (wipEnd20 < -RECONCILE_EPS) {
+        status = 'Отрицательное НЗП';
+        row.classList.add('row-w20-negative-wip');
+        if (wipEndCell) {
+          wipEndCell.classList.add('cell-validate-negative');
+          wipEndCell.title = status;
+        }
+        if (statusEl) statusEl.classList.add('w20-status-error');
+      } else if (statusEl) {
+        statusEl.classList.add('w20-status-ok');
+      }
+
+      if (statusEl) statusEl.textContent = status;
     }
 
     function checkData() {
@@ -2769,6 +2999,12 @@
       let sumFootWipEnd = 0;
       let sumFootProfit = 0;
       let sumFootProfitWith26 = 0;
+      let sumFootW20WipStart = 0;
+      let sumFootW20PeriodExp = 0;
+      let sumFootW20TotalWip = 0;
+      let sumFootW20Writeoff = 0;
+      let sumFootW20WipEnd = 0;
+      let sumFootW20Profit = 0;
 
       // 2. Расчёты по строкам
       rows.forEach(row => {
@@ -2779,7 +3015,9 @@
         const processing = num(row.querySelector('.processing').value);
         const otherDirect = num(row.querySelector('.other-direct').value);
         const salary = num(row.querySelector('.salary').value);
-        const profitPercent = num(row.querySelector('.profit-percent').value);
+        const profitPercentEl =
+          row.querySelector('.profit-percent') || row.querySelector('.w20-profit-percent');
+        const profitPercent = num(profitPercentEl && profitPercentEl.value);
 
         const shipmentShare = totalShipmentNoVat ? shipmentNoVat / totalShipmentNoVat : 0;
         const salaryShare = totalSalary ? salary / totalSalary : 0;
@@ -2840,6 +3078,22 @@
         const profitWith26 = profitRub - acc26;
         const marginWith26Pct = shipmentNoVat > 0 ? (profitWith26 / shipmentNoVat) * 100 : 0;
 
+        const periodExp20 =
+          materials + processing + otherDirect + salary + insurance + sick + acc25 + acc44;
+        const totalWithWip20 = wipStart + periodExp20;
+
+        const manualInputW20 = getManualWriteoffInput(row);
+        let writeOff20Raw;
+        if (manualInputW20 && manualWriteoffHasValue(manualInputW20)) {
+          writeOff20Raw = num(manualInputW20.value);
+        } else {
+          writeOff20Raw = totalWithWip20 * (profitPercent / 100);
+        }
+        const writeOff20 = writeOff20Raw;
+        const wipEnd20 = totalWithWip20 - writeOff20;
+        const profit20 = shipmentNoVat - writeOff20;
+        const margin20Pct = shipmentNoVat > 0 ? (profit20 / shipmentNoVat) * 100 : 0;
+
         row.querySelector('.shipment-percent').textContent = (shipmentShare * 100).toFixed(2) + '%';
         row.querySelector('.salary-share').textContent = (salaryShare * 100).toFixed(2) + '%';
         row.querySelector('.insurance').textContent = fmt(insurance);
@@ -2858,6 +3112,17 @@
 
         applyReconcileRowMetrics(row, totalCost, acc26, writeOff, wipEnd);
 
+        applyWriteoff20RowMetrics(
+          row,
+          wipStart,
+          periodExp20,
+          totalWithWip20,
+          writeOff20,
+          wipEnd20,
+          profit20,
+          margin20Pct
+        );
+
         if (marginPct < 0) {
           row.classList.add('row-negative-margin');
         }
@@ -2865,7 +3130,13 @@
         const rowHasOtherSums = totalCost > 0 || shipmentNoVat > 0;
 
         row.querySelectorAll('input.table-num').forEach(el => {
-          if (el.classList.contains('manual-writeoff') && !manualWriteoffHasValue(el)) return;
+          if (
+            (el.classList.contains('manual-writeoff') ||
+              el.classList.contains('w20-manual-writeoff')) &&
+            !manualWriteoffHasValue(el)
+          ) {
+            return;
+          }
           const v = num(el.value);
           if (v > VALIDATE_HI) el.classList.add('cell-validate-hi-input');
           if (v === 0 && rowHasOtherSums) el.classList.add('cell-validate-zero');
@@ -2903,6 +3174,12 @@
         sumFootWipEnd += wipEnd;
         sumFootProfit += profitRub;
         sumFootProfitWith26 += profitWith26;
+        sumFootW20WipStart += wipStart;
+        sumFootW20PeriodExp += periodExp20;
+        sumFootW20TotalWip += totalWithWip20;
+        sumFootW20Writeoff += writeOff20;
+        sumFootW20WipEnd += wipEnd20;
+        sumFootW20Profit += profit20;
 
         totalWrittenOff += writeOff;
         totalEndingWIP += wipEnd;
@@ -2938,6 +3215,16 @@
       setFoot('ordersFootWipEnd', sumFootWipEnd);
       setFoot('ordersFootProfit', sumFootProfit);
       setFoot('ordersFootProfitWith26', sumFootProfitWith26);
+      setFoot('ordersFootW20WipStart', sumFootW20WipStart);
+      setFoot('ordersFootW20PeriodExp', sumFootW20PeriodExp);
+      setFoot('ordersFootW20TotalWip', sumFootW20TotalWip);
+      setFoot('ordersFootW20Writeoff', sumFootW20Writeoff);
+      setFoot('ordersFootW20WipEnd', sumFootW20WipEnd);
+      setFoot('ordersFootW20Profit', sumFootW20Profit);
+      setFootPct(
+        'ordersFootW20Margin',
+        totalShipmentNoVat > 0 ? (sumFootW20Profit / totalShipmentNoVat) * 100 : 0
+      );
       setFootPct(
         'ordersFootMargin',
         totalShipmentNoVat > 0 ? (sumFootProfit / totalShipmentNoVat) * 100 : 0

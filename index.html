@@ -526,7 +526,8 @@
     }
 
     #ordersTable[data-active-tab="writeoff20"] td input.w20-profit-percent,
-    #ordersTable[data-active-tab="writeoff20"] td input.w20-manual-writeoff {
+    #ordersTable[data-active-tab="writeoff20"] td input.w20-manual-writeoff,
+    #ordersTable[data-active-tab="writeoff20"] td input.shipment-vat {
       width: 100%;
       min-width: 72px;
     }
@@ -1246,7 +1247,7 @@
           <thead>
             <tr>
               <th class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Заказ</th>
-              <th class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile">Отгрузка с НДС</th>
+              <th class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Отгрузка с НДС</th>
               <th class="orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Отгрузка без НДС</th>
               <th class="orders-col-w col-w20-wip-start tab-v-writeoff20">НЗП нач. 20</th>
               <th class="orders-col-w col-w20-period-exp tab-v-writeoff20">Расходы за период 20</th>
@@ -1299,7 +1300,7 @@
           <tfoot>
             <tr>
               <td class="readonly orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">Итого</td>
-              <td class="readonly orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"></td>
+              <td class="readonly orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20" id="ordersFootShipmentVat">0.00</td>
               <td class="readonly orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20" id="ordersFootShipmentNoVat">0.00</td>
               <td class="readonly orders-col-w col-w20-wip-start tab-v-writeoff20" id="ordersFootW20WipStart">0.00</td>
               <td class="readonly orders-col-w col-w20-period-exp tab-v-writeoff20" id="ordersFootW20PeriodExp">0.00</td>
@@ -2129,7 +2130,7 @@
 
       tr.innerHTML = `
         <td class="orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20"><input class="text order-name" type="text" placeholder="Заказ"></td>
-        <td class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
+        <td class="orders-col-shipment-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20"><input class="shipment-vat table-num" type="text" inputmode="decimal" value="0"></td>
         <td class="readonly shipment-no-vat orders-col-shipment-no-vat orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20">0.00</td>
         <td class="readonly w20-wip-start orders-col-w col-w20-wip-start tab-v-writeoff20">0.00</td>
         <td class="readonly w20-period-exp orders-col-w col-w20-period-exp tab-v-writeoff20">0.00</td>
@@ -2961,6 +2962,7 @@
       rows.forEach(clearOrderRowValidation);
 
       let totalShipmentNoVat = 0;
+      let totalShipmentVat = 0;
       let totalSalary = 0;
 
       // 1. Считаем общую отгрузку без НДС и общую ЗП
@@ -2972,6 +2974,7 @@
         row.querySelector('.shipment-no-vat').textContent = fmt(shipmentNoVat);
 
         totalShipmentNoVat += shipmentNoVat;
+        totalShipmentVat += shipmentVat;
         totalSalary += salary;
       });
 
@@ -3194,6 +3197,7 @@
         if (el) el.textContent = pct.toFixed(1) + '%';
       };
 
+      setFoot('ordersFootShipmentVat', totalShipmentVat);
       setFoot('ordersFootShipmentNoVat', totalShipmentNoVat);
       setFoot('ordersFootWipStart', sumFootWipStart);
       setFoot('ordersFootMaterials', sumFootMaterials);

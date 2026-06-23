@@ -1894,17 +1894,46 @@
       return String(tr.querySelector('.order-name')?.value ?? '').trim();
     }
 
-    function normalizeGroupingEntry(entry, defaultOrderName) {
+    function resolveGroupingSettings(orderName) {
+      const entry = orderGrouping && typeof orderGrouping === 'object' ? orderGrouping[orderName] : undefined;
+      if (!entry || typeof entry !== 'object') {
+        return {
+          groupName: orderName,
+          enabled: true,
+          note: ''
+        };
+      }
+      const groupNameRaw = entry.groupName != null ? String(entry.groupName).trim() : '';
       return {
-        groupName: String(entry?.groupName ?? defaultOrderName).trim() || defaultOrderName,
-        enabled: entry?.enabled !== false,
-        note: String(entry?.note ?? '')
+        groupName: groupNameRaw || orderName,
+        enabled: entry.enabled === false ? false : true,
+        note: entry.note != null ? String(entry.note) : ''
       };
+    }
+
+    function getOrderGroupsForCalculations() {
+      const map = new Map();
+      getRows().forEach(row => {
+        const orderName = getOrderNameFromRow(row);
+        if (!orderName) return;
+
+        const settings = resolveGroupingSettings(orderName);
+        if (settings.enabled === false) return;
+
+        const groupName = settings.groupName || orderName;
+        if (!map.has(groupName)) {
+          map.set(groupName, { groupName, orderNames: [], rows: [] });
+        }
+        const grp = map.get(groupName);
+        grp.orderNames.push(orderName);
+        grp.rows.push(row);
+      });
+      return Array.from(map.values());
     }
 
     function getGroupingForOrder(orderName) {
       if (!orderName) return { groupName: '', enabled: false, note: '' };
-      return normalizeGroupingEntry(orderGrouping[orderName], orderName);
+      return resolveGroupingSettings(orderName);
     }
 
     function ensureGroupingForAllRows() {
@@ -1985,21 +2014,7 @@
 
     function buildCalculationGroups() {
       ensureGroupingForAllRows();
-      const map = new Map();
-      getRows().forEach(row => {
-        const orderName = getOrderNameFromRow(row);
-        if (!orderName) return;
-        const g = getGroupingForOrder(orderName);
-        if (!g.enabled) return;
-        const gn = g.groupName || orderName;
-        if (!map.has(gn)) {
-          map.set(gn, { groupName: gn, orderNames: [], rows: [] });
-        }
-        const grp = map.get(gn);
-        grp.orderNames.push(orderName);
-        grp.rows.push(row);
-      });
-      return Array.from(map.values());
+      return getOrderGroupsForCalculations();
     }
 
     function sumGroupMetrics(memberRows) {
@@ -2132,6 +2147,7 @@
         profitPercent: calc.profitPercent,
         manualWriteoff: calc.manualWriteoff
       });
+      if (!tr) return null;
       tr.classList.remove('order-item');
       tr.classList.add('order-group-item');
       tr.setAttribute('data-group-name', group.groupName);
@@ -2235,6 +2251,8 @@
       }
 
       const groups = buildCalculationGroups();
+      console.log('groups for calculations', groups);
+      console.log('grouping settings', orderGrouping);
       const groupBody = document.getElementById('ordersGroupBody');
       if (groupBody) groupBody.innerHTML = '';
 
@@ -2263,7 +2281,8 @@
         const calc = getGroupCalcSettings(group.groupName, group.rows);
         const metrics = computeGroupWriteoffMetrics(sums, calc);
         if (groupBody) {
-          groupBody.appendChild(createGroupCalculationRow(group, sums, calc, metrics));
+          const groupRow = createGroupCalculationRow(group, sums, calc, metrics);
+          if (groupRow) groupBody.appendChild(groupRow);
         }
         foot.shipmentVat += sums.shipmentVat;
         foot.shipmentNoVat += sums.shipmentNoVat;
@@ -2972,6 +2991,7 @@
 
       ordersBody.appendChild(tr);
       setupOrdersTableScrollSync();
+      return tr;
     }
 
     function is1cCsvHeaderRow(parts) {

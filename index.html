@@ -1329,7 +1329,7 @@
               <th class="orders-col-w col-w20-wip-start tab-v-writeoff20">НЗП нач. 20</th>
               <th class="orders-col-w col-w20-period-exp tab-v-writeoff20">Расходы за период 20</th>
               <th class="orders-col-w col-w20-total-wip tab-v-writeoff20">Всего с НЗП</th>
-              <th class="orders-col-w col-w20-profit-pct tab-v-writeoff20" title="Доля списания от «Всего с НЗП»">% списания</th>
+              <th class="orders-col-w col-w20-profit-pct tab-v-writeoff20" title="Процент списания от отгрузки без НДС">% списания</th>
               <th class="orders-col-w col-w20-manual-writeoff tab-v-writeoff20">Ручное списание</th>
               <th class="orders-col-w col-w20-writeoff tab-v-writeoff20">Списание 20</th>
               <th class="orders-col-w col-w20-wip-end tab-v-writeoff20">НЗП конец 20</th>
@@ -3331,7 +3331,7 @@
         if (manualInputW20 && manualWriteoffHasValue(manualInputW20)) {
           writeOff20Raw = num(manualInputW20.value);
         } else {
-          writeOff20Raw = totalWithWip20 * (profitPercent / 100);
+          writeOff20Raw = shipmentNoVat * (profitPercent / 100);
         }
         const writeOff20 = writeOff20Raw;
         const wipEnd20 = totalWithWip20 - writeOff20;
@@ -3348,7 +3348,7 @@
         if (manualInputW26 && manualWriteoffHasValue(manualInputW26)) {
           writeOffTotalRaw = num(manualInputW26.value);
         } else {
-          writeOffTotalRaw = totalWithWip26 * (profitPercent / 100);
+          writeOffTotalRaw = shipmentNoVat * (profitPercent / 100);
         }
         const writeOffTotal = writeOffTotalRaw;
         const writeOff26Part = Math.min(acc26Period, writeOffTotal);

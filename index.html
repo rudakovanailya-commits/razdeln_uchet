@@ -777,6 +777,58 @@
       display: none;
     }
 
+    #ordersTable[data-active-tab="writeoff20"] tbody#ordersBody tr.order-item,
+    #ordersTable[data-active-tab="writeoff26"] tbody#ordersBody tr.order-item {
+      display: none;
+    }
+
+    #ordersTable tbody#ordersGroupBody {
+      display: none;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tbody#ordersGroupBody,
+    #ordersTable[data-active-tab="writeoff26"] tbody#ordersGroupBody {
+      display: table-row-group;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tfoot tr,
+    #ordersTable[data-active-tab="writeoff26"] tfoot tr {
+      display: table-row;
+    }
+
+    .group-calc-order-name {
+      display: block;
+      font-weight: 600;
+    }
+
+    .group-calc-order-hint {
+      display: block;
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .grouping-panel-toolbar {
+      margin: 12px 0 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    #groupingTable th,
+    #groupingTable td {
+      padding: 8px 10px;
+      vertical-align: middle;
+    }
+
+    #groupingTable input.grouping-group-name,
+    #groupingTable input.grouping-note {
+      width: 100%;
+      min-width: 140px;
+      box-sizing: border-box;
+    }
+
     #ordersTable :is(th, td).tab-v-internal {
       display: none !important;
     }
@@ -1303,6 +1355,9 @@
         <button type="button" class="orders-tab-btn" data-orders-tab="writeoff26" role="tab" aria-selected="false">
           Списание с 26
         </button>
+        <button type="button" class="orders-tab-btn" data-orders-tab="grouping" role="tab" aria-selected="false">
+          Группировка заказов
+        </button>
         <button type="button" class="orders-tab-btn" data-orders-tab="economist" role="tab" aria-selected="false">
           План списания и НЗП
         </button>
@@ -1315,7 +1370,7 @@
         Если «Списание с 20 сч.» получилось минусом, значит общее списание меньше 26 счёта — проверьте расчёт.
       </div>
 
-      <div class="orders-table-scroll-outer">
+      <div class="orders-table-scroll-outer" id="ordersTableScrollOuter">
         <div class="orders-table-scroll-top" id="ordersTableScrollTop" aria-hidden="true">
           <div class="orders-table-scroll-top-inner" id="ordersTableScrollTopInner"></div>
         </div>
@@ -1387,6 +1442,7 @@
             </tr>
           </thead>
           <tbody id="ordersBody"></tbody>
+          <tbody id="ordersGroupBody"></tbody>
           <tfoot>
             <tr>
               <td class="readonly orders-col-order orders-col-w tab-v-expenses tab-v-economist tab-v-reconcile tab-v-writeoff20 tab-v-writeoff26">Итого</td>
@@ -1453,6 +1509,29 @@
             </tr>
           </tfoot>
         </table>
+        </div>
+      </div>
+
+      <div id="ordersGroupingPanel" hidden>
+        <div class="grouping-panel-toolbar">
+          <button type="button" id="saveGroupingBtn" class="secondary">Сохранить группировку</button>
+          <span class="hint" id="groupingSaveStatus"></span>
+        </div>
+        <div class="hint" style="margin-bottom: 8px;">
+          Объедините бухгалтерские строки в один расчётный заказ для вкладок «Списание 20 сч.» и «Списание с 26». Исходные строки на первой вкладке не меняются.
+        </div>
+        <div class="table-wrap">
+          <table id="groupingTable" class="orders-block-table grouping-table">
+            <thead>
+              <tr>
+                <th>Бухгалтерский заказ</th>
+                <th>Показывать в расчётах как</th>
+                <th>Включать</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody id="groupingTableBody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -1806,6 +1885,455 @@
       return inputs[0] || null;
     }
 
+    let orderGrouping = {};
+    let groupCalc = {};
+    let lastAllRowsFootTotals = null;
+    let lastGroupFootTotals = null;
+
+    function getOrderNameFromRow(tr) {
+      return String(tr.querySelector('.order-name')?.value ?? '').trim();
+    }
+
+    function normalizeGroupingEntry(entry, defaultOrderName) {
+      return {
+        groupName: String(entry?.groupName ?? defaultOrderName).trim() || defaultOrderName,
+        enabled: entry?.enabled !== false,
+        note: String(entry?.note ?? '')
+      };
+    }
+
+    function getGroupingForOrder(orderName) {
+      if (!orderName) return { groupName: '', enabled: false, note: '' };
+      return normalizeGroupingEntry(orderGrouping[orderName], orderName);
+    }
+
+    function ensureGroupingForAllRows() {
+      getRows().forEach(row => {
+        const orderName = getOrderNameFromRow(row);
+        if (!orderName) return;
+        if (!orderGrouping[orderName]) {
+          orderGrouping[orderName] = { groupName: orderName, enabled: true, note: '' };
+        }
+      });
+    }
+
+    function collectGroupingFromPanel() {
+      const body = document.getElementById('groupingTableBody');
+      if (!body) return;
+      body.querySelectorAll('tr[data-order-name]').forEach(tr => {
+        const orderName = tr.getAttribute('data-order-name');
+        if (!orderName) return;
+        const groupNameEl = tr.querySelector('.grouping-group-name');
+        const enabledEl = tr.querySelector('.grouping-enabled');
+        const noteEl = tr.querySelector('.grouping-note');
+        orderGrouping[orderName] = {
+          groupName: String(groupNameEl?.value ?? orderName).trim() || orderName,
+          enabled: enabledEl ? enabledEl.checked : true,
+          note: String(noteEl?.value ?? '')
+        };
+      });
+    }
+
+    function renderGroupingPanel() {
+      ensureGroupingForAllRows();
+      const body = document.getElementById('groupingTableBody');
+      if (!body) return;
+      const seen = new Set();
+      body.innerHTML = '';
+      getRows().forEach(row => {
+        const orderName = getOrderNameFromRow(row);
+        if (!orderName || seen.has(orderName)) return;
+        seen.add(orderName);
+        const g = getGroupingForOrder(orderName);
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-order-name', orderName);
+
+        const tdOrder = document.createElement('td');
+        tdOrder.className = 'grouping-order-name';
+        tdOrder.textContent = orderName;
+        tdOrder.title = orderName;
+
+        const tdGroup = document.createElement('td');
+        const groupInput = document.createElement('input');
+        groupInput.type = 'text';
+        groupInput.className = 'grouping-group-name';
+        groupInput.value = g.groupName;
+        tdGroup.appendChild(groupInput);
+
+        const tdEnabled = document.createElement('td');
+        tdEnabled.style.textAlign = 'center';
+        const enabledInput = document.createElement('input');
+        enabledInput.type = 'checkbox';
+        enabledInput.className = 'grouping-enabled';
+        enabledInput.checked = g.enabled;
+        tdEnabled.appendChild(enabledInput);
+
+        const tdNote = document.createElement('td');
+        const noteInput = document.createElement('input');
+        noteInput.type = 'text';
+        noteInput.className = 'grouping-note';
+        noteInput.value = g.note;
+        tdNote.appendChild(noteInput);
+
+        tr.appendChild(tdOrder);
+        tr.appendChild(tdGroup);
+        tr.appendChild(tdEnabled);
+        tr.appendChild(tdNote);
+        body.appendChild(tr);
+      });
+    }
+
+    function buildCalculationGroups() {
+      ensureGroupingForAllRows();
+      const map = new Map();
+      getRows().forEach(row => {
+        const orderName = getOrderNameFromRow(row);
+        if (!orderName) return;
+        const g = getGroupingForOrder(orderName);
+        if (!g.enabled) return;
+        const gn = g.groupName || orderName;
+        if (!map.has(gn)) {
+          map.set(gn, { groupName: gn, orderNames: [], rows: [] });
+        }
+        const grp = map.get(gn);
+        grp.orderNames.push(orderName);
+        grp.rows.push(row);
+      });
+      return Array.from(map.values());
+    }
+
+    function sumGroupMetrics(memberRows) {
+      let shipmentVat = 0;
+      let shipmentNoVat = 0;
+      let wipStart = 0;
+      let materials = 0;
+      let processing = 0;
+      let otherDirect = 0;
+      let salary = 0;
+      let insurance = 0;
+      let sick = 0;
+      let acc25 = 0;
+      let acc26 = 0;
+      let acc44 = 0;
+      memberRows.forEach(row => {
+        shipmentVat += num(row.querySelector('.shipment-vat')?.value);
+        shipmentNoVat += num(row.querySelector('.shipment-no-vat')?.textContent);
+        wipStart += num(row.querySelector('.wip-start')?.value);
+        materials += num(row.querySelector('.materials')?.value);
+        processing += num(row.querySelector('.processing')?.value);
+        otherDirect += num(row.querySelector('.other-direct')?.value);
+        salary += num(row.querySelector('.salary')?.value);
+        insurance += num(row.querySelector('.insurance')?.textContent);
+        sick += num(row.querySelector('.sick')?.textContent);
+        acc25 += num(row.querySelector('.acc25')?.textContent);
+        acc26 += num(row.querySelector('.acc26')?.textContent);
+        acc44 += num(row.querySelector('.acc44')?.textContent);
+      });
+      const periodExp20 =
+        materials + processing + otherDirect + salary + insurance + sick + acc25 + acc44;
+      const periodExp26 = periodExp20 + acc26;
+      return {
+        shipmentVat,
+        shipmentNoVat,
+        wipStart,
+        acc26,
+        periodExp20,
+        periodExp26,
+        totalWithWip20: wipStart + periodExp20,
+        totalWithWip26: wipStart + periodExp26
+      };
+    }
+
+    function getGroupCalcSettings(groupName, memberRows) {
+      const gc = groupCalc[groupName];
+      if (memberRows.length === 1 && !gc) {
+        const row = memberRows[0];
+        return {
+          profitPercent: row.querySelector('input.profit-percent')?.value ?? '0',
+          manualWriteoff: row.querySelector('input.manual-writeoff')?.value ?? ''
+        };
+      }
+      return {
+        profitPercent: gc?.profitPercent != null ? String(gc.profitPercent) : '0',
+        manualWriteoff: gc?.manualWriteoff != null ? String(gc.manualWriteoff) : ''
+      };
+    }
+
+    function saveGroupCalcFromRow(tr, sourceEl) {
+      const gn = tr?.getAttribute('data-group-name');
+      if (!gn || !sourceEl) return;
+      if (!groupCalc[gn]) groupCalc[gn] = {};
+      if (
+        sourceEl.classList.contains('group-w20-profit-percent') ||
+        sourceEl.classList.contains('group-w26-profit-percent')
+      ) {
+        groupCalc[gn].profitPercent = sourceEl.value;
+        tr.querySelectorAll('.group-w20-profit-percent, .group-w26-profit-percent').forEach(inp => {
+          if (inp !== sourceEl) inp.value = sourceEl.value;
+        });
+      } else if (
+        sourceEl.classList.contains('group-w20-manual-writeoff') ||
+        sourceEl.classList.contains('group-w26-manual-writeoff')
+      ) {
+        groupCalc[gn].manualWriteoff = sourceEl.value;
+        tr.querySelectorAll('.group-w20-manual-writeoff, .group-w26-manual-writeoff').forEach(inp => {
+          if (inp !== sourceEl) inp.value = sourceEl.value;
+        });
+      }
+    }
+
+    function computeGroupWriteoffMetrics(sums, calc) {
+      const profitPercent = num(calc.profitPercent);
+      const manualStr = calc.manualWriteoff;
+      const hasManual =
+        manualStr != null &&
+        String(manualStr).replace(/\s/g, '').replace(',', '.') !== '' &&
+        String(manualStr).replace(/\s/g, '').replace(',', '.') !== '.';
+
+      let writeOff20Raw;
+      let writeOffTotalRaw;
+      if (hasManual) {
+        const manualVal = num(manualStr);
+        writeOff20Raw = manualVal;
+        writeOffTotalRaw = manualVal;
+      } else {
+        writeOff20Raw = sums.shipmentNoVat * (profitPercent / 100);
+        writeOffTotalRaw = writeOff20Raw;
+      }
+
+      const writeOff20 = writeOff20Raw;
+      const wipEnd20 = sums.totalWithWip20 - writeOff20;
+      const profit20 = sums.shipmentNoVat - writeOff20;
+      const margin20Pct = sums.shipmentNoVat > 0 ? (profit20 / sums.shipmentNoVat) * 100 : 0;
+
+      const writeOffTotal = writeOffTotalRaw;
+      const writeOff26Part = Math.min(sums.acc26, writeOffTotal);
+      const writeOff20Part = writeOffTotal - writeOff26Part;
+      const wipEnd26 = sums.totalWithWip26 - writeOffTotal;
+      const profit26Sum = sums.shipmentNoVat - writeOffTotal;
+      const profit26Pct = sums.shipmentNoVat > 0 ? (profit26Sum / sums.shipmentNoVat) * 100 : 0;
+
+      return {
+        writeOff20,
+        wipEnd20,
+        profit20,
+        margin20Pct,
+        writeOffTotal,
+        writeOff26Part,
+        writeOff20Part,
+        wipEnd26,
+        profit26Sum,
+        profit26Pct
+      };
+    }
+
+    function createGroupCalculationRow(group, sums, calc, metrics) {
+      const tr = createRow({
+        profitPercent: calc.profitPercent,
+        manualWriteoff: calc.manualWriteoff
+      });
+      tr.classList.remove('order-item');
+      tr.classList.add('order-group-item');
+      tr.setAttribute('data-group-name', group.groupName);
+
+      const composition = group.orderNames.join(', ');
+      const orderTd = tr.querySelector('.orders-col-order');
+      if (orderTd) {
+        orderTd.innerHTML = '';
+        orderTd.classList.remove('tab-v-expenses', 'tab-v-economist', 'tab-v-reconcile');
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'group-calc-order-name';
+        nameSpan.textContent = group.groupName;
+        orderTd.appendChild(nameSpan);
+        if (group.orderNames.length > 1) {
+          const hintSpan = document.createElement('span');
+          hintSpan.className = 'group-calc-order-hint';
+          hintSpan.textContent = 'строк: ' + group.orderNames.length;
+          orderTd.appendChild(hintSpan);
+        }
+        orderTd.title = composition;
+      }
+
+      const svTd = tr.querySelector('.orders-col-shipment-vat');
+      if (svTd) {
+        svTd.innerHTML = fmt(sums.shipmentVat);
+        svTd.classList.add('readonly');
+        svTd.classList.remove('tab-v-expenses', 'tab-v-economist', 'tab-v-reconcile');
+      }
+      const snvEl = tr.querySelector('.shipment-no-vat');
+      if (snvEl) snvEl.textContent = fmt(sums.shipmentNoVat);
+
+      const markGroupInput = (selector, groupClass) => {
+        const el = tr.querySelector(selector);
+        if (!el) return;
+        el.classList.add(groupClass);
+        el.readOnly = false;
+        el.disabled = false;
+      };
+      markGroupInput('.w20-profit-percent', 'group-w20-profit-percent');
+      markGroupInput('.w20-manual-writeoff', 'group-w20-manual-writeoff');
+      markGroupInput('.w26-profit-percent', 'group-w26-profit-percent');
+      markGroupInput('.w26-manual-writeoff', 'group-w26-manual-writeoff');
+
+      const g20pct = tr.querySelector('.group-w20-profit-percent');
+      const g26pct = tr.querySelector('.group-w26-profit-percent');
+      const g20man = tr.querySelector('.group-w20-manual-writeoff');
+      const g26man = tr.querySelector('.group-w26-manual-writeoff');
+      if (g20pct) {
+        g20pct.value = calc.profitPercent;
+        initTableNumDisplay(g20pct);
+      }
+      if (g26pct) {
+        g26pct.value = calc.profitPercent;
+        initTableNumDisplay(g26pct);
+      }
+      if (g20man) g20man.value = calc.manualWriteoff;
+      if (g26man) g26man.value = calc.manualWriteoff;
+
+      tr.querySelectorAll('input.wip-start, input.materials, input.processing, input.other-direct, input.salary, input.profit-percent, input.manual-writeoff, input.shipment-vat, input.order-name').forEach(inp => {
+        inp.readOnly = true;
+        inp.disabled = true;
+      });
+
+      clearOrderRowValidation(tr);
+      applyWriteoff20RowMetrics(
+        tr,
+        sums.wipStart,
+        sums.periodExp20,
+        sums.totalWithWip20,
+        metrics.writeOff20,
+        metrics.wipEnd20,
+        metrics.profit20,
+        metrics.margin20Pct
+      );
+      applyWriteoff26RowMetrics(
+        tr,
+        sums.wipStart,
+        sums.acc26,
+        sums.periodExp26,
+        sums.totalWithWip26,
+        metrics.writeOffTotal,
+        metrics.writeOff26Part,
+        metrics.writeOff20Part,
+        metrics.wipEnd26,
+        metrics.profit26Sum,
+        metrics.profit26Pct
+      );
+
+      const delCell = tr.querySelector('.col-delete');
+      if (delCell) delCell.innerHTML = '';
+
+      return tr;
+    }
+
+    function calculateAndRenderGroupedRows() {
+      const panel = document.getElementById('ordersGroupingPanel');
+      if (panel && !panel.hidden) {
+        collectGroupingFromPanel();
+      } else {
+        ensureGroupingForAllRows();
+      }
+
+      const groups = buildCalculationGroups();
+      const groupBody = document.getElementById('ordersGroupBody');
+      if (groupBody) groupBody.innerHTML = '';
+
+      const foot = {
+        shipmentVat: 0,
+        shipmentNoVat: 0,
+        w20WipStart: 0,
+        w20PeriodExp: 0,
+        w20TotalWip: 0,
+        w20Writeoff: 0,
+        w20WipEnd: 0,
+        w20Profit: 0,
+        w26WipStart: 0,
+        w26Acc26: 0,
+        w26PeriodTotal: 0,
+        w26TotalWip: 0,
+        w26WriteoffTotal: 0,
+        w26Writeoff26: 0,
+        w26Writeoff20: 0,
+        w26WipEnd: 0,
+        w26Profit: 0
+      };
+
+      groups.forEach(group => {
+        const sums = sumGroupMetrics(group.rows);
+        const calc = getGroupCalcSettings(group.groupName, group.rows);
+        const metrics = computeGroupWriteoffMetrics(sums, calc);
+        if (groupBody) {
+          groupBody.appendChild(createGroupCalculationRow(group, sums, calc, metrics));
+        }
+        foot.shipmentVat += sums.shipmentVat;
+        foot.shipmentNoVat += sums.shipmentNoVat;
+        foot.w20WipStart += sums.wipStart;
+        foot.w20PeriodExp += sums.periodExp20;
+        foot.w20TotalWip += sums.totalWithWip20;
+        foot.w20Writeoff += metrics.writeOff20;
+        foot.w20WipEnd += metrics.wipEnd20;
+        foot.w20Profit += metrics.profit20;
+        foot.w26WipStart += sums.wipStart;
+        foot.w26Acc26 += sums.acc26;
+        foot.w26PeriodTotal += sums.periodExp26;
+        foot.w26TotalWip += sums.totalWithWip26;
+        foot.w26WriteoffTotal += metrics.writeOffTotal;
+        foot.w26Writeoff26 += metrics.writeOff26Part;
+        foot.w26Writeoff20 += metrics.writeOff20Part;
+        foot.w26WipEnd += metrics.wipEnd26;
+        foot.w26Profit += metrics.profit26Sum;
+      });
+
+      lastGroupFootTotals = foot;
+      return foot;
+    }
+
+    function updateFootForActiveTab(setFoot, setFootPct) {
+      const table = document.getElementById('ordersTable');
+      const tab = table ? table.getAttribute('data-active-tab') : 'expenses';
+      if ((tab === 'writeoff20' || tab === 'writeoff26') && lastGroupFootTotals) {
+        const g = lastGroupFootTotals;
+        setFoot('ordersFootShipmentVat', g.shipmentVat);
+        setFoot('ordersFootShipmentNoVat', g.shipmentNoVat);
+        setFoot('ordersFootW20WipStart', g.w20WipStart);
+        setFoot('ordersFootW20PeriodExp', g.w20PeriodExp);
+        setFoot('ordersFootW20TotalWip', g.w20TotalWip);
+        setFoot('ordersFootW20Writeoff', g.w20Writeoff);
+        setFoot('ordersFootW20WipEnd', g.w20WipEnd);
+        setFoot('ordersFootW20Profit', g.w20Profit);
+        setFootPct(
+          'ordersFootW20Margin',
+          g.shipmentNoVat > 0 ? (g.w20Profit / g.shipmentNoVat) * 100 : 0
+        );
+        setFoot('ordersFootW26WipStart', g.w26WipStart);
+        setFoot('ordersFootW26Acc26', g.w26Acc26);
+        setFoot('ordersFootW26PeriodTotal', g.w26PeriodTotal);
+        setFoot('ordersFootW26TotalWip', g.w26TotalWip);
+        setFoot('ordersFootW26WriteoffTotal', g.w26WriteoffTotal);
+        setFoot('ordersFootW26Writeoff26', g.w26Writeoff26);
+        setFoot('ordersFootW26Writeoff20', g.w26Writeoff20);
+        setFoot('ordersFootW26WipEnd', g.w26WipEnd);
+        setFoot('ordersFootW26Profit', g.w26Profit);
+        setFootPct(
+          'ordersFootW26ProfitMargin',
+          g.shipmentNoVat > 0 ? (g.w26Profit / g.shipmentNoVat) * 100 : 0
+        );
+      } else if (lastAllRowsFootTotals) {
+        setFoot('ordersFootShipmentVat', lastAllRowsFootTotals.shipmentVat);
+        setFoot('ordersFootShipmentNoVat', lastAllRowsFootTotals.shipmentNoVat);
+      }
+    }
+
+    function saveOrderGrouping() {
+      collectGroupingFromPanel();
+      calculateAll();
+      const statusEl = document.getElementById('groupingSaveStatus');
+      if (statusEl) {
+        statusEl.textContent =
+          'Группировка применена. Нажмите «Сохранить локально», чтобы записать настройки в период.';
+      }
+    }
+
     function initGlobalNumDisplay(el) {
       const raw = el.value.replace(/\s/g, '').replace(',', '.');
       if (raw === '' || raw === '.') {
@@ -2107,7 +2635,8 @@
           tabId === 'economist' ||
           tabId === 'reconcile' ||
           tabId === 'writeoff20' ||
-          tabId === 'writeoff26'
+          tabId === 'writeoff26' ||
+          tabId === 'grouping'
             ? tabId
             : 'expenses';
         table.setAttribute('data-active-tab', id);
@@ -2116,11 +2645,29 @@
           btn.classList.toggle('active', active);
           btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
+        const scrollOuter = document.getElementById('ordersTableScrollOuter');
+        const groupingPanel = document.getElementById('ordersGroupingPanel');
+        if (scrollOuter) scrollOuter.hidden = id === 'grouping';
+        if (groupingPanel) {
+          groupingPanel.hidden = id !== 'grouping';
+          if (id === 'grouping') renderGroupingPanel();
+        }
         if (hint) hint.hidden = id !== 'reconcile';
         if (id === 'writeoff20' || id === 'writeoff26') {
           getRows().forEach(row => syncWriteoffPlanInputsInRow(row));
         }
         applyOrdersTabHeaderLabels(id);
+        if (typeof updateFootForActiveTab === 'function') {
+          const setFoot = (fid, v) => {
+            const el = document.getElementById(fid);
+            if (el) el.textContent = fmt(v);
+          };
+          const setFootPct = (fid, pct) => {
+            const el = document.getElementById(fid);
+            if (el) el.textContent = pct.toFixed(1) + '%';
+          };
+          updateFootForActiveTab(setFoot, setFootPct);
+        }
         requestAnimationFrame(() => setupOrdersTableScrollSync());
       }
 
@@ -2218,6 +2765,77 @@
       calculateAll();
       autoSave();
     });
+
+    const ordersGroupBody = document.getElementById('ordersGroupBody');
+    if (ordersGroupBody) {
+      ordersGroupBody.addEventListener('input', e => {
+        const t = e.target;
+        if (!t.matches || !t.matches('input.table-num')) return;
+        const row = t.closest('tr.order-group-item');
+        if (!row) return;
+        sanitizeTableNumInput(t);
+        if (
+          t.classList.contains('group-w20-profit-percent') ||
+          t.classList.contains('group-w26-profit-percent') ||
+          t.classList.contains('group-w20-manual-writeoff') ||
+          t.classList.contains('group-w26-manual-writeoff')
+        ) {
+          saveGroupCalcFromRow(row, t);
+        }
+        calculateAll();
+        autoSave();
+      });
+
+      ordersGroupBody.addEventListener('focusin', e => {
+        const t = e.target;
+        if (t.matches && t.matches('input.table-num')) onTableNumFocus(t);
+      });
+
+      ordersGroupBody.addEventListener('focusout', e => {
+        const t = e.target;
+        if (!t.matches || !t.matches('input.table-num')) return;
+        onTableNumBlur(t);
+        const row = t.closest('tr.order-group-item');
+        if (
+          row &&
+          (t.classList.contains('group-w20-profit-percent') ||
+            t.classList.contains('group-w26-profit-percent') ||
+            t.classList.contains('group-w20-manual-writeoff') ||
+            t.classList.contains('group-w26-manual-writeoff'))
+        ) {
+          saveGroupCalcFromRow(row, t);
+        }
+        calculateAll();
+        autoSave();
+      });
+
+      ordersGroupBody.addEventListener('paste', e => {
+        const t = e.target;
+        if (!t.matches || !t.matches('input.table-num')) return;
+        e.preventDefault();
+        const paste = (e.clipboardData || window.clipboardData).getData('text');
+        const clean = paste.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+        const vis = t.value;
+        const start = t.selectionStart ?? 0;
+        const end = t.selectionEnd ?? 0;
+        const before = vis.slice(0, start).replace(/\s/g, '');
+        const after = vis.slice(end).replace(/\s/g, '');
+        t.value = before + clean + after;
+        sanitizeTableNumInput(t);
+        const row = t.closest('tr.order-group-item');
+        if (row) saveGroupCalcFromRow(row, t);
+        calculateAll();
+        autoSave();
+      });
+    }
+
+    const saveGroupingBtn = document.getElementById('saveGroupingBtn');
+    if (saveGroupingBtn) {
+      saveGroupingBtn.addEventListener('click', () => {
+        if (isPeriodFinal()) return;
+        saveOrderGrouping();
+      });
+    }
 
     topGridEl.addEventListener('input', (e) => {
       const t = e.target;
@@ -3232,21 +3850,6 @@
       let sumFootWipEnd = 0;
       let sumFootProfit = 0;
       let sumFootProfitWith26 = 0;
-      let sumFootW20WipStart = 0;
-      let sumFootW20PeriodExp = 0;
-      let sumFootW20TotalWip = 0;
-      let sumFootW20Writeoff = 0;
-      let sumFootW20WipEnd = 0;
-      let sumFootW20Profit = 0;
-      let sumFootW26WipStart = 0;
-      let sumFootW26Acc26 = 0;
-      let sumFootW26PeriodTotal = 0;
-      let sumFootW26TotalWip = 0;
-      let sumFootW26WriteoffTotal = 0;
-      let sumFootW26Writeoff26 = 0;
-      let sumFootW26Writeoff20 = 0;
-      let sumFootW26WipEnd = 0;
-      let sumFootW26Profit = 0;
 
       // 2. Расчёты по строкам
       rows.forEach(row => {
@@ -3322,41 +3925,6 @@
         const profitWith26 = profitRub - acc26;
         const marginWith26Pct = shipmentNoVat > 0 ? (profitWith26 / shipmentNoVat) * 100 : 0;
 
-        const periodExp20 =
-          materials + processing + otherDirect + salary + insurance + sick + acc25 + acc44;
-        const totalWithWip20 = wipStart + periodExp20;
-
-        const manualInputW20 = getManualWriteoffInput(row);
-        let writeOff20Raw;
-        if (manualInputW20 && manualWriteoffHasValue(manualInputW20)) {
-          writeOff20Raw = num(manualInputW20.value);
-        } else {
-          writeOff20Raw = shipmentNoVat * (profitPercent / 100);
-        }
-        const writeOff20 = writeOff20Raw;
-        const wipEnd20 = totalWithWip20 - writeOff20;
-        const profit20 = shipmentNoVat - writeOff20;
-        const margin20Pct = shipmentNoVat > 0 ? (profit20 / shipmentNoVat) * 100 : 0;
-
-        const periodExp26 =
-          materials + processing + otherDirect + salary + insurance + sick + acc25 + acc44 + acc26;
-        const acc26Period = acc26;
-        const totalWithWip26 = wipStart + periodExp26;
-
-        const manualInputW26 = getManualWriteoffInput(row);
-        let writeOffTotalRaw;
-        if (manualInputW26 && manualWriteoffHasValue(manualInputW26)) {
-          writeOffTotalRaw = num(manualInputW26.value);
-        } else {
-          writeOffTotalRaw = shipmentNoVat * (profitPercent / 100);
-        }
-        const writeOffTotal = writeOffTotalRaw;
-        const writeOff26Part = Math.min(acc26Period, writeOffTotal);
-        const writeOff20Part = writeOffTotal - writeOff26Part;
-        const wipEnd26 = totalWithWip26 - writeOffTotal;
-        const profit26Sum = shipmentNoVat - writeOffTotal;
-        const profit26Pct = shipmentNoVat > 0 ? (profit26Sum / shipmentNoVat) * 100 : 0;
-
         row.querySelector('.shipment-percent').textContent = (shipmentShare * 100).toFixed(2) + '%';
         row.querySelector('.salary-share').textContent = (salaryShare * 100).toFixed(2) + '%';
         row.querySelector('.insurance').textContent = fmt(insurance);
@@ -3374,31 +3942,6 @@
         row.querySelector('.wip-end').textContent = fmt(wipEnd);
 
         applyReconcileRowMetrics(row, totalCost, acc26, writeOff, wipEnd);
-
-        applyWriteoff20RowMetrics(
-          row,
-          wipStart,
-          periodExp20,
-          totalWithWip20,
-          writeOff20,
-          wipEnd20,
-          profit20,
-          margin20Pct
-        );
-
-        applyWriteoff26RowMetrics(
-          row,
-          wipStart,
-          acc26Period,
-          periodExp26,
-          totalWithWip26,
-          writeOffTotal,
-          writeOff26Part,
-          writeOff20Part,
-          wipEnd26,
-          profit26Sum,
-          profit26Pct
-        );
 
         if (marginPct < 0) {
           row.classList.add('row-negative-margin');
@@ -3452,25 +3995,16 @@
         sumFootWipEnd += wipEnd;
         sumFootProfit += profitRub;
         sumFootProfitWith26 += profitWith26;
-        sumFootW20WipStart += wipStart;
-        sumFootW20PeriodExp += periodExp20;
-        sumFootW20TotalWip += totalWithWip20;
-        sumFootW20Writeoff += writeOff20;
-        sumFootW20WipEnd += wipEnd20;
-        sumFootW20Profit += profit20;
-        sumFootW26WipStart += wipStart;
-        sumFootW26Acc26 += acc26Period;
-        sumFootW26PeriodTotal += periodExp26;
-        sumFootW26TotalWip += totalWithWip26;
-        sumFootW26WriteoffTotal += writeOffTotal;
-        sumFootW26Writeoff26 += writeOff26Part;
-        sumFootW26Writeoff20 += writeOff20Part;
-        sumFootW26WipEnd += wipEnd26;
-        sumFootW26Profit += profit26Sum;
 
         totalWrittenOff += writeOff;
         totalEndingWIP += wipEnd;
       });
+
+      calculateAndRenderGroupedRows();
+      lastAllRowsFootTotals = {
+        shipmentVat: totalShipmentVat,
+        shipmentNoVat: totalShipmentNoVat
+      };
 
       const setFoot = (id, v) => {
         const el = document.getElementById(id);
@@ -3503,33 +4037,11 @@
       setFoot('ordersFootWipEnd', sumFootWipEnd);
       setFoot('ordersFootProfit', sumFootProfit);
       setFoot('ordersFootProfitWith26', sumFootProfitWith26);
-      setFoot('ordersFootW20WipStart', sumFootW20WipStart);
-      setFoot('ordersFootW20PeriodExp', sumFootW20PeriodExp);
-      setFoot('ordersFootW20TotalWip', sumFootW20TotalWip);
-      setFoot('ordersFootW20Writeoff', sumFootW20Writeoff);
-      setFoot('ordersFootW20WipEnd', sumFootW20WipEnd);
-      setFoot('ordersFootW20Profit', sumFootW20Profit);
-      setFootPct(
-        'ordersFootW20Margin',
-        totalShipmentNoVat > 0 ? (sumFootW20Profit / totalShipmentNoVat) * 100 : 0
-      );
-      setFoot('ordersFootW26WipStart', sumFootW26WipStart);
-      setFoot('ordersFootW26Acc26', sumFootW26Acc26);
-      setFoot('ordersFootW26PeriodTotal', sumFootW26PeriodTotal);
-      setFoot('ordersFootW26TotalWip', sumFootW26TotalWip);
-      setFoot('ordersFootW26WriteoffTotal', sumFootW26WriteoffTotal);
-      setFoot('ordersFootW26Writeoff26', sumFootW26Writeoff26);
-      setFoot('ordersFootW26Writeoff20', sumFootW26Writeoff20);
-      setFoot('ordersFootW26WipEnd', sumFootW26WipEnd);
-      setFoot('ordersFootW26Profit', sumFootW26Profit);
-      setFootPct(
-        'ordersFootW26ProfitMargin',
-        totalShipmentNoVat > 0 ? (sumFootW26Profit / totalShipmentNoVat) * 100 : 0
-      );
       setFootPct(
         'ordersFootMargin',
         totalShipmentNoVat > 0 ? (sumFootProfit / totalShipmentNoVat) * 100 : 0
       );
+      updateFootForActiveTab(setFoot, setFootPct);
 
       document.getElementById('totalShipmentNoVat').textContent = fmt(totalShipmentNoVat);
       document.getElementById('totalSalaryValue').textContent = fmt(totalSalary);
@@ -3877,6 +4389,25 @@
         b.style.opacity = locked ? '0.5' : '1';
         b.style.pointerEvents = locked ? 'none' : '';
       });
+      const groupBody = document.getElementById('ordersGroupBody');
+      if (groupBody) {
+        groupBody
+          .querySelectorAll(
+            'input.group-w20-profit-percent, input.group-w26-profit-percent, input.group-w20-manual-writeoff, input.group-w26-manual-writeoff'
+          )
+          .forEach(inp => {
+            inp.readOnly = locked;
+            inp.disabled = locked;
+          });
+      }
+      const groupingPanel = document.getElementById('ordersGroupingPanel');
+      if (groupingPanel) {
+        groupingPanel.querySelectorAll('input').forEach(inp => {
+          inp.readOnly = locked;
+          inp.disabled = locked;
+        });
+      }
+      setButtonDisabled('saveGroupingBtn', locked);
     }
 
     function setButtonDisabled(id, disabled) {
@@ -4231,7 +4762,14 @@
 
     function collectData() {
       const rows = getRows().map(row => collectRowData(row));
-
+      const groupingCopy = {};
+      Object.keys(orderGrouping).forEach(k => {
+        groupingCopy[k] = { ...orderGrouping[k] };
+      });
+      const groupCalcCopy = {};
+      Object.keys(groupCalc).forEach(k => {
+        groupCalcCopy[k] = { ...groupCalc[k] };
+      });
       return {
         periodStatus: getPeriodStatus(),
         globals: {
@@ -4242,7 +4780,9 @@
           total26: document.getElementById('total26').value,
           total44: document.getElementById('total44').value
         },
-        rows
+        rows,
+        grouping: groupingCopy,
+        groupCalc: groupCalcCopy
       };
     }
 
@@ -4253,6 +4793,23 @@
         const el = document.getElementById(key);
         if (el) el.value = data.globals[key];
       });
+
+      if (data.grouping && typeof data.grouping === 'object') {
+        orderGrouping = {};
+        Object.keys(data.grouping).forEach(k => {
+          orderGrouping[k] = { ...data.grouping[k] };
+        });
+      } else {
+        orderGrouping = {};
+      }
+      if (data.groupCalc && typeof data.groupCalc === 'object') {
+        groupCalc = {};
+        Object.keys(data.groupCalc).forEach(k => {
+          groupCalc[k] = { ...data.groupCalc[k] };
+        });
+      } else {
+        groupCalc = {};
+      }
 
       setPeriodStatus(data.periodStatus || 'draft');
       const isFinal = getPeriodStatus() === 'final';
@@ -4276,6 +4833,9 @@
           if (rowsEls[i] && r.snapshot) applyRowSnapshot(rowsEls[i], r.snapshot);
         });
       }
+
+      ensureGroupingForAllRows();
+      renderGroupingPanel();
 
       if (isFinal && !hasAnySnapshot) {
         setTableReadOnlyMode(false);
@@ -5233,6 +5793,12 @@
       }
 
       ordersBody.innerHTML = '';
+      orderGrouping = {};
+      groupCalc = {};
+      const groupBody = document.getElementById('ordersGroupBody');
+      if (groupBody) groupBody.innerHTML = '';
+      const groupingStatus = document.getElementById('groupingSaveStatus');
+      if (groupingStatus) groupingStatus.textContent = '';
 
       document.getElementById('vatRate').value = '22';
       document.getElementById('totalInsurance').value = '0';
@@ -6675,6 +7241,8 @@
       calculateAll();
       autoSave();
       populateOrderSelect();
+      const groupingPanel = document.getElementById('ordersGroupingPanel');
+      if (groupingPanel && !groupingPanel.hidden) renderGroupingPanel();
     });
 
     document.getElementById('checkDataBtn').addEventListener('click', () => checkData());

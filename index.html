@@ -7345,16 +7345,50 @@
       reader.readAsArrayBuffer(file);
     }
 
-    function exportOrdersToExcel() {
-      if (typeof XLSX === 'undefined') {
-        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
-        return;
-      }
+    function getActiveOrdersTab() {
+      const table = document.getElementById('ordersTable');
+      return table?.getAttribute('data-active-tab') || 'expenses';
+    }
 
-      if (!isPeriodFinal()) {
-        calculateAll();
-      }
+    function getGroupRows() {
+      const groupBody = document.getElementById('ordersGroupBody');
+      if (!groupBody) return [];
+      return Array.from(groupBody.querySelectorAll('tr.order-group-item'));
+    }
 
+    function exportCellText(el) {
+      if (!el) return '';
+      if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+        return String(el.value ?? '').trim();
+      }
+      return String(el.textContent ?? '').trim();
+    }
+
+    function exportCellNum(el) {
+      const text = exportCellText(el);
+      if (!text) return 0;
+      return num(text);
+    }
+
+    function exportGroupOrderName(tr) {
+      const nameEl = tr.querySelector('.group-calc-order-name');
+      if (nameEl) return exportCellText(nameEl);
+      return exportCellText(tr.querySelector('.order-name'));
+    }
+
+    function buildExportFilename(tabSuffix) {
+      const period = getCurrentPeriod() || 'bez_perioda';
+      return 'razdelny_uchet_' + period + '_' + tabSuffix + '.xlsx';
+    }
+
+    function downloadExcelAoA(rows, sheetName, filename) {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.writeFile(wb, filename);
+    }
+
+    function exportExpensesTabToExcel() {
       const header = [
         'Заказ',
         'Отгрузка',
@@ -7372,30 +7406,289 @@
         'Маржа'
       ];
 
-      const body = getRows().map(tr => {
-        return [
-          (tr.querySelector('.order-name').value || '').trim(),
-          num(tr.querySelector('.shipment-vat').value),
-          num(tr.querySelector('.materials').value),
-          num(tr.querySelector('.processing').value),
-          num(tr.querySelector('.other-direct').value),
-          num(tr.querySelector('.salary').value),
-          num(tr.querySelector('.acc25').textContent),
-          num(tr.querySelector('.acc26').textContent),
-          num(tr.querySelector('.acc44').textContent),
-          num(tr.querySelector('.total-cost').textContent),
-          num(tr.querySelector('.write-off').textContent),
-          num(tr.querySelector('.wip-end').textContent),
-          num(tr.querySelector('.profit-rub').textContent),
-          num(tr.querySelector('.profit-margin').textContent)
-        ];
-      });
+      const body = getRows().map(tr => [
+        exportCellText(tr.querySelector('.order-name')),
+        exportCellNum(tr.querySelector('.shipment-vat')),
+        exportCellNum(tr.querySelector('.materials')),
+        exportCellNum(tr.querySelector('.processing')),
+        exportCellNum(tr.querySelector('.other-direct')),
+        exportCellNum(tr.querySelector('.salary')),
+        exportCellNum(tr.querySelector('.acc25')),
+        exportCellNum(tr.querySelector('.acc26')),
+        exportCellNum(tr.querySelector('.acc44')),
+        exportCellNum(tr.querySelector('.total-cost')),
+        exportCellNum(tr.querySelector('.write-off')),
+        exportCellNum(tr.querySelector('.wip-end')),
+        exportCellNum(tr.querySelector('.profit-rub')),
+        exportCellNum(tr.querySelector('.profit-margin'))
+      ]);
 
-      const data = [header, ...body];
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Отчет');
-      XLSX.writeFile(wb, 'Отчет.xlsx');
+      downloadExcelAoA([header, ...body], 'Расходы', buildExportFilename('rashody'));
+    }
+
+    function exportWriteoff20TabToExcel() {
+      const header = [
+        'Заказ',
+        'Отгрузка с НДС',
+        'Отгрузка без НДС',
+        'НЗП нач. 20',
+        'Расходы за период 20',
+        'Всего с НЗП',
+        '% списания',
+        'Ручное списание',
+        'Списание 20',
+        'НЗП конец 20',
+        'Прибыль',
+        'Маржа %',
+        'Контроль'
+      ];
+
+      const body = getGroupRows().map(tr => [
+        exportGroupOrderName(tr),
+        exportCellNum(tr.querySelector('.orders-col-shipment-vat')),
+        exportCellNum(tr.querySelector('.shipment-no-vat')),
+        exportCellNum(tr.querySelector('.w20-wip-start')),
+        exportCellNum(tr.querySelector('.w20-period-exp')),
+        exportCellNum(tr.querySelector('.w20-total-wip')),
+        exportCellNum(tr.querySelector('.group-w20-profit-percent, .w20-profit-percent')),
+        exportCellText(tr.querySelector('.group-w20-manual-writeoff, .w20-manual-writeoff')),
+        exportCellNum(tr.querySelector('.w20-writeoff')),
+        exportCellNum(tr.querySelector('.w20-wip-end')),
+        exportCellNum(tr.querySelector('.w20-profit')),
+        exportCellText(tr.querySelector('.w20-margin')),
+        exportCellText(tr.querySelector('.w20-control'))
+      ]);
+
+      const footer = [
+        'Итого',
+        exportCellNum(document.getElementById('ordersFootShipmentVat')),
+        exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
+        exportCellNum(document.getElementById('ordersFootW20WipStart')),
+        exportCellNum(document.getElementById('ordersFootW20PeriodExp')),
+        exportCellNum(document.getElementById('ordersFootW20TotalWip')),
+        '',
+        '',
+        exportCellNum(document.getElementById('ordersFootW20Writeoff')),
+        exportCellNum(document.getElementById('ordersFootW20WipEnd')),
+        exportCellNum(document.getElementById('ordersFootW20Profit')),
+        exportCellText(document.getElementById('ordersFootW20Margin')),
+        ''
+      ];
+
+      downloadExcelAoA([header, ...body, footer], 'Списание 20', buildExportFilename('spisanie_20'));
+    }
+
+    function exportWriteoff26TabToExcel() {
+      const header = [
+        'Заказ',
+        'Отгрузка с НДС',
+        'Отгрузка без НДС',
+        'НЗП нач.',
+        'Расходы 26 сч. за период',
+        'Всего с 26 сч. за период',
+        'Итого с НЗП',
+        '% списания от отгрузки',
+        'Списание вручную',
+        'Списано всего',
+        'Списано с 26 сч.',
+        'Списано с 20 сч.',
+        'НЗП конец',
+        'Прибыль, сумма',
+        'Прибыль, %',
+        'Контроль'
+      ];
+
+      const body = getGroupRows().map(tr => [
+        exportGroupOrderName(tr),
+        exportCellNum(tr.querySelector('.orders-col-shipment-vat')),
+        exportCellNum(tr.querySelector('.shipment-no-vat')),
+        exportCellNum(tr.querySelector('.w26-wip-start')),
+        exportCellNum(tr.querySelector('.w26-acc26-period')),
+        exportCellNum(tr.querySelector('.w26-period-total')),
+        exportCellNum(tr.querySelector('.w26-total-wip')),
+        exportCellNum(tr.querySelector('.group-w26-profit-percent, .w26-profit-percent')),
+        exportCellText(tr.querySelector('.group-w26-manual-writeoff, .w26-manual-writeoff')),
+        exportCellNum(tr.querySelector('.w26-writeoff-total')),
+        exportCellNum(tr.querySelector('.w26-writeoff-26')),
+        exportCellNum(tr.querySelector('.w26-writeoff-20')),
+        exportCellNum(tr.querySelector('.w26-wip-end')),
+        exportCellNum(tr.querySelector('.w26-profit')),
+        exportCellText(tr.querySelector('.w26-profit-margin')),
+        exportCellText(tr.querySelector('.w26-control'))
+      ]);
+
+      const footer = [
+        'Итого',
+        exportCellNum(document.getElementById('ordersFootShipmentVat')),
+        exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
+        exportCellNum(document.getElementById('ordersFootW26WipStart')),
+        exportCellNum(document.getElementById('ordersFootW26Acc26')),
+        exportCellNum(document.getElementById('ordersFootW26PeriodTotal')),
+        exportCellNum(document.getElementById('ordersFootW26TotalWip')),
+        '',
+        '',
+        exportCellNum(document.getElementById('ordersFootW26WriteoffTotal')),
+        exportCellNum(document.getElementById('ordersFootW26Writeoff26')),
+        exportCellNum(document.getElementById('ordersFootW26Writeoff20')),
+        exportCellNum(document.getElementById('ordersFootW26WipEnd')),
+        exportCellNum(document.getElementById('ordersFootW26Profit')),
+        exportCellText(document.getElementById('ordersFootW26ProfitMargin')),
+        ''
+      ];
+
+      downloadExcelAoA([header, ...body, footer], 'Списание 26', buildExportFilename('spisanie_26'));
+    }
+
+    function exportGroupingTabToExcel() {
+      collectGroupingFromPanel();
+      const header = [
+        'Бухгалтерский заказ',
+        'Показывать в расчётах как',
+        'Включать',
+        'Примечание'
+      ];
+
+      const panelRows = document.querySelectorAll('#groupingTableBody tr[data-order-name]');
+      const body = Array.from(panelRows).map(tr => [
+        tr.getAttribute('data-order-name') || '',
+        exportCellText(tr.querySelector('.grouping-group-name')),
+        tr.querySelector('.grouping-enabled')?.checked ? 'да' : 'нет',
+        exportCellText(tr.querySelector('.grouping-note'))
+      ]);
+
+      downloadExcelAoA([header, ...body], 'Группировка', buildExportFilename('gruppirovka'));
+    }
+
+    function exportEconomistTabToExcel() {
+      const header = [
+        'Заказ',
+        'Отгрузка с НДС',
+        'Отгрузка без НДС',
+        'Расходы всего с 26',
+        'Расходы без 26',
+        '% списания от отгрузки',
+        'Ручное списание',
+        'Списание всего',
+        'НЗП конец с 26',
+        'Прибыль, руб.',
+        'Маржа, %'
+      ];
+
+      const body = getRows().map(tr => [
+        exportCellText(tr.querySelector('.order-name')),
+        exportCellNum(tr.querySelector('.shipment-vat')),
+        exportCellNum(tr.querySelector('.shipment-no-vat')),
+        exportCellNum(tr.querySelector('.total-cost')),
+        exportCellNum(tr.querySelector('.total-cost-no26')),
+        exportCellNum(tr.querySelector('.profit-percent')),
+        exportCellText(tr.querySelector('.manual-writeoff')),
+        exportCellNum(tr.querySelector('.write-off')),
+        exportCellNum(tr.querySelector('.wip-end')),
+        exportCellNum(tr.querySelector('.profit-rub')),
+        exportCellNum(tr.querySelector('.profit-margin'))
+      ]);
+
+      const footer = [
+        'Итого',
+        exportCellNum(document.getElementById('ordersFootShipmentVat')),
+        exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
+        exportCellNum(document.getElementById('ordersFootTotalCost')),
+        exportCellNum(document.getElementById('ordersFootTotalCostNo26')),
+        '',
+        '',
+        exportCellNum(document.getElementById('ordersFootWriteOff')),
+        exportCellNum(document.getElementById('ordersFootWipEnd')),
+        exportCellNum(document.getElementById('ordersFootProfit')),
+        exportCellNum(document.getElementById('ordersFootMargin'))
+      ];
+
+      downloadExcelAoA([header, ...body, footer], 'План списания', buildExportFilename('plan_nzp'));
+    }
+
+    function exportReconcileTabToExcel() {
+      const header = [
+        'Заказ',
+        'Отгрузка с НДС',
+        'Отгрузка без НДС',
+        '26 сч. распределён',
+        'Расходы всего с 26',
+        'Расходы без 26',
+        '26 сч. списывается',
+        'Списание с 20 сч.',
+        'НЗП на 20 сч.',
+        'Контроль'
+      ];
+
+      const body = getRows().map(tr => [
+        exportCellText(tr.querySelector('.order-name')),
+        exportCellNum(tr.querySelector('.shipment-vat')),
+        exportCellNum(tr.querySelector('.shipment-no-vat')),
+        exportCellNum(tr.querySelector('.acc26')),
+        exportCellNum(tr.querySelector('.total-cost')),
+        exportCellNum(tr.querySelector('.total-cost-no26')),
+        exportCellNum(tr.querySelector('.writeoff-26-1c')),
+        exportCellNum(tr.querySelector('.writeoff-no26')),
+        exportCellNum(tr.querySelector('.wip-no26')),
+        exportCellText(tr.querySelector('.reconcile-status-1c'))
+      ]);
+
+      const footer = [
+        'Итого',
+        exportCellNum(document.getElementById('ordersFootShipmentVat')),
+        exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
+        exportCellNum(document.getElementById('ordersFootAcc26')),
+        exportCellNum(document.getElementById('ordersFootTotalCost')),
+        exportCellNum(document.getElementById('ordersFootTotalCostNo26')),
+        exportCellNum(document.getElementById('ordersFootWriteOff26_1c')),
+        exportCellNum(document.getElementById('ordersFootWriteOff20')),
+        exportCellNum(document.getElementById('ordersFootWip20')),
+        ''
+      ];
+
+      downloadExcelAoA([header, ...body, footer], 'НЗП для 1С', buildExportFilename('nzp_1c'));
+    }
+
+    function exportOrdersToExcel() {
+      if (typeof XLSX === 'undefined') {
+        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
+        return;
+      }
+
+      const activeTab = getActiveOrdersTab();
+
+      if (activeTab === 'grouping') {
+        renderGroupingPanel();
+      } else if (activeTab === 'writeoff20' || activeTab === 'writeoff26') {
+        if (!isPeriodFinal()) {
+          calculateAll();
+        } else {
+          calculateAndRenderGroupedRows();
+        }
+      } else if (!isPeriodFinal()) {
+        calculateAll();
+      }
+
+      switch (activeTab) {
+        case 'writeoff20':
+          exportWriteoff20TabToExcel();
+          break;
+        case 'writeoff26':
+          exportWriteoff26TabToExcel();
+          break;
+        case 'grouping':
+          exportGroupingTabToExcel();
+          break;
+        case 'economist':
+          exportEconomistTabToExcel();
+          break;
+        case 'reconcile':
+          exportReconcileTabToExcel();
+          break;
+        case 'expenses':
+        default:
+          exportExpensesTabToExcel();
+          break;
+      }
     }
 
     document.getElementById('fileInput').addEventListener('change', handleFile);

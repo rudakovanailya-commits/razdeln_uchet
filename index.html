@@ -586,24 +586,6 @@
       font-weight: 600;
     }
 
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td,
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td {
-      background: #fecaca !important;
-    }
-
-    #ordersTable[data-active-tab="writeoff20"]
-      .orders-block-table
-      tbody
-      tr.row-w20-writeoff-over:hover
-      td,
-    #ordersTable[data-active-tab="writeoff20"]
-      .orders-block-table
-      tbody
-      tr.row-w20-negative-wip:hover
-      td {
-      background: #fca5a5 !important;
-    }
-
     #ordersTable[data-active-tab="writeoff20"] td.cell-validate-negative {
       box-shadow: inset 0 0 0 2px #b91c1c;
       background: #fef2f2 !important;
@@ -613,16 +595,6 @@
       background: #fef2f2 !important;
       color: #b91c1c;
       font-weight: 600;
-    }
-
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.orders-col-order,
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.orders-col-shipment-vat,
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.shipment-no-vat,
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td.orders-col-order,
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td.orders-col-shipment-vat,
-    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td.shipment-no-vat {
-      background: var(--orders-sticky-pin-bg) !important;
-      color: var(--orders-sticky-pin-text);
     }
 
     /* --- Ширины: вкладка «Списание с 26» --- */
@@ -721,30 +693,6 @@
       font-weight: 600;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td {
-      background: #fecaca !important;
-    }
-
-    #ordersTable[data-active-tab="writeoff26"]
-      .orders-block-table
-      tbody
-      tr.row-w26-writeoff-over:hover
-      td,
-    #ordersTable[data-active-tab="writeoff26"]
-      .orders-block-table
-      tbody
-      tr.row-w26-negative-wip:hover
-      td,
-    #ordersTable[data-active-tab="writeoff26"]
-      .orders-block-table
-      tbody
-      tr.row-w26-writeoff20-negative:hover
-      td {
-      background: #fca5a5 !important;
-    }
-
     #ordersTable[data-active-tab="writeoff26"] td.cell-validate-negative {
       box-shadow: inset 0 0 0 2px #b91c1c;
       background: #fef2f2 !important;
@@ -756,17 +704,42 @@
       font-weight: 600;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.orders-col-order,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.orders-col-shipment-vat,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.shipment-no-vat,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td.orders-col-order,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td.orders-col-shipment-vat,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td.shipment-no-vat,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td.orders-col-order,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td.orders-col-shipment-vat,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td.shipment-no-vat {
+    /* Ошибки на вкладках списания: мягкая подсветка расчётных ячеек, закреплённые — тёмные */
+    #ordersTable[data-active-tab="writeoff20"] tbody tr.row-w20-writeoff-over td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff20"] tbody tr.row-w20-negative-wip td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff-over td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-negative-wip td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-manual-less-than-20 td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff26-over td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff20-negative td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat) {
+      background: #fff1f2 !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tbody tr.row-w20-writeoff-over:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff20"] tbody tr.row-w20-negative-wip:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff-over:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-negative-wip:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-manual-less-than-20:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff26-over:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff20-negative:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat) {
+      background: #fecaca !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tbody tr:is(.row-w20-writeoff-over, .row-w20-negative-wip) td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative) td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat) {
       background: var(--orders-sticky-pin-bg) !important;
-      color: var(--orders-sticky-pin-text);
+      color: var(--orders-sticky-pin-text) !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tbody tr:is(.row-w20-writeoff-over, .row-w20-negative-wip):hover td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative):hover td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat) {
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text) !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tbody tr:is(.row-w20-writeoff-over, .row-w20-negative-wip) td.orders-col-order,
+    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative) td.orders-col-order {
+      box-shadow: inset 4px 0 0 #ef4444;
     }
 
 
@@ -943,24 +916,6 @@
       display: none !important;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-manual-less-than-20 td,
-    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff26-over td {
-      background: #fecaca !important;
-    }
-
-    #ordersTable[data-active-tab="writeoff26"]
-      .orders-block-table
-      tbody
-      tr.row-w26-manual-less-than-20:hover
-      td,
-    #ordersTable[data-active-tab="writeoff26"]
-      .orders-block-table
-      tbody
-      tr.row-w26-writeoff26-over:hover
-      td {
-      background: #fca5a5 !important;
-    }
-
     .group-calc-order-name {
       display: block;
       font-weight: 600;
@@ -969,7 +924,7 @@
     .group-calc-order-hint {
       display: block;
       font-size: 11px;
-      color: #64748b;
+      color: #94a3b8;
       margin-top: 2px;
     }
 

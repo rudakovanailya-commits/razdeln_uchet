@@ -491,7 +491,10 @@
 
     /* --- Ширины: вкладка «Списание 20 сч.» --- */
     #ordersTable[data-active-tab="writeoff20"] {
-      min-width: 1040px;
+      --orders-col-order-w: 200px;
+      --orders-col-shipment-vat-w: 112px;
+      --orders-col-shipment-no-vat-w: 112px;
+      min-width: 0;
     }
 
     #ordersTable[data-active-tab="writeoff20"] thead th {
@@ -507,33 +510,59 @@
     #ordersTable[data-active-tab="writeoff20"] .col-w20-writeoff,
     #ordersTable[data-active-tab="writeoff20"] .col-w20-wip-end,
     #ordersTable[data-active-tab="writeoff20"] .col-w20-profit {
-      min-width: 108px;
+      width: 140px;
+      min-width: 140px;
+      max-width: 140px;
+      text-align: right;
     }
 
-    #ordersTable[data-active-tab="writeoff20"] .col-w20-profit-pct,
+    #ordersTable[data-active-tab="writeoff20"] .col-w20-profit-pct {
+      width: 95px;
+      min-width: 95px;
+      max-width: 100px;
+      text-align: center;
+    }
+
     #ordersTable[data-active-tab="writeoff20"] .col-w20-manual-writeoff {
-      min-width: 68px;
-      max-width: 82px;
+      width: 160px;
+      min-width: 160px;
+      max-width: 170px;
+      text-align: right;
+      overflow: visible;
     }
 
     #ordersTable[data-active-tab="writeoff20"] .col-w20-margin {
-      min-width: 64px;
-      max-width: 76px;
+      width: 58px;
+      min-width: 58px;
+      max-width: 64px;
+      text-align: right;
     }
 
     #ordersTable[data-active-tab="writeoff20"] .col-w20-control {
-      min-width: 96px;
-      max-width: 120px;
+      width: 84px;
+      min-width: 84px;
+      max-width: 96px;
       white-space: normal;
       font-size: 11px;
       line-height: 1.2;
+      text-align: left;
     }
 
-    #ordersTable[data-active-tab="writeoff20"] td input.w20-profit-percent,
-    #ordersTable[data-active-tab="writeoff20"] td input.w20-manual-writeoff,
-    #ordersTable[data-active-tab="writeoff20"] td input.shipment-vat {
+    #ordersTable[data-active-tab="writeoff20"] td input.table-num {
+      text-align: right;
       width: 100%;
-      min-width: 72px;
+      min-width: 0;
+      box-sizing: border-box;
+      white-space: nowrap;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] td.col-w20-manual-writeoff input.table-num {
+      min-width: 140px;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] td.col-w20-profit-pct input.table-num {
+      text-align: center;
+      min-width: 0;
     }
 
     #ordersTable td.w20-control.w20-status-ok {
@@ -592,7 +621,10 @@
 
     /* --- Ширины: вкладка «Списание с 26» --- */
     #ordersTable[data-active-tab="writeoff26"] {
-      min-width: 1320px;
+      --orders-col-order-w: 200px;
+      --orders-col-shipment-vat-w: 112px;
+      --orders-col-shipment-no-vat-w: 112px;
+      min-width: 0;
     }
 
     #ordersTable[data-active-tab="writeoff26"] thead th {
@@ -611,33 +643,59 @@
     #ordersTable[data-active-tab="writeoff26"] .col-w26-writeoff-20,
     #ordersTable[data-active-tab="writeoff26"] .col-w26-wip-end,
     #ordersTable[data-active-tab="writeoff26"] .col-w26-profit {
-      min-width: 100px;
+      width: 140px;
+      min-width: 140px;
+      max-width: 140px;
+      text-align: right;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] .col-w26-profit-pct,
+    #ordersTable[data-active-tab="writeoff26"] .col-w26-profit-pct {
+      width: 95px;
+      min-width: 95px;
+      max-width: 100px;
+      text-align: center;
+    }
+
     #ordersTable[data-active-tab="writeoff26"] .col-w26-manual-writeoff {
-      min-width: 68px;
-      max-width: 82px;
+      width: 160px;
+      min-width: 160px;
+      max-width: 170px;
+      text-align: right;
+      overflow: visible;
     }
 
     #ordersTable[data-active-tab="writeoff26"] .col-w26-profit-margin {
-      min-width: 64px;
-      max-width: 76px;
+      width: 58px;
+      min-width: 58px;
+      max-width: 64px;
+      text-align: right;
     }
 
     #ordersTable[data-active-tab="writeoff26"] .col-w26-control {
-      min-width: 96px;
-      max-width: 130px;
+      width: 84px;
+      min-width: 84px;
+      max-width: 96px;
       white-space: normal;
       font-size: 11px;
       line-height: 1.2;
+      text-align: left;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] td input.w26-profit-percent,
-    #ordersTable[data-active-tab="writeoff26"] td input.w26-manual-writeoff,
-    #ordersTable[data-active-tab="writeoff26"] td input.shipment-vat {
+    #ordersTable[data-active-tab="writeoff26"] td input.table-num {
+      text-align: right;
       width: 100%;
-      min-width: 72px;
+      min-width: 0;
+      box-sizing: border-box;
+      white-space: nowrap;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"] td.col-w26-manual-writeoff input.table-num {
+      min-width: 140px;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"] td.col-w26-profit-pct input.table-num {
+      text-align: center;
+      min-width: 0;
     }
 
     #ordersTable td.w26-control.w26-status-ok {

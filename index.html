@@ -962,6 +962,55 @@
       box-sizing: border-box;
     }
 
+    .transfers-panel-toolbar {
+      margin: 12px 0 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    #transfersTable th,
+    #transfersTable td {
+      padding: 8px 10px;
+      vertical-align: middle;
+    }
+
+    #transfersTable input.transfer-from,
+    #transfersTable input.transfer-to,
+    #transfersTable input.transfer-comment {
+      width: 100%;
+      min-width: 160px;
+      box-sizing: border-box;
+    }
+
+    #transfersTable input.transfer-amount {
+      width: 100%;
+      min-width: 120px;
+      text-align: right;
+      box-sizing: border-box;
+    }
+
+    #transfersTable select.transfer-type {
+      min-width: 200px;
+      max-width: 100%;
+    }
+
+    #transfersTable td.transfer-control {
+      font-size: 12px;
+      white-space: nowrap;
+      color: #166534;
+      font-weight: 600;
+    }
+
+    #transfersTable tr.row-transfer-over-limit td:not(:first-child):not(:last-child) {
+      background: #fee2e2;
+    }
+
+    #transfersTable tr.row-transfer-over-limit td.transfer-control {
+      color: #b91c1c;
+    }
+
     #ordersTable :is(th, td).tab-v-internal {
       display: none !important;
     }
@@ -1533,12 +1582,18 @@
         <button type="button" class="orders-tab-btn" data-orders-tab="grouping" role="tab" aria-selected="false">
           Группировка заказов
         </button>
+        <button type="button" class="orders-tab-btn" data-orders-tab="transfers" role="tab" aria-selected="false">
+          Перенос НЗП
+        </button>
         <button type="button" class="orders-tab-btn" data-orders-tab="economist" role="tab" aria-selected="false">
           План списания и НЗП
         </button>
         <button type="button" class="orders-tab-btn" data-orders-tab="reconcile" role="tab" aria-selected="false">
           НЗП для 1С
         </button>
+      </div>
+      <div class="hint" id="expensesTransfersHint" hidden>
+        Суммы на этой вкладке — как в 1С. На вкладках «Списание 20 сч.» и «Списание с 26» дополнительно учитываются переносы с вкладки «Перенос НЗП».
       </div>
       <div class="hint" id="ordersTabReconcileHint" hidden>
         26 счёт в 1С закрывается отдельно. Для инвентаризации НЗП ориентир — колонка «НЗП на 20 сч.».
@@ -1708,6 +1763,33 @@
               </tr>
             </thead>
             <tbody id="groupingTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="ordersTransfersPanel" hidden>
+        <div class="transfers-panel-toolbar">
+          <button type="button" id="addTransferBtn" class="secondary">Добавить перенос</button>
+          <span class="hint" id="transfersSaveStatus"></span>
+        </div>
+        <div class="hint" style="margin-bottom: 8px;">
+          Управленческий перенос НЗП нач. 20 или расходов периода 20 между расчётными группами. Исходные строки и импорт из 1С не меняются. 26 счёт не затрагивается.
+        </div>
+        <datalist id="transferGroupList"></datalist>
+        <div class="table-wrap">
+          <table id="transfersTable" class="orders-block-table transfers-table">
+            <thead>
+              <tr>
+                <th>Источник</th>
+                <th>Получатель</th>
+                <th>Сумма</th>
+                <th>Тип переноса</th>
+                <th>Комментарий</th>
+                <th>Контроль</th>
+                <th>Удалить</th>
+              </tr>
+            </thead>
+            <tbody id="transfersTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -2098,12 +2180,14 @@
     let orderGrouping = {};
     let groupCalc20 = {};
     let groupCalc26 = {};
+    let periodTransfers = [];
     let lastAllRowsFootTotals = null;
     let lastGroupFootTotals = null;
     let lastTabWarnings = {
       expenses: [],
       writeoff20: [],
       writeoff26: [],
+      transfers: [],
       economist: [],
       reconcile: []
     };
@@ -2233,6 +2317,281 @@
     function buildCalculationGroups() {
       ensureGroupingForAllRows();
       return getOrderGroupsForCalculations();
+    }
+
+    function normalizeTransfer(t) {
+      return {
+        from: String(t?.from ?? '').trim(),
+        to: String(t?.to ?? '').trim(),
+        amount: t?.amount != null ? String(t.amount) : '',
+        type: t?.type === 'periodExp20' ? 'periodExp20' : 'wipStart20',
+        comment: String(t?.comment ?? '')
+      };
+    }
+
+    function getCalculationGroupNames() {
+      return buildCalculationGroups()
+        .map(g => g.groupName)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'ru'));
+    }
+
+    function computeTransferAdjustmentsByGroup(transfers, excludeIndex) {
+      const map = new Map();
+      const add = (groupName, field, delta) => {
+        const key = String(groupName || '').trim();
+        if (!key || !delta) return;
+        if (!map.has(key)) {
+          map.set(key, { wipStartDelta: 0, periodExp20Delta: 0 });
+        }
+        map.get(key)[field] += delta;
+      };
+
+      (transfers || []).forEach((t, i) => {
+        if (excludeIndex != null && i === excludeIndex) return;
+        const from = String(t.from || '').trim();
+        const to = String(t.to || '').trim();
+        const amount = num(t.amount);
+        if (!from || !to || amount <= 0) return;
+        if (t.type === 'periodExp20') {
+          add(from, 'periodExp20Delta', -amount);
+          add(to, 'periodExp20Delta', amount);
+        } else {
+          add(from, 'wipStartDelta', -amount);
+          add(to, 'wipStartDelta', amount);
+        }
+      });
+      return map;
+    }
+
+    function applyTransferAdjustmentsToSums(sums, groupName, adjustmentsMap) {
+      const adj = adjustmentsMap && adjustmentsMap.get(groupName);
+      if (!adj) return sums;
+      const result = Object.assign({}, sums);
+      result.wipStart = sums.wipStart + (adj.wipStartDelta || 0);
+      result.periodExp20 = sums.periodExp20 + (adj.periodExp20Delta || 0);
+      result.periodExp26 = result.periodExp20 + sums.acc26;
+      result.totalWithWip20 = result.wipStart + result.periodExp20;
+      result.totalWithWip26 = result.wipStart + result.periodExp26;
+      return result;
+    }
+
+    function sumGroupMetricsWithTransfers(memberRows, groupName, transfers) {
+      const sums = sumGroupMetrics(memberRows);
+      const adjMap = computeTransferAdjustmentsByGroup(transfers != null ? transfers : periodTransfers);
+      return applyTransferAdjustmentsToSums(sums, groupName, adjMap);
+    }
+
+    function getGroupRawMetricsForTransfer(groupName) {
+      const groups = buildCalculationGroups();
+      const g = groups.find(x => x.groupName === groupName);
+      if (!g) return { wipStart: 0, periodExp20: 0 };
+      const sums = sumGroupMetrics(g.rows);
+      return { wipStart: sums.wipStart, periodExp20: sums.periodExp20 };
+    }
+
+    function validateTransfer(transfer, index, transfers) {
+      const from = String(transfer?.from || '').trim();
+      const amount = num(transfer?.amount);
+      const type = transfer?.type === 'periodExp20' ? 'periodExp20' : 'wipStart20';
+      if (!from || amount <= 0) {
+        return { overLimit: false, available: 0 };
+      }
+      const raw = getGroupRawMetricsForTransfer(from);
+      const adjMap = computeTransferAdjustmentsByGroup(transfers, index);
+      const adj = adjMap.get(from) || { wipStartDelta: 0, periodExp20Delta: 0 };
+      const available =
+        type === 'periodExp20'
+          ? raw.periodExp20 + adj.periodExp20Delta
+          : raw.wipStart + adj.wipStartDelta;
+      return {
+        overLimit: amount > available + RECONCILE_EPS,
+        available
+      };
+    }
+
+    function collectTransfersFromPanel() {
+      const body = document.getElementById('transfersTableBody');
+      if (!body) return;
+      const rows = body.querySelectorAll('tr[data-transfer-index]');
+      periodTransfers = Array.from(rows).map(tr => {
+        return normalizeTransfer({
+          from: tr.querySelector('.transfer-from')?.value,
+          to: tr.querySelector('.transfer-to')?.value,
+          amount: tr.querySelector('.transfer-amount')?.value,
+          type: tr.querySelector('.transfer-type')?.value,
+          comment: tr.querySelector('.transfer-comment')?.value
+        });
+      });
+    }
+
+    function updateTransferRowValidation(tr, transfer, index) {
+      const ctrl = tr.querySelector('.transfer-control');
+      const v = validateTransfer(transfer, index, periodTransfers);
+      tr.classList.toggle('row-transfer-over-limit', v.overLimit);
+      if (ctrl) {
+        ctrl.textContent = v.overLimit ? 'Перенос больше доступной суммы источника' : 'ОК';
+        ctrl.title = v.overLimit
+          ? 'Доступно: ' + fmt(v.available)
+          : '';
+      }
+    }
+
+    function refreshTransferGroupDatalist() {
+      const dl = document.getElementById('transferGroupList');
+      if (!dl) return;
+      dl.innerHTML = '';
+      getCalculationGroupNames().forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        dl.appendChild(opt);
+      });
+    }
+
+    function renderTransfersPanel() {
+      refreshTransferGroupDatalist();
+      const body = document.getElementById('transfersTableBody');
+      if (!body) return;
+      body.innerHTML = '';
+      periodTransfers.forEach((t, index) => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-transfer-index', String(index));
+
+        const mkInput = (cls, value, attrs) => {
+          const td = document.createElement('td');
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.className = cls;
+          if (attrs && attrs.list) inp.setAttribute('list', attrs.list);
+          if (attrs && attrs.inputmode) inp.setAttribute('inputmode', attrs.inputmode);
+          inp.value = value != null ? String(value) : '';
+          td.appendChild(inp);
+          return td;
+        };
+
+        tr.appendChild(mkInput('transfer-from', t.from, { list: 'transferGroupList' }));
+        tr.appendChild(mkInput('transfer-to', t.to, { list: 'transferGroupList' }));
+
+        const tdAmt = document.createElement('td');
+        const amtInp = document.createElement('input');
+        amtInp.type = 'text';
+        amtInp.className = 'transfer-amount table-num';
+        amtInp.setAttribute('inputmode', 'decimal');
+        amtInp.value = t.amount != null ? String(t.amount) : '';
+        tdAmt.appendChild(amtInp);
+        tr.appendChild(tdAmt);
+
+        const tdType = document.createElement('td');
+        const sel = document.createElement('select');
+        sel.className = 'transfer-type';
+        [
+          { v: 'wipStart20', l: 'Из НЗП нач. 20' },
+          { v: 'periodExp20', l: 'Из расходов периода 20' }
+        ].forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt.v;
+          o.textContent = opt.l;
+          if (t.type === opt.v) o.selected = true;
+          sel.appendChild(o);
+        });
+        tdType.appendChild(sel);
+        tr.appendChild(tdType);
+
+        tr.appendChild(mkInput('transfer-comment', t.comment));
+
+        const tdCtrl = document.createElement('td');
+        tdCtrl.className = 'transfer-control';
+        tr.appendChild(tdCtrl);
+
+        const tdDel = document.createElement('td');
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'delete-transfer secondary';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Удалить перенос';
+        tdDel.appendChild(delBtn);
+        tr.appendChild(tdDel);
+
+        updateTransferRowValidation(tr, t, index);
+        body.appendChild(tr);
+      });
+
+      const locked = isPeriodFinal();
+      body.querySelectorAll('input, select, button.delete-transfer').forEach(el => {
+        if (el.classList.contains('delete-transfer')) {
+          el.disabled = locked;
+          return;
+        }
+        el.disabled = locked;
+        if (el.tagName === 'INPUT') el.readOnly = locked;
+      });
+      setButtonDisabled('addTransferBtn', locked);
+    }
+
+    function onTransferPanelChange() {
+      if (isPeriodFinal()) return;
+      collectTransfersFromPanel();
+      const body = document.getElementById('transfersTableBody');
+      if (body) {
+        body.querySelectorAll('tr[data-transfer-index]').forEach((tr, index) => {
+          updateTransferRowValidation(tr, periodTransfers[index], index);
+        });
+      }
+      calculateAll();
+      autoSave();
+    }
+
+    function setupTransfersPanel() {
+      const panel = document.getElementById('ordersTransfersPanel');
+      const addBtn = document.getElementById('addTransferBtn');
+      const body = document.getElementById('transfersTableBody');
+      if (!panel || !addBtn || !body || panel.dataset.bound) return;
+      panel.dataset.bound = '1';
+
+      addBtn.addEventListener('click', () => {
+        if (isPeriodFinal()) return;
+        periodTransfers.push({
+          from: '',
+          to: '',
+          amount: '',
+          type: 'wipStart20',
+          comment: ''
+        });
+        renderTransfersPanel();
+        onTransferPanelChange();
+      });
+
+      body.addEventListener('click', e => {
+        const btn = e.target.closest('.delete-transfer');
+        if (!btn || isPeriodFinal()) return;
+        const tr = btn.closest('tr[data-transfer-index]');
+        if (!tr) return;
+        const index = Number(tr.getAttribute('data-transfer-index'));
+        periodTransfers.splice(index, 1);
+        renderTransfersPanel();
+        onTransferPanelChange();
+      });
+
+      body.addEventListener('change', e => {
+        if (e.target.matches('select.transfer-type')) onTransferPanelChange();
+      });
+
+      body.addEventListener('focusout', e => {
+        const t = e.target;
+        if (!t.matches || !t.matches('input.transfer-from, input.transfer-to, input.transfer-amount, input.transfer-comment')) {
+          return;
+        }
+        if (t.classList.contains('transfer-amount')) onTableNumBlur(t);
+        onTransferPanelChange();
+      });
+
+      body.addEventListener('keydown', e => {
+        const t = e.target;
+        if (e.key !== 'Enter' || !t.matches || !t.matches('input.transfer-amount')) return;
+        e.preventDefault();
+        onTableNumBlur(t);
+        onTransferPanelChange();
+      });
     }
 
     function sumGroupMetrics(memberRows) {
@@ -2504,6 +2863,10 @@
       } else {
         ensureGroupingForAllRows();
       }
+      const transfersBody = document.getElementById('transfersTableBody');
+      if (transfersBody && transfersBody.querySelector('tr[data-transfer-index]')) {
+        collectTransfersFromPanel();
+      }
 
       const active = document.activeElement;
       if (isGroupCalcActiveInput(active)) {
@@ -2537,7 +2900,7 @@
       };
 
       groups.forEach(group => {
-        const sums = sumGroupMetrics(group.rows);
+        const sums = sumGroupMetricsWithTransfers(group.rows, group.groupName);
         const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
         const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
         const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
@@ -2574,13 +2937,25 @@
       return foot;
     }
 
+    function collectTransferTabWarnings() {
+      const warnings = [];
+      periodTransfers.forEach((t, i) => {
+        const v = validateTransfer(t, i, periodTransfers);
+        if (v.overLimit) {
+          const label = `«${t.from || '—'}» → «${t.to || '—'}»`;
+          warnings.push(`Перенос ${label}: сумма больше доступного остатка у источника.`);
+        }
+      });
+      return warnings;
+    }
+
     function collectGroupWriteoffTabWarnings(groups) {
       const writeoff20 = [];
       const writeoff26 = [];
 
       groups.forEach(group => {
         const label = group.groupName || '—';
-        const sums = sumGroupMetrics(group.rows);
+        const sums = sumGroupMetricsWithTransfers(group.rows, group.groupName);
         const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
         const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
         const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
@@ -2634,6 +3009,8 @@
         messages = lastTabWarnings.writeoff20;
       } else if (tab === 'writeoff26') {
         messages = lastTabWarnings.writeoff26;
+      } else if (tab === 'transfers') {
+        messages = lastTabWarnings.transfers;
       } else if (tab === 'economist') {
         messages = lastTabWarnings.economist;
       } else if (tab === 'reconcile') {
@@ -2642,7 +3019,7 @@
 
       if (messages.length) {
         warningBox.innerHTML = '<span class="danger">' + messages.join('<br>') + '</span>';
-      } else if (tab === 'expenses' || tab === 'grouping') {
+      } else if (tab === 'expenses' || tab === 'grouping' || tab === 'transfers') {
         warningBox.textContent = '';
       } else {
         warningBox.textContent = 'Ограничения не сработали. Расчёт выполнен.';
@@ -3012,7 +3389,8 @@
           tabId === 'reconcile' ||
           tabId === 'writeoff20' ||
           tabId === 'writeoff26' ||
-          tabId === 'grouping'
+          tabId === 'grouping' ||
+          tabId === 'transfers'
             ? tabId
             : 'expenses';
         table.setAttribute('data-active-tab', id);
@@ -3023,11 +3401,18 @@
         });
         const scrollOuter = document.getElementById('ordersTableScrollOuter');
         const groupingPanel = document.getElementById('ordersGroupingPanel');
-        if (scrollOuter) scrollOuter.hidden = id === 'grouping';
+        const transfersPanel = document.getElementById('ordersTransfersPanel');
+        const expensesHint = document.getElementById('expensesTransfersHint');
+        if (scrollOuter) scrollOuter.hidden = id === 'grouping' || id === 'transfers';
         if (groupingPanel) {
           groupingPanel.hidden = id !== 'grouping';
           if (id === 'grouping') renderGroupingPanel();
         }
+        if (transfersPanel) {
+          transfersPanel.hidden = id !== 'transfers';
+          if (id === 'transfers') renderTransfersPanel();
+        }
+        if (expensesHint) expensesHint.hidden = id !== 'expenses';
         if (hint) hint.hidden = id !== 'reconcile';
         if (id === 'writeoff20' || id === 'writeoff26') {
           getRows().forEach(row => syncWriteoffPlanInputsInRow(row));
@@ -4502,10 +4887,12 @@
       calculateAndRenderGroupedRows();
 
       const groupWarnings = collectGroupWriteoffTabWarnings(buildCalculationGroups());
+      const transferWarnings = collectTransferTabWarnings();
       lastTabWarnings = {
         expenses: [],
-        writeoff20: groupWarnings.writeoff20,
-        writeoff26: groupWarnings.writeoff26,
+        writeoff20: groupWarnings.writeoff20.concat(transferWarnings),
+        writeoff26: groupWarnings.writeoff26.concat(transferWarnings),
+        transfers: transferWarnings,
         economist: economistWarnings,
         reconcile: reconcileWarnings
       };
@@ -4916,7 +5303,18 @@
           inp.disabled = locked;
         });
       }
+      const transfersPanel = document.getElementById('ordersTransfersPanel');
+      if (transfersPanel) {
+        transfersPanel.querySelectorAll('input, select').forEach(inp => {
+          inp.readOnly = locked;
+          inp.disabled = locked;
+        });
+        transfersPanel.querySelectorAll('button.delete-transfer').forEach(btn => {
+          btn.disabled = locked;
+        });
+      }
       setButtonDisabled('saveGroupingBtn', locked);
+      setButtonDisabled('addTransferBtn', locked);
     }
 
     function setButtonDisabled(id, disabled) {
@@ -5333,7 +5731,8 @@
         rows,
         grouping: groupingCopy,
         groupCalc20: groupCalc20Copy,
-        groupCalc26: groupCalc26Copy
+        groupCalc26: groupCalc26Copy,
+        transfers: periodTransfers.map(t => ({ ...t }))
       };
     }
 
@@ -5354,6 +5753,11 @@
         orderGrouping = {};
       }
       applyLoadedGroupCalcData(data);
+
+      periodTransfers = Array.isArray(data.transfers)
+        ? data.transfers.map(normalizeTransfer)
+        : [];
+      renderTransfersPanel();
 
       setPeriodStatus(data.periodStatus || 'draft');
       const isFinal = getPeriodStatus() === 'final';
@@ -6340,10 +6744,12 @@
       orderGrouping = {};
       groupCalc20 = {};
       groupCalc26 = {};
+      periodTransfers = [];
       const groupBody = document.getElementById('ordersGroupBody');
       if (groupBody) groupBody.innerHTML = '';
       const groupingStatus = document.getElementById('groupingSaveStatus');
       if (groupingStatus) groupingStatus.textContent = '';
+      renderTransfersPanel();
 
       document.getElementById('vatRate').value = '22';
       document.getElementById('totalInsurance').value = '0';
@@ -7026,7 +7432,7 @@
       };
     }
 
-    function sumGroupMetricsFromPeriodData(memberRows, globals, totals) {
+    function sumGroupMetricsFromPeriodData(memberRows, globals, totals, groupName, transfers) {
       let shipmentVat = 0;
       let shipmentNoVat = 0;
       let wipStart = 0;
@@ -7061,7 +7467,7 @@
 
       const periodExp26 = periodExp20 + acc26;
 
-      return {
+      const base = {
         shipmentVat,
         shipmentNoVat,
         wipStart,
@@ -7071,6 +7477,10 @@
         totalWithWip20: wipStart + periodExp20,
         totalWithWip26: wipStart + periodExp26
       };
+
+      if (!groupName) return base;
+      const adjMap = computeTransferAdjustmentsByGroup(transfers || []);
+      return applyTransferAdjustmentsToSums(base, groupName, adjMap);
     }
 
     function getGroupCalc26SettingsFromPeriodData(
@@ -7148,9 +7558,16 @@
         data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
       const legacy =
         data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
 
       return buildCalculationGroupsFromPeriodData(data).map(group => {
-        const sums = sumGroupMetricsFromPeriodData(group.memberRows, globals, totals);
+        const sums = sumGroupMetricsFromPeriodData(
+          group.memberRows,
+          globals,
+          totals,
+          group.groupName,
+          transfers
+        );
         const calc26 = getGroupCalc26SettingsFromPeriodData(
           group.groupName,
           group.memberRows,
@@ -8607,6 +9024,7 @@
     updatePeriodStatusUI();
     setupOrderNameTooltipHandlers();
     setupOrdersTableTabs();
+    setupTransfersPanel();
     setupPeriodSummaryToggle();
     (async function initFromCloud() {
       try {

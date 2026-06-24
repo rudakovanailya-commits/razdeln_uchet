@@ -2685,6 +2685,20 @@
       }
     }
 
+    function updateSummaryCardsForActiveTab() {
+      const table = document.getElementById('ordersTable');
+      const tab = table ? table.getAttribute('data-active-tab') : 'expenses';
+      const endingWipEl = document.getElementById('totalEndingWIP');
+      if (!endingWipEl) return;
+
+      if ((tab === 'writeoff26' || tab === 'writeoff20') && lastGroupFootTotals) {
+        const g = lastGroupFootTotals;
+        endingWipEl.textContent = fmt(tab === 'writeoff26' ? g.w26WipEnd : g.w20WipEnd);
+      } else if (lastAllRowsFootTotals && lastAllRowsFootTotals.totalEndingWIP != null) {
+        endingWipEl.textContent = fmt(lastAllRowsFootTotals.totalEndingWIP);
+      }
+    }
+
     function saveOrderGrouping() {
       collectGroupingFromPanel();
       calculateAll();
@@ -3029,6 +3043,9 @@
             if (el) el.textContent = pct.toFixed(1) + '%';
           };
           updateFootForActiveTab(setFoot, setFootPct);
+        }
+        if (typeof updateSummaryCardsForActiveTab === 'function') {
+          updateSummaryCardsForActiveTab();
         }
         if (typeof renderWarningBoxForActiveTab === 'function') {
           renderWarningBoxForActiveTab();
@@ -4495,7 +4512,9 @@
 
       lastAllRowsFootTotals = {
         shipmentVat: totalShipmentVat,
-        shipmentNoVat: totalShipmentNoVat
+        shipmentNoVat: totalShipmentNoVat,
+        totalWrittenOff,
+        totalEndingWIP
       };
 
       const setFoot = (id, v) => {
@@ -4541,6 +4560,7 @@
       if (totalCostNo26El) totalCostNo26El.textContent = fmt(sumFootTotalCostNo26);
       document.getElementById('totalWrittenOff').textContent = fmt(totalWrittenOff);
       document.getElementById('totalEndingWIP').textContent = fmt(totalEndingWIP);
+      updateSummaryCardsForActiveTab();
 
       renderWarningBoxForActiveTab();
 

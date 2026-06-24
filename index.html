@@ -553,9 +553,37 @@
       font-weight: 600;
     }
 
-    #ordersTable.orders-block-table tbody tr.row-w20-writeoff-over:hover td,
-    #ordersTable.orders-block-table tbody tr.row-w20-negative-wip:hover td {
-      background: #fecaca;
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td,
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td {
+      background: #fecaca !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"]
+      .orders-block-table
+      tbody
+      tr.row-w20-writeoff-over:hover
+      td,
+    #ordersTable[data-active-tab="writeoff20"]
+      .orders-block-table
+      tbody
+      tr.row-w20-negative-wip:hover
+      td {
+      background: #fca5a5 !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] td.cell-validate-negative {
+      box-shadow: inset 0 0 0 2px #b91c1c;
+      background: #fef2f2 !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.orders-col-order,
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.shipment-no-vat,
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td.orders-col-order,
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="writeoff20"] tr.row-w20-negative-wip td.shipment-no-vat {
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
     }
 
     /* --- Ширины: вкладка «Списание с 26» --- */
@@ -621,10 +649,46 @@
       font-weight: 600;
     }
 
-    #ordersTable.orders-block-table tbody tr.row-w26-writeoff-over:hover td,
-    #ordersTable.orders-block-table tbody tr.row-w26-negative-wip:hover td,
-    #ordersTable.orders-block-table tbody tr.row-w26-writeoff20-negative:hover td {
-      background: #fecaca;
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td {
+      background: #fecaca !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"]
+      .orders-block-table
+      tbody
+      tr.row-w26-writeoff-over:hover
+      td,
+    #ordersTable[data-active-tab="writeoff26"]
+      .orders-block-table
+      tbody
+      tr.row-w26-negative-wip:hover
+      td,
+    #ordersTable[data-active-tab="writeoff26"]
+      .orders-block-table
+      tbody
+      tr.row-w26-writeoff20-negative:hover
+      td {
+      background: #fca5a5 !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"] td.cell-validate-negative {
+      box-shadow: inset 0 0 0 2px #b91c1c;
+      background: #fef2f2 !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.orders-col-order,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.shipment-no-vat,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td.orders-col-order,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-negative-wip td.shipment-no-vat,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td.orders-col-order,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff20-negative td.shipment-no-vat {
+      background: var(--orders-sticky-pin-bg) !important;
+      color: var(--orders-sticky-pin-text);
     }
 
 
@@ -861,18 +925,18 @@
       color: var(--orders-sticky-pin-text);
     }
 
-    #ordersTable tr.row-validate-writeoff td.orders-col-order,
-    #ordersTable tr.row-validate-writeoff td.orders-col-shipment-vat,
-    #ordersTable tr.row-validate-writeoff td.shipment-no-vat,
-    #ordersTable tr.row-negative-margin td.orders-col-order,
-    #ordersTable tr.row-negative-margin td.orders-col-shipment-vat,
-    #ordersTable tr.row-negative-margin td.shipment-no-vat,
+    #ordersTable[data-active-tab="economist"] tr.row-validate-writeoff td.orders-col-order,
+    #ordersTable[data-active-tab="economist"] tr.row-validate-writeoff td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="economist"] tr.row-validate-writeoff td.shipment-no-vat,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-margin td.orders-col-order,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-margin td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-margin td.shipment-no-vat,
     #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td.orders-col-order,
     #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td.orders-col-shipment-vat,
     #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td.shipment-no-vat,
-    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td.orders-col-order,
-    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td.orders-col-shipment-vat,
-    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td.shipment-no-vat,
+    #ordersTable[data-active-tab="reconcile"] tr.row-reconcile-error td.orders-col-order,
+    #ordersTable[data-active-tab="reconcile"] tr.row-reconcile-error td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="reconcile"] tr.row-reconcile-error td.shipment-no-vat,
     #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td.orders-col-order,
     #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td.orders-col-shipment-vat,
     #ordersTable[data-active-tab="reconcile"] tr.row-negative-profit-with26 td.shipment-no-vat {
@@ -880,12 +944,36 @@
       color: var(--orders-sticky-pin-text);
     }
 
-    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.orders-col-order,
-    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.orders-col-shipment-vat,
-    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td.shipment-no-vat,
-    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td.orders-col-order,
-    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td.orders-col-shipment-vat,
-    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td.shipment-no-vat,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-negative-margin:hover
+      td.orders-col-order,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-negative-margin:hover
+      td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-negative-margin:hover
+      td.shipment-no-vat,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-validate-writeoff:hover
+      td.orders-col-order,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-validate-writeoff:hover
+      td.orders-col-shipment-vat,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-validate-writeoff:hover
+      td.shipment-no-vat,
     #ordersTable[data-active-tab="reconcile"]
       .orders-block-table
       tbody
@@ -905,35 +993,58 @@
       color: var(--orders-sticky-pin-text);
     }
 
-    #ordersTable input.cell-validate-hi-input {
+    #ordersTable[data-active-tab="expenses"] input.cell-validate-hi-input {
       border-color: #ca8a04 !important;
       box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.5);
       background: #fffbeb !important;
     }
 
-    #ordersTable input.cell-validate-zero {
+    #ordersTable[data-active-tab="expenses"] input.cell-validate-zero {
       border-color: #ca8a04 !important;
       box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.5);
       background: #fffbeb !important;
     }
 
-    /* Критические ошибки — розовая строка */
-    #ordersTable tr.row-validate-writeoff td,
-    #ordersTable tr.row-negative-margin td {
+    /* Критические ошибки — только на своей вкладке */
+    #ordersTable[data-active-tab="economist"] tr.row-validate-writeoff td,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-margin td,
+    #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td {
       background: #fecaca !important;
     }
 
-    #ordersTable.orders-block-table tbody tr.row-negative-margin:hover td,
-    #ordersTable.orders-block-table tbody tr.row-validate-writeoff:hover td {
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-negative-margin:hover
+      td,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-validate-writeoff:hover
+      td,
+    #ordersTable[data-active-tab="economist"]
+      .orders-block-table
+      tbody
+      tr.row-negative-wip-end:hover
+      td {
       background: #fca5a5 !important;
     }
 
-    #ordersTable[data-active-tab="economist"] tr.row-negative-wip-end td,
-    #ordersTable[data-active-tab="reconcile"] tr.row-negative-wip-end td {
+    #ordersTable[data-active-tab="economist"] td.wip-end.cell-validate-negative,
+    #ordersTable[data-active-tab="economist"] td.write-off.cell-validate-negative {
+      box-shadow: inset 0 0 0 2px #b91c1c;
+      background: #fef2f2 !important;
+    }
+
+    #ordersTable[data-active-tab="reconcile"] tr.row-reconcile-error td {
       background: #fecaca !important;
     }
 
-    #ordersTable.orders-block-table tbody tr.row-negative-wip-end:hover td {
+    #ordersTable[data-active-tab="reconcile"]
+      .orders-block-table
+      tbody
+      tr.row-reconcile-error:hover
+      td {
       background: #fca5a5 !important;
     }
 
@@ -957,11 +1068,6 @@
     #ordersTable td.cell-warning-reconcile-26 {
       box-shadow: inset 0 0 0 2px #f59e0b;
       background: #fffbeb !important;
-    }
-
-    #ordersTable td.cell-validate-negative {
-      box-shadow: inset 0 0 0 2px #b91c1c;
-      background: #fef2f2 !important;
     }
 
     #orderReportBox {
@@ -3544,6 +3650,7 @@
         'row-negative-margin',
         'row-negative-profit-with26',
         'row-negative-wip-end',
+        'row-reconcile-error',
         'row-w20-writeoff-over',
         'row-w20-negative-wip',
         'row-w26-writeoff-over',
@@ -3590,6 +3697,8 @@
       const wip20Cell = row.querySelector('.wip-no26');
       const commentEl = row.querySelector('.reconcile-comment');
 
+      row.classList.remove('row-reconcile-error');
+
       let status;
       let comment = '';
 
@@ -3613,9 +3722,19 @@
       if (writeOff20 < -RECONCILE_EPS) {
         status = '20 < 0';
         comment = 'Общее списание меньше 26. Расчет НЗП залезает в 26 счет.';
+        row.classList.add('row-reconcile-error');
         if (writeOff20Cell) {
           writeOff20Cell.classList.add('cell-validate-negative');
           writeOff20Cell.title = comment;
+        }
+        if (statusEl) statusEl.classList.add('reconcile-status-check');
+      } else if (wip20 < -RECONCILE_EPS) {
+        status = 'НЗП 20 < 0';
+        comment = 'Отрицательное НЗП на 20 сч.';
+        row.classList.add('row-reconcile-error');
+        if (wip20Cell) {
+          wip20Cell.classList.add('cell-validate-negative');
+          wip20Cell.title = comment;
         }
         if (statusEl) statusEl.classList.add('reconcile-status-check');
       } else if (acc26 > RECONCILE_EPS) {
@@ -3658,6 +3777,8 @@
       const statusEl = row.querySelector('.w20-control');
       const writeOffCell = row.querySelector('.w20-writeoff');
       const wipEndCell = row.querySelector('.w20-wip-end');
+
+      row.classList.remove('row-w20-writeoff-over', 'row-w20-negative-wip');
 
       if (writeOffCell) {
         writeOffCell.classList.remove('cell-validate-negative');
@@ -3731,6 +3852,12 @@
       const writeOffTotalCell = row.querySelector('.w26-writeoff-total');
       const wipEndCell = row.querySelector('.w26-wip-end');
       const writeOff20Cell = row.querySelector('.w26-writeoff-20');
+
+      row.classList.remove(
+        'row-w26-writeoff-over',
+        'row-w26-negative-wip',
+        'row-w26-writeoff20-negative'
+      );
 
       [writeOffTotalCell, wipEndCell, writeOff20Cell].forEach(cell => {
         if (!cell) return;
@@ -3970,6 +4097,8 @@
         const rowHasOtherSums = totalCost > 0 || shipmentNoVat > 0;
 
         row.querySelectorAll('input.table-num').forEach(el => {
+          const td = el.closest('td');
+          if (!td || !td.classList.contains('tab-v-expenses')) return;
           if (
             (el.classList.contains('manual-writeoff') ||
               el.classList.contains('w20-manual-writeoff') ||

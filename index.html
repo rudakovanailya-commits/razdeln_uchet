@@ -2084,6 +2084,13 @@
     let groupCalc26 = {};
     let lastAllRowsFootTotals = null;
     let lastGroupFootTotals = null;
+    let lastTabWarnings = {
+      expenses: [],
+      writeoff20: [],
+      writeoff26: [],
+      economist: [],
+      reconcile: []
+    };
 
     function getOrderNameFromRow(tr) {
       return String(tr.querySelector('.order-name')?.value ?? '').trim();
@@ -2547,6 +2554,79 @@
       return foot;
     }
 
+    function collectGroupWriteoffTabWarnings(groups) {
+      const writeoff20 = [];
+      const writeoff26 = [];
+
+      groups.forEach(group => {
+        const label = group.groupName || '—';
+        const sums = sumGroupMetrics(group.rows);
+        const calc20 = getGroupCalc20Settings(group.groupName, group.rows);
+        const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
+        const metrics20 = computeGroupWriteoff20Metrics(sums, calc20);
+        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26, metrics20.writeOff20);
+
+        if (metrics20.writeOff20 > sums.totalWithWip20 + RECONCILE_EPS) {
+          writeoff20.push(
+            `Группа «${label}»: списание 20 (${fmt(metrics20.writeOff20)}) больше, чем всего с НЗП (${fmt(sums.totalWithWip20)}).`
+          );
+        }
+        if (metrics20.wipEnd20 < -RECONCILE_EPS) {
+          writeoff20.push(
+            `Группа «${label}»: отрицательное НЗП конец 20 (${fmt(metrics20.wipEnd20)}).`
+          );
+        }
+
+        if (metrics26.validation.manualLessThan20) {
+          writeoff26.push(`Группа «${label}»: списание всего меньше списания 20.`);
+        }
+        if (metrics26.validation.writeoff26OverExpenses) {
+          writeoff26.push(
+            `Группа «${label}»: списание 26 (${fmt(metrics26.writeOff26Part)}) больше расходов 26 (${fmt(sums.acc26)}).`
+          );
+        }
+        if (metrics26.writeOffTotal > sums.totalWithWip26 + RECONCILE_EPS) {
+          writeoff26.push(
+            `Группа «${label}»: списано всего (${fmt(metrics26.writeOffTotal)}) больше, чем итого с НЗП (${fmt(sums.totalWithWip26)}).`
+          );
+        }
+        if (metrics26.wipEnd26 < -RECONCILE_EPS) {
+          writeoff26.push(
+            `Группа «${label}»: отрицательное НЗП конец (${fmt(metrics26.wipEnd26)}).`
+          );
+        }
+      });
+
+      return { writeoff20, writeoff26 };
+    }
+
+    function renderWarningBoxForActiveTab() {
+      const warningBox = document.getElementById('warningBox');
+      if (!warningBox) return;
+
+      const table = document.getElementById('ordersTable');
+      const tab = table?.getAttribute('data-active-tab') || 'expenses';
+
+      let messages = [];
+      if (tab === 'writeoff20') {
+        messages = lastTabWarnings.writeoff20;
+      } else if (tab === 'writeoff26') {
+        messages = lastTabWarnings.writeoff26;
+      } else if (tab === 'economist') {
+        messages = lastTabWarnings.economist;
+      } else if (tab === 'reconcile') {
+        messages = lastTabWarnings.reconcile;
+      }
+
+      if (messages.length) {
+        warningBox.innerHTML = '<span class="danger">' + messages.join('<br>') + '</span>';
+      } else if (tab === 'expenses' || tab === 'grouping') {
+        warningBox.textContent = '';
+      } else {
+        warningBox.textContent = 'Ограничения не сработали. Расчёт выполнен.';
+      }
+    }
+
     function updateFootForActiveTab(setFoot, setFootPct) {
       const table = document.getElementById('ordersTable');
       const tab = table ? table.getAttribute('data-active-tab') : 'expenses';
@@ -2927,6 +3007,9 @@
             if (el) el.textContent = pct.toFixed(1) + '%';
           };
           updateFootForActiveTab(setFoot, setFootPct);
+        }
+        if (typeof renderWarningBoxForActiveTab === 'function') {
+          renderWarningBoxForActiveTab();
         }
         requestAnimationFrame(() => setupOrdersTableScrollSync());
       }
@@ -4178,7 +4261,8 @@
 
       let totalWrittenOff = 0;
       let totalEndingWIP = 0;
-      let warnings = [];
+      const economistWarnings = [];
+      const reconcileWarnings = [];
 
       let sumFootMaterials = 0;
       let sumFootProcessing = 0;
@@ -4260,12 +4344,12 @@
 
         if (writeOff > totalCost) {
           writeOff = totalCost;
-          warnings.push(`Заказ "${orderName}": списание ограничено суммой затрат.`);
+          economistWarnings.push(`Заказ "${orderName}": списание ограничено суммой затрат.`);
         }
 
         if (writeOff < 0) {
           writeOff = 0;
-          warnings.push(`Заказ "${orderName}": списание не может быть отрицательным.`);
+          economistWarnings.push(`Заказ "${orderName}": списание не может быть отрицательным.`);
         }
 
         const wipEnd = totalCost - writeOff;
@@ -4304,6 +4388,17 @@
 
         applyReconcileRowMetrics(row, totalCost, acc26, writeOff, wipEnd);
 
+        const reconcileStatusEl = row.querySelector('.reconcile-status-1c');
+        if (reconcileStatusEl?.classList.contains('reconcile-status-check')) {
+          const comment = row.querySelector('.reconcile-comment')?.textContent?.trim();
+          reconcileWarnings.push(
+            `Заказ "${orderName}": ${reconcileStatusEl.textContent}` +
+              (comment ? ` — ${comment}` : '')
+          );
+        } else if (reconcileStatusEl?.classList.contains('reconcile-status-warn')) {
+          reconcileWarnings.push(`Заказ "${orderName}": ${reconcileStatusEl.textContent}`);
+        }
+
         if (marginPct < 0) {
           row.classList.add('row-negative-margin');
         }
@@ -4328,7 +4423,7 @@
 
         if (writeOffRaw > totalCost) {
           row.classList.add('row-validate-writeoff');
-          warnings.push(
+          economistWarnings.push(
             `Заказ "${orderName}": списание (${fmt(writeOffRaw)}) больше, чем всего затрат (${fmt(totalCost)}).`
           );
         }
@@ -4364,6 +4459,16 @@
       });
 
       calculateAndRenderGroupedRows();
+
+      const groupWarnings = collectGroupWriteoffTabWarnings(buildCalculationGroups());
+      lastTabWarnings = {
+        expenses: [],
+        writeoff20: groupWarnings.writeoff20,
+        writeoff26: groupWarnings.writeoff26,
+        economist: economistWarnings,
+        reconcile: reconcileWarnings
+      };
+
       lastAllRowsFootTotals = {
         shipmentVat: totalShipmentVat,
         shipmentNoVat: totalShipmentNoVat
@@ -4413,12 +4518,7 @@
       document.getElementById('totalWrittenOff').textContent = fmt(totalWrittenOff);
       document.getElementById('totalEndingWIP').textContent = fmt(totalEndingWIP);
 
-      const warningBox = document.getElementById('warningBox');
-      if (warnings.length) {
-        warningBox.innerHTML = '<span class="danger">' + warnings.join('<br>') + '</span>';
-      } else {
-        warningBox.textContent = 'Ограничения не сработали. Расчёт выполнен.';
-      }
+      renderWarningBoxForActiveTab();
 
       formatAllCalculatedFields();
     }

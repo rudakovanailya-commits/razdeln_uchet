@@ -491,7 +491,7 @@
 
     /* --- Ширины: вкладка «Списание 20 сч.» --- */
     #ordersTable[data-active-tab="writeoff20"] {
-      min-width: 1180px;
+      min-width: 1040px;
     }
 
     #ordersTable[data-active-tab="writeoff20"] thead th {
@@ -512,17 +512,21 @@
 
     #ordersTable[data-active-tab="writeoff20"] .col-w20-profit-pct,
     #ordersTable[data-active-tab="writeoff20"] .col-w20-manual-writeoff {
-      min-width: 96px;
+      min-width: 68px;
+      max-width: 82px;
     }
 
     #ordersTable[data-active-tab="writeoff20"] .col-w20-margin {
-      min-width: 84px;
+      min-width: 64px;
+      max-width: 76px;
     }
 
     #ordersTable[data-active-tab="writeoff20"] .col-w20-control {
-      min-width: 148px;
-      max-width: 200px;
+      min-width: 96px;
+      max-width: 120px;
       white-space: normal;
+      font-size: 11px;
+      line-height: 1.2;
     }
 
     #ordersTable[data-active-tab="writeoff20"] td input.w20-profit-percent,
@@ -588,7 +592,7 @@
 
     /* --- Ширины: вкладка «Списание с 26» --- */
     #ordersTable[data-active-tab="writeoff26"] {
-      min-width: 1680px;
+      min-width: 1320px;
     }
 
     #ordersTable[data-active-tab="writeoff26"] thead th {
@@ -612,17 +616,21 @@
 
     #ordersTable[data-active-tab="writeoff26"] .col-w26-profit-pct,
     #ordersTable[data-active-tab="writeoff26"] .col-w26-manual-writeoff {
-      min-width: 92px;
+      min-width: 68px;
+      max-width: 82px;
     }
 
     #ordersTable[data-active-tab="writeoff26"] .col-w26-profit-margin {
-      min-width: 84px;
+      min-width: 64px;
+      max-width: 76px;
     }
 
     #ordersTable[data-active-tab="writeoff26"] .col-w26-control {
-      min-width: 148px;
-      max-width: 200px;
+      min-width: 96px;
+      max-width: 130px;
       white-space: normal;
+      font-size: 11px;
+      line-height: 1.2;
     }
 
     #ordersTable[data-active-tab="writeoff26"] td input.w26-profit-percent,
@@ -858,6 +866,29 @@
     #ordersTable[data-active-tab="writeoff20"] tfoot tr,
     #ordersTable[data-active-tab="writeoff26"] tfoot tr {
       display: table-row;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] :is(th, td).col-delete,
+    #ordersTable[data-active-tab="writeoff26"] :is(th, td).col-delete {
+      display: none !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-manual-less-than-20 td,
+    #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff26-over td {
+      background: #fecaca !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"]
+      .orders-block-table
+      tbody
+      tr.row-w26-manual-less-than-20:hover
+      td,
+    #ordersTable[data-active-tab="writeoff26"]
+      .orders-block-table
+      tbody
+      tr.row-w26-writeoff26-over:hover
+      td {
+      background: #fca5a5 !important;
     }
 
     .group-calc-order-name {
@@ -1502,7 +1533,7 @@
               <th class="orders-col-w col-w26-period-total tab-v-writeoff26">Всего с 26 сч. за период</th>
               <th class="orders-col-w col-w26-total-wip tab-v-writeoff26">Итого с НЗП</th>
               <th class="orders-col-w col-w26-profit-pct tab-v-writeoff26" title="Процент списания от отгрузки без НДС">% списания от отгрузки</th>
-              <th class="orders-col-w col-w26-manual-writeoff tab-v-writeoff26">Списание вручную</th>
+              <th class="orders-col-w col-w26-manual-writeoff tab-v-writeoff26" title="Общая сумма списания с 20 и 26 счёта">Списание всего вручную</th>
               <th class="orders-col-w col-w26-writeoff-total tab-v-writeoff26">Списано всего</th>
               <th class="orders-col-w col-w26-writeoff-26 tab-v-writeoff26">Списано с 26 сч.</th>
               <th class="orders-col-w col-w26-writeoff-20 tab-v-writeoff26">Списано с 20 сч.</th>
@@ -1992,7 +2023,8 @@
     }
 
     let orderGrouping = {};
-    let groupCalc = {};
+    let groupCalc20 = {};
+    let groupCalc26 = {};
     let lastAllRowsFootTotals = null;
     let lastGroupFootTotals = null;
 
@@ -2165,93 +2197,122 @@
       };
     }
 
-    function getGroupCalcSettings(groupName, memberRows) {
-      const gc = groupCalc[groupName];
+    function manualWriteoffPositive(s) {
+      const t = String(s ?? '')
+        .replace(/\s/g, '')
+        .replace(',', '.');
+      return t !== '' && t !== '.' && num(t) > 0;
+    }
+
+    function getGroupCalc20Settings(groupName, memberRows) {
+      const gc = groupCalc20[groupName];
       if (memberRows.length === 1 && !gc) {
         const row = memberRows[0];
         return {
-          profitPercent: row.querySelector('input.profit-percent')?.value ?? '0',
-          manualWriteoff: row.querySelector('input.manual-writeoff')?.value ?? ''
+          profitPercent20: row.querySelector('input.profit-percent')?.value ?? '0',
+          manualWriteoff20: row.querySelector('input.manual-writeoff')?.value ?? ''
         };
       }
       return {
-        profitPercent: gc?.profitPercent != null ? String(gc.profitPercent) : '0',
-        manualWriteoff: gc?.manualWriteoff != null ? String(gc.manualWriteoff) : ''
+        profitPercent20: gc?.profitPercent20 != null ? String(gc.profitPercent20) : '0',
+        manualWriteoff20: gc?.manualWriteoff20 != null ? String(gc.manualWriteoff20) : ''
+      };
+    }
+
+    function getGroupCalc26Settings(groupName, memberRows) {
+      const gc = groupCalc26[groupName];
+      if (memberRows.length === 1 && !gc) {
+        const row = memberRows[0];
+        return {
+          profitPercent26: row.querySelector('input.profit-percent')?.value ?? '0',
+          manualTotalWriteoff26: ''
+        };
+      }
+      return {
+        profitPercent26: gc?.profitPercent26 != null ? String(gc.profitPercent26) : '0',
+        manualTotalWriteoff26:
+          gc?.manualTotalWriteoff26 != null ? String(gc.manualTotalWriteoff26) : ''
       };
     }
 
     function saveGroupCalcFromRow(tr, sourceEl) {
       const gn = tr?.getAttribute('data-group-name');
       if (!gn || !sourceEl) return;
-      if (!groupCalc[gn]) groupCalc[gn] = {};
-      if (
-        sourceEl.classList.contains('group-w20-profit-percent') ||
-        sourceEl.classList.contains('group-w26-profit-percent')
-      ) {
-        groupCalc[gn].profitPercent = sourceEl.value;
-        tr.querySelectorAll('.group-w20-profit-percent, .group-w26-profit-percent').forEach(inp => {
-          if (inp !== sourceEl) inp.value = sourceEl.value;
-        });
-      } else if (
-        sourceEl.classList.contains('group-w20-manual-writeoff') ||
-        sourceEl.classList.contains('group-w26-manual-writeoff')
-      ) {
-        groupCalc[gn].manualWriteoff = sourceEl.value;
-        tr.querySelectorAll('.group-w20-manual-writeoff, .group-w26-manual-writeoff').forEach(inp => {
-          if (inp !== sourceEl) inp.value = sourceEl.value;
-        });
+      if (sourceEl.classList.contains('group-w20-profit-percent')) {
+        if (!groupCalc20[gn]) groupCalc20[gn] = {};
+        groupCalc20[gn].profitPercent20 = sourceEl.value;
+      } else if (sourceEl.classList.contains('group-w20-manual-writeoff')) {
+        if (!groupCalc20[gn]) groupCalc20[gn] = {};
+        groupCalc20[gn].manualWriteoff20 = sourceEl.value;
+      } else if (sourceEl.classList.contains('group-w26-profit-percent')) {
+        if (!groupCalc26[gn]) groupCalc26[gn] = {};
+        groupCalc26[gn].profitPercent26 = sourceEl.value;
+      } else if (sourceEl.classList.contains('group-w26-manual-writeoff')) {
+        if (!groupCalc26[gn]) groupCalc26[gn] = {};
+        groupCalc26[gn].manualTotalWriteoff26 = sourceEl.value;
       }
     }
 
-    function computeGroupWriteoffMetrics(sums, calc) {
-      const profitPercent = num(calc.profitPercent);
-      const manualStr = calc.manualWriteoff;
-      const hasManual =
-        manualStr != null &&
-        String(manualStr).replace(/\s/g, '').replace(',', '.') !== '' &&
-        String(manualStr).replace(/\s/g, '').replace(',', '.') !== '.';
-
-      let writeOff20Raw;
-      let writeOffTotalRaw;
-      if (hasManual) {
-        const manualVal = num(manualStr);
-        writeOff20Raw = manualVal;
-        writeOffTotalRaw = manualVal;
-      } else {
-        writeOff20Raw = sums.shipmentNoVat * (profitPercent / 100);
-        writeOffTotalRaw = writeOff20Raw;
+    function computeWriteoff20Amount(sums, calc20) {
+      if (manualWriteoffPositive(calc20.manualWriteoff20)) {
+        return num(calc20.manualWriteoff20);
       }
+      return sums.shipmentNoVat * (num(calc20.profitPercent20) / 100);
+    }
 
-      const writeOff20 = writeOff20Raw;
+    function computeGroupWriteoff20Metrics(sums, calc20) {
+      const writeOff20 = computeWriteoff20Amount(sums, calc20);
       const wipEnd20 = sums.totalWithWip20 - writeOff20;
       const profit20 = sums.shipmentNoVat - writeOff20;
       const margin20Pct = sums.shipmentNoVat > 0 ? (profit20 / sums.shipmentNoVat) * 100 : 0;
+      return { writeOff20, wipEnd20, profit20, margin20Pct };
+    }
 
-      const writeOffTotal = writeOffTotalRaw;
-      const writeOff26Part = Math.min(sums.acc26, writeOffTotal);
-      const writeOff20Part = writeOffTotal - writeOff26Part;
+    function computeGroupWriteoff26Metrics(sums, calc26, writeOff20) {
+      const hasManualTotal = manualWriteoffPositive(calc26.manualTotalWriteoff26);
+      let writeOff26Part;
+      let writeOffTotal;
+      const validation = {
+        manualLessThan20: false,
+        writeoff26OverExpenses: false
+      };
+
+      if (hasManualTotal) {
+        writeOffTotal = num(calc26.manualTotalWriteoff26);
+        writeOff26Part = writeOffTotal - writeOff20;
+        if (writeOff26Part < -RECONCILE_EPS) {
+          validation.manualLessThan20 = true;
+        }
+        if (writeOff26Part > sums.acc26 + RECONCILE_EPS) {
+          validation.writeoff26OverExpenses = true;
+        }
+      } else {
+        const targetByPct =
+          sums.shipmentNoVat * (num(calc26.profitPercent26) / 100);
+        writeOff26Part = Math.min(sums.acc26, Math.max(0, targetByPct - writeOff20));
+        writeOffTotal = writeOff20 + writeOff26Part;
+      }
+
       const wipEnd26 = sums.totalWithWip26 - writeOffTotal;
       const profit26Sum = sums.shipmentNoVat - writeOffTotal;
-      const profit26Pct = sums.shipmentNoVat > 0 ? (profit26Sum / sums.shipmentNoVat) * 100 : 0;
+      const profit26Pct =
+        sums.shipmentNoVat > 0 ? (profit26Sum / sums.shipmentNoVat) * 100 : 0;
 
       return {
         writeOff20,
-        wipEnd20,
-        profit20,
-        margin20Pct,
-        writeOffTotal,
         writeOff26Part,
-        writeOff20Part,
+        writeOffTotal,
         wipEnd26,
         profit26Sum,
-        profit26Pct
+        profit26Pct,
+        validation
       };
     }
 
-    function createGroupCalculationRow(group, sums, calc, metrics) {
+    function createGroupCalculationRow(group, sums, calc20, calc26, metrics20, metrics26) {
       const tr = createRow({
-        profitPercent: calc.profitPercent,
-        manualWriteoff: calc.manualWriteoff
+        profitPercent: calc20.profitPercent20,
+        manualWriteoff: calc20.manualWriteoff20
       });
       if (!tr) return null;
       tr.classList.remove('order-item');
@@ -2302,15 +2363,15 @@
       const g20man = tr.querySelector('.group-w20-manual-writeoff');
       const g26man = tr.querySelector('.group-w26-manual-writeoff');
       if (g20pct) {
-        g20pct.value = calc.profitPercent;
+        g20pct.value = calc20.profitPercent20;
         initTableNumDisplay(g20pct);
       }
       if (g26pct) {
-        g26pct.value = calc.profitPercent;
+        g26pct.value = calc26.profitPercent26;
         initTableNumDisplay(g26pct);
       }
-      if (g20man) g20man.value = calc.manualWriteoff;
-      if (g26man) g26man.value = calc.manualWriteoff;
+      if (g20man) g20man.value = calc20.manualWriteoff20;
+      if (g26man) g26man.value = calc26.manualTotalWriteoff26;
 
       tr.querySelectorAll('input.wip-start, input.materials, input.processing, input.other-direct, input.salary, input.profit-percent, input.manual-writeoff, input.shipment-vat, input.order-name').forEach(inp => {
         inp.readOnly = true;
@@ -2323,10 +2384,10 @@
         sums.wipStart,
         sums.periodExp20,
         sums.totalWithWip20,
-        metrics.writeOff20,
-        metrics.wipEnd20,
-        metrics.profit20,
-        metrics.margin20Pct
+        metrics20.writeOff20,
+        metrics20.wipEnd20,
+        metrics20.profit20,
+        metrics20.margin20Pct
       );
       applyWriteoff26RowMetrics(
         tr,
@@ -2334,12 +2395,13 @@
         sums.acc26,
         sums.periodExp26,
         sums.totalWithWip26,
-        metrics.writeOffTotal,
-        metrics.writeOff26Part,
-        metrics.writeOff20Part,
-        metrics.wipEnd26,
-        metrics.profit26Sum,
-        metrics.profit26Pct
+        metrics26.writeOffTotal,
+        metrics26.writeOff26Part,
+        metrics26.writeOff20,
+        metrics26.wipEnd26,
+        metrics26.profit26Sum,
+        metrics26.profit26Pct,
+        metrics26.validation
       );
 
       const delCell = tr.querySelector('.col-delete');
@@ -2384,10 +2446,19 @@
 
       groups.forEach(group => {
         const sums = sumGroupMetrics(group.rows);
-        const calc = getGroupCalcSettings(group.groupName, group.rows);
-        const metrics = computeGroupWriteoffMetrics(sums, calc);
+        const calc20 = getGroupCalc20Settings(group.groupName, group.rows);
+        const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
+        const metrics20 = computeGroupWriteoff20Metrics(sums, calc20);
+        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26, metrics20.writeOff20);
         if (groupBody) {
-          const groupRow = createGroupCalculationRow(group, sums, calc, metrics);
+          const groupRow = createGroupCalculationRow(
+            group,
+            sums,
+            calc20,
+            calc26,
+            metrics20,
+            metrics26
+          );
           if (groupRow) groupBody.appendChild(groupRow);
         }
         foot.shipmentVat += sums.shipmentVat;
@@ -2395,18 +2466,18 @@
         foot.w20WipStart += sums.wipStart;
         foot.w20PeriodExp += sums.periodExp20;
         foot.w20TotalWip += sums.totalWithWip20;
-        foot.w20Writeoff += metrics.writeOff20;
-        foot.w20WipEnd += metrics.wipEnd20;
-        foot.w20Profit += metrics.profit20;
+        foot.w20Writeoff += metrics20.writeOff20;
+        foot.w20WipEnd += metrics20.wipEnd20;
+        foot.w20Profit += metrics20.profit20;
         foot.w26WipStart += sums.wipStart;
         foot.w26Acc26 += sums.acc26;
         foot.w26PeriodTotal += sums.periodExp26;
         foot.w26TotalWip += sums.totalWithWip26;
-        foot.w26WriteoffTotal += metrics.writeOffTotal;
-        foot.w26Writeoff26 += metrics.writeOff26Part;
-        foot.w26Writeoff20 += metrics.writeOff20Part;
-        foot.w26WipEnd += metrics.wipEnd26;
-        foot.w26Profit += metrics.profit26Sum;
+        foot.w26WriteoffTotal += metrics26.writeOffTotal;
+        foot.w26Writeoff26 += metrics26.writeOff26Part;
+        foot.w26Writeoff20 += metrics26.writeOff20;
+        foot.w26WipEnd += metrics26.wipEnd26;
+        foot.w26Profit += metrics26.profit26Sum;
       });
 
       lastGroupFootTotals = foot;
@@ -3655,7 +3726,9 @@
         'row-w20-negative-wip',
         'row-w26-writeoff-over',
         'row-w26-negative-wip',
-        'row-w26-writeoff20-negative'
+        'row-w26-writeoff20-negative',
+        'row-w26-manual-less-than-20',
+        'row-w26-writeoff26-over'
       );
       row.querySelectorAll('input, td').forEach(el => {
         el.classList.remove(
@@ -3828,9 +3901,11 @@
       writeOff20Part,
       wipEnd26,
       profit26Sum,
-      profit26Pct
+      profit26Pct,
+      validation
     ) {
       if (!row) return;
+      validation = validation || {};
 
       const set = (selector, text) => {
         const el = row.querySelector(selector);
@@ -3850,16 +3925,19 @@
 
       const statusEl = row.querySelector('.w26-control');
       const writeOffTotalCell = row.querySelector('.w26-writeoff-total');
+      const writeOff26Cell = row.querySelector('.w26-writeoff-26');
       const wipEndCell = row.querySelector('.w26-wip-end');
       const writeOff20Cell = row.querySelector('.w26-writeoff-20');
 
       row.classList.remove(
         'row-w26-writeoff-over',
         'row-w26-negative-wip',
-        'row-w26-writeoff20-negative'
+        'row-w26-writeoff20-negative',
+        'row-w26-manual-less-than-20',
+        'row-w26-writeoff26-over'
       );
 
-      [writeOffTotalCell, wipEndCell, writeOff20Cell].forEach(cell => {
+      [writeOffTotalCell, writeOff26Cell, wipEndCell, writeOff20Cell].forEach(cell => {
         if (!cell) return;
         cell.classList.remove('cell-validate-negative');
         cell.removeAttribute('title');
@@ -3870,7 +3948,23 @@
       }
 
       let status = 'ОК';
-      if (writeOffTotal > totalWithWip26 + RECONCILE_EPS) {
+      if (validation.manualLessThan20) {
+        status = 'Списание всего меньше списания 20';
+        row.classList.add('row-w26-manual-less-than-20');
+        if (writeOff26Cell) {
+          writeOff26Cell.classList.add('cell-validate-negative');
+          writeOff26Cell.title = status;
+        }
+        if (statusEl) statusEl.classList.add('w26-status-error');
+      } else if (validation.writeoff26OverExpenses) {
+        status = 'Списание 26 больше расходов 26';
+        row.classList.add('row-w26-writeoff26-over');
+        if (writeOff26Cell) {
+          writeOff26Cell.classList.add('cell-validate-negative');
+          writeOff26Cell.title = status;
+        }
+        if (statusEl) statusEl.classList.add('w26-status-error');
+      } else if (writeOffTotal > totalWithWip26 + RECONCILE_EPS) {
         status = 'Списание больше затрат';
         row.classList.add('row-w26-writeoff-over');
         if (writeOffTotalCell) {
@@ -3884,14 +3978,6 @@
         if (wipEndCell) {
           wipEndCell.classList.add('cell-validate-negative');
           wipEndCell.title = status;
-        }
-        if (statusEl) statusEl.classList.add('w26-status-error');
-      } else if (writeOff20Part < -RECONCILE_EPS) {
-        status = 'Списание 20 < 0';
-        row.classList.add('row-w26-writeoff20-negative');
-        if (writeOff20Cell) {
-          writeOff20Cell.classList.add('cell-validate-negative');
-          writeOff20Cell.title = status;
         }
         if (statusEl) statusEl.classList.add('w26-status-error');
       } else if (statusEl) {
@@ -4909,15 +4995,55 @@
       return 'razdelny_uchet_' + period;
     }
 
+    function applyLoadedGroupCalcData(data) {
+      groupCalc20 = {};
+      groupCalc26 = {};
+      const keys = new Set();
+      [data.groupCalc20, data.groupCalc26, data.groupCalc].forEach(obj => {
+        if (obj && typeof obj === 'object') {
+          Object.keys(obj).forEach(k => keys.add(k));
+        }
+      });
+      keys.forEach(k => {
+        const leg = data.groupCalc && data.groupCalc[k];
+        const c20 = data.groupCalc20 && data.groupCalc20[k];
+        const c26 = data.groupCalc26 && data.groupCalc26[k];
+        groupCalc20[k] = {
+          profitPercent20:
+            c20?.profitPercent20 ??
+            c20?.profitPercent ??
+            leg?.profitPercent20 ??
+            leg?.profitPercent ??
+            '0',
+          manualWriteoff20:
+            c20?.manualWriteoff20 ??
+            c20?.manualWriteoff ??
+            leg?.manualWriteoff20 ??
+            leg?.manualWriteoff ??
+            ''
+        };
+        groupCalc26[k] = {
+          profitPercent26:
+            c26?.profitPercent26 ?? c26?.profitPercent ?? leg?.profitPercent26 ?? '0',
+          manualTotalWriteoff26:
+            c26?.manualTotalWriteoff26 ?? c26?.manualWriteoff ?? ''
+        };
+      });
+    }
+
     function collectData() {
       const rows = getRows().map(row => collectRowData(row));
       const groupingCopy = {};
       Object.keys(orderGrouping).forEach(k => {
         groupingCopy[k] = { ...orderGrouping[k] };
       });
-      const groupCalcCopy = {};
-      Object.keys(groupCalc).forEach(k => {
-        groupCalcCopy[k] = { ...groupCalc[k] };
+      const groupCalc20Copy = {};
+      Object.keys(groupCalc20).forEach(k => {
+        groupCalc20Copy[k] = { ...groupCalc20[k] };
+      });
+      const groupCalc26Copy = {};
+      Object.keys(groupCalc26).forEach(k => {
+        groupCalc26Copy[k] = { ...groupCalc26[k] };
       });
       return {
         periodStatus: getPeriodStatus(),
@@ -4931,7 +5057,8 @@
         },
         rows,
         grouping: groupingCopy,
-        groupCalc: groupCalcCopy
+        groupCalc20: groupCalc20Copy,
+        groupCalc26: groupCalc26Copy
       };
     }
 
@@ -4951,14 +5078,7 @@
       } else {
         orderGrouping = {};
       }
-      if (data.groupCalc && typeof data.groupCalc === 'object') {
-        groupCalc = {};
-        Object.keys(data.groupCalc).forEach(k => {
-          groupCalc[k] = { ...data.groupCalc[k] };
-        });
-      } else {
-        groupCalc = {};
-      }
+      applyLoadedGroupCalcData(data);
 
       setPeriodStatus(data.periodStatus || 'draft');
       const isFinal = getPeriodStatus() === 'final';
@@ -5943,7 +6063,8 @@
 
       ordersBody.innerHTML = '';
       orderGrouping = {};
-      groupCalc = {};
+      groupCalc20 = {};
+      groupCalc26 = {};
       const groupBody = document.getElementById('ordersGroupBody');
       if (groupBody) groupBody.innerHTML = '';
       const groupingStatus = document.getElementById('groupingSaveStatus');
@@ -6673,35 +6794,61 @@
       };
     }
 
-    function getGroupCalcSettingsFromPeriodData(groupName, memberRows, groupCalc) {
-      const gc = groupCalc && typeof groupCalc === 'object' ? groupCalc[groupName] : undefined;
-      if (memberRows.length === 1 && !gc) {
+    function getGroupCalc20SettingsFromPeriodData(
+      groupName,
+      memberRows,
+      groupCalc20Data,
+      legacyGroupCalc
+    ) {
+      const gc =
+        groupCalc20Data && typeof groupCalc20Data === 'object'
+          ? groupCalc20Data[groupName]
+          : undefined;
+      const legacy =
+        legacyGroupCalc && typeof legacyGroupCalc === 'object'
+          ? legacyGroupCalc[groupName]
+          : undefined;
+      if (memberRows.length === 1 && !gc && !legacy) {
         const row = memberRows[0];
         return {
-          profitPercent: row.profitPercent != null ? String(row.profitPercent) : '0',
-          manualWriteoff: row.manualWriteoff != null ? String(row.manualWriteoff) : ''
+          profitPercent20: row.profitPercent != null ? String(row.profitPercent) : '0',
+          manualWriteoff20: row.manualWriteoff != null ? String(row.manualWriteoff) : ''
         };
       }
       return {
-        profitPercent: gc?.profitPercent != null ? String(gc.profitPercent) : '0',
-        manualWriteoff: gc?.manualWriteoff != null ? String(gc.manualWriteoff) : ''
+        profitPercent20:
+          gc?.profitPercent20 ??
+          gc?.profitPercent ??
+          legacy?.profitPercent20 ??
+          legacy?.profitPercent ??
+          '0',
+        manualWriteoff20:
+          gc?.manualWriteoff20 ??
+          gc?.manualWriteoff ??
+          legacy?.manualWriteoff20 ??
+          legacy?.manualWriteoff ??
+          ''
       };
     }
 
     function computeWriteoff20GroupsWithWipEnd(data) {
       const globals = data.globals || {};
       const totals = computePeriodTotals(data);
-      const groupCalc = data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+      const gc20 =
+        data.groupCalc20 && typeof data.groupCalc20 === 'object' ? data.groupCalc20 : {};
+      const legacy =
+        data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
 
       return buildCalculationGroupsFromPeriodData(data).map(group => {
         const sums = sumGroupMetricsFromPeriodData(group.memberRows, globals, totals);
-        const calc = getGroupCalcSettingsFromPeriodData(
+        const calc20 = getGroupCalc20SettingsFromPeriodData(
           group.groupName,
           group.memberRows,
-          groupCalc
+          gc20,
+          legacy
         );
-        const metrics = computeGroupWriteoffMetrics(sums, calc);
-        return Object.assign({}, group, { wipEnd20: metrics.wipEnd20 });
+        const metrics20 = computeGroupWriteoff20Metrics(sums, calc20);
+        return Object.assign({}, group, { wipEnd20: metrics20.wipEnd20 });
       });
     }
 
@@ -7767,7 +7914,7 @@
         'Всего с 26 сч. за период',
         'Итого с НЗП',
         '% списания от отгрузки',
-        'Списание вручную',
+        'Списание всего вручную',
         'Списано всего',
         'Списано с 26 сч.',
         'Списано с 20 сч.',

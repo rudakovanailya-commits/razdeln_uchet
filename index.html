@@ -269,8 +269,8 @@
 
     .totals {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
       margin-top: 14px;
       position: sticky;
       bottom: 0;
@@ -283,17 +283,18 @@
       background: #e6faf0;
       border: 1px solid #86efac;
       border-radius: 10px;
-      padding: 12px;
+      padding: 10px 12px;
     }
 
     .total-box .label {
-      font-size: 13px;
+      font-size: 12px;
       color: #3f5d4a;
       margin-bottom: 4px;
+      line-height: 1.25;
     }
 
     .total-box .value {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: bold;
     }
 
@@ -370,7 +371,8 @@
       max-width: 104px;
     }
 
-    #ordersTable[data-active-tab="expenses"] .col-total-cost {
+    #ordersTable[data-active-tab="expenses"] .col-total-cost,
+    #ordersTable[data-active-tab="expenses"] .col-total-cost-no26 {
       width: 128px;
       min-width: 128px;
       max-width: 128px;
@@ -1578,8 +1580,8 @@
               <th class="orders-col-w col-acc25 tab-v-expenses">25 сч.</th>
               <th class="orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" title="26 распределённый">26 распред.</th>
               <th class="orders-col-w col-acc44 tab-v-expenses" title="44 / транспортные">44 / трансп.</th>
+              <th class="orders-col-w col-total-cost-no26 tab-v-expenses tab-v-economist tab-v-reconcile">Итого без 26</th>
               <th class="orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" title="Итого расходов с 26">Итого с 26</th>
-              <th class="orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile">Расходы без 26</th>
               <th class="orders-col-w col-writeoff-26-1c tab-v-reconcile" title="В 1С 26 счёт закрывается полностью в периоде">26 сч. списывается</th>
               <th class="orders-col-w col-writeoff-no26 tab-v-reconcile">Списание с 20 сч.</th>
               <th class="orders-col-w col-wip-no26 tab-v-reconcile">НЗП на 20 сч.</th>
@@ -1645,8 +1647,8 @@
               <td class="readonly orders-col-w col-acc25 tab-v-expenses" id="ordersFootAcc25">0.00</td>
               <td class="readonly orders-col-w col-acc26 tab-v-expenses tab-v-reconcile" id="ordersFootAcc26">0.00</td>
               <td class="readonly orders-col-w col-acc44 tab-v-expenses" id="ordersFootAcc44">0.00</td>
+              <td class="readonly orders-col-w col-total-cost-no26 tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCostNo26">0.00</td>
               <td class="readonly orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile" id="ordersFootTotalCost">0.00</td>
-              <td class="readonly orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile" id="ordersFootTotalCostNo26">0.00</td>
               <td class="readonly orders-col-w col-writeoff-26-1c tab-v-reconcile" id="ordersFootWriteOff26_1c">0.00</td>
               <td class="readonly orders-col-w col-writeoff-no26 tab-v-reconcile" id="ordersFootWriteOff20">0.00</td>
               <td class="readonly orders-col-w col-wip-no26 tab-v-reconcile" id="ordersFootWip20">0.00</td>
@@ -1705,6 +1707,10 @@
         <div class="total-box">
           <div class="label">Общая ЗП</div>
           <div class="value" id="totalSalaryValue">0.00</div>
+        </div>
+        <div class="total-box">
+          <div class="label">Итого без 26</div>
+          <div class="value" id="totalCostNo26">0.00</div>
         </div>
         <div class="total-box">
           <div class="label">Всего списано</div>
@@ -1810,6 +1816,7 @@
       [
         'totalShipmentNoVat',
         'totalSalaryValue',
+        'totalCostNo26',
         'totalWrittenOff',
         'totalEndingWIP'
       ].forEach(id => {
@@ -2807,6 +2814,7 @@
         reconcile: 'Расходы всего с 26'
       },
       'col-total-cost-no26': {
+        expenses: 'Итого без 26',
         economist: 'Расходы без 26',
         reconcile: 'Расходы без 26'
       },
@@ -3205,8 +3213,8 @@
         <td class="readonly acc25 orders-col-w col-acc25 tab-v-expenses">0.00</td>
         <td class="readonly acc26 orders-col-w col-acc26 tab-v-expenses tab-v-reconcile">0.00</td>
         <td class="readonly acc44 orders-col-w col-acc44 tab-v-expenses">0.00</td>
+        <td class="readonly total-cost-no26 orders-col-w col-total-cost-no26 tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
         <td class="readonly total-cost orders-col-w col-total-cost tab-v-expenses tab-v-economist tab-v-reconcile">0.00</td>
-        <td class="readonly total-cost-no26 orders-col-w col-total-cost-no26 tab-v-economist tab-v-reconcile">0.00</td>
         <td class="readonly writeoff-26-1c orders-col-w col-writeoff-26-1c tab-v-reconcile">0.00</td>
         <td class="readonly writeoff-no26 orders-col-w col-writeoff-no26 tab-v-reconcile">0.00</td>
         <td class="readonly wip-no26 orders-col-w col-wip-no26 tab-v-reconcile">0.00</td>
@@ -4274,6 +4282,17 @@
         row.querySelector('.acc25').textContent = fmt(acc25);
         row.querySelector('.acc26').textContent = fmt(acc26);
         row.querySelector('.acc44').textContent = fmt(acc44);
+        const totalCostNo26 =
+          wipStart +
+          materials +
+          processing +
+          otherDirect +
+          salary +
+          insurance +
+          sick +
+          acc25 +
+          acc44;
+        row.querySelector('.total-cost-no26').textContent = fmt(totalCostNo26);
         row.querySelector('.total-cost').textContent = fmt(totalCost);
         row.querySelector('.period-cost').textContent = fmt(periodCost);
         row.querySelector('.profit-rub').textContent = fmt(profitRub);
@@ -4389,6 +4408,8 @@
 
       document.getElementById('totalShipmentNoVat').textContent = fmt(totalShipmentNoVat);
       document.getElementById('totalSalaryValue').textContent = fmt(totalSalary);
+      const totalCostNo26El = document.getElementById('totalCostNo26');
+      if (totalCostNo26El) totalCostNo26El.textContent = fmt(sumFootTotalCostNo26);
       document.getElementById('totalWrittenOff').textContent = fmt(totalWrittenOff);
       document.getElementById('totalEndingWIP').textContent = fmt(totalEndingWIP);
 
@@ -7934,7 +7955,8 @@
         '25',
         '26',
         '44',
-        'Всего затрат',
+        'Итого без 26',
+        'Итого с 26',
         'Списано',
         'НЗП',
         'Прибыль',
@@ -7951,6 +7973,7 @@
         exportCellNum(tr.querySelector('.acc25')),
         exportCellNum(tr.querySelector('.acc26')),
         exportCellNum(tr.querySelector('.acc44')),
+        exportCellNum(tr.querySelector('.total-cost-no26')),
         exportCellNum(tr.querySelector('.total-cost')),
         exportCellNum(tr.querySelector('.write-off')),
         exportCellNum(tr.querySelector('.wip-end')),
@@ -8099,8 +8122,8 @@
         'Заказ',
         'Отгрузка с НДС',
         'Отгрузка без НДС',
-        'Расходы всего с 26',
         'Расходы без 26',
+        'Расходы всего с 26',
         '% списания от отгрузки',
         'Ручное списание',
         'Списание всего',
@@ -8113,8 +8136,8 @@
         exportCellText(tr.querySelector('.order-name')),
         exportCellNum(tr.querySelector('.shipment-vat')),
         exportCellNum(tr.querySelector('.shipment-no-vat')),
-        exportCellNum(tr.querySelector('.total-cost')),
         exportCellNum(tr.querySelector('.total-cost-no26')),
+        exportCellNum(tr.querySelector('.total-cost')),
         exportCellNum(tr.querySelector('.profit-percent')),
         exportCellText(tr.querySelector('.manual-writeoff')),
         exportCellNum(tr.querySelector('.write-off')),
@@ -8127,8 +8150,8 @@
         'Итого',
         exportCellNum(document.getElementById('ordersFootShipmentVat')),
         exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
-        exportCellNum(document.getElementById('ordersFootTotalCost')),
         exportCellNum(document.getElementById('ordersFootTotalCostNo26')),
+        exportCellNum(document.getElementById('ordersFootTotalCost')),
         '',
         '',
         exportCellNum(document.getElementById('ordersFootWriteOff')),
@@ -8146,8 +8169,8 @@
         'Отгрузка с НДС',
         'Отгрузка без НДС',
         '26 сч. распределён',
-        'Расходы всего с 26',
         'Расходы без 26',
+        'Расходы всего с 26',
         '26 сч. списывается',
         'Списание с 20 сч.',
         'НЗП на 20 сч.',
@@ -8159,8 +8182,8 @@
         exportCellNum(tr.querySelector('.shipment-vat')),
         exportCellNum(tr.querySelector('.shipment-no-vat')),
         exportCellNum(tr.querySelector('.acc26')),
-        exportCellNum(tr.querySelector('.total-cost')),
         exportCellNum(tr.querySelector('.total-cost-no26')),
+        exportCellNum(tr.querySelector('.total-cost')),
         exportCellNum(tr.querySelector('.writeoff-26-1c')),
         exportCellNum(tr.querySelector('.writeoff-no26')),
         exportCellNum(tr.querySelector('.wip-no26')),
@@ -8172,8 +8195,8 @@
         exportCellNum(document.getElementById('ordersFootShipmentVat')),
         exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
         exportCellNum(document.getElementById('ordersFootAcc26')),
-        exportCellNum(document.getElementById('ordersFootTotalCost')),
         exportCellNum(document.getElementById('ordersFootTotalCostNo26')),
+        exportCellNum(document.getElementById('ordersFootTotalCost')),
         exportCellNum(document.getElementById('ordersFootWriteOff26_1c')),
         exportCellNum(document.getElementById('ordersFootWriteOff20')),
         exportCellNum(document.getElementById('ordersFootWip20')),

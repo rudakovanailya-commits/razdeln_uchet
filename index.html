@@ -609,6 +609,12 @@
       background: #fef2f2 !important;
     }
 
+    #ordersTable[data-active-tab="writeoff20"] td.cell-profit-negative {
+      background: #fef2f2 !important;
+      color: #b91c1c;
+      font-weight: 600;
+    }
+
     #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.orders-col-order,
     #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.orders-col-shipment-vat,
     #ordersTable[data-active-tab="writeoff20"] tr.row-w20-writeoff-over td.shipment-no-vat,
@@ -742,6 +748,12 @@
     #ordersTable[data-active-tab="writeoff26"] td.cell-validate-negative {
       box-shadow: inset 0 0 0 2px #b91c1c;
       background: #fef2f2 !important;
+    }
+
+    #ordersTable[data-active-tab="writeoff26"] td.cell-profit-negative {
+      background: #fef2f2 !important;
+      color: #b91c1c;
+      font-weight: 600;
     }
 
     #ordersTable[data-active-tab="writeoff26"] tr.row-w26-writeoff-over td.orders-col-order,
@@ -3853,6 +3865,7 @@
           'cell-validate-hi-input',
           'cell-validate-zero',
           'cell-validate-negative',
+          'cell-profit-negative',
           'cell-warning-reconcile-26',
           'cell-reconcile-wip26-warn',
           'reconcile-status-ok',
@@ -3863,6 +3876,21 @@
     }
 
     const RECONCILE_EPS = 0.01;
+
+    function applyProfitCellHighlight(row, sumSelector, pctSelector, profitSum, profitPct) {
+      if (!row) return;
+      const sumCell = row.querySelector(sumSelector);
+      const pctCell = row.querySelector(pctSelector);
+      [sumCell, pctCell].forEach(cell => {
+        if (cell) cell.classList.remove('cell-profit-negative');
+      });
+      if (sumCell && profitSum < -RECONCILE_EPS) {
+        sumCell.classList.add('cell-profit-negative');
+      }
+      if (pctCell && profitPct < -RECONCILE_EPS) {
+        pctCell.classList.add('cell-profit-negative');
+      }
+    }
 
     function applyReconcileRowMetrics(row, totalCostWith26, acc26, writeOffWith26, wipEndWith26) {
       if (!row) return;
@@ -4005,6 +4033,8 @@
       }
 
       if (statusEl) statusEl.textContent = status;
+
+      applyProfitCellHighlight(row, '.w20-profit', '.w20-margin', profit20, margin20Pct);
     }
 
     function applyWriteoff26RowMetrics(
@@ -4102,6 +4132,8 @@
       }
 
       if (statusEl) statusEl.textContent = status;
+
+      applyProfitCellHighlight(row, '.w26-profit', '.w26-profit-margin', profit26Sum, profit26Pct);
     }
 
     function checkData() {

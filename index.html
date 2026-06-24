@@ -636,7 +636,8 @@
       text-align: center;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] .col-w26-manual-writeoff {
+    #ordersTable[data-active-tab="writeoff26"] .col-w26-manual-writeoff,
+    #ordersTable[data-active-tab="writeoff26"] .col-w26-manual-writeoff-26 {
       width: 160px;
       min-width: 160px;
       max-width: 170px;
@@ -669,8 +670,16 @@
       white-space: nowrap;
     }
 
-    #ordersTable[data-active-tab="writeoff26"] td.col-w26-manual-writeoff input.table-num {
+    #ordersTable[data-active-tab="writeoff26"] td.col-w26-manual-writeoff input.table-num,
+    #ordersTable[data-active-tab="writeoff26"] td.col-w26-manual-writeoff-26 input.table-num {
       min-width: 140px;
+    }
+
+    #ordersTable[data-active-tab="writeoff20"] td.col-w20-profit-pct input.table-num,
+    #ordersTable[data-active-tab="writeoff20"] td.col-w20-manual-writeoff input.table-num {
+      background: #f1f5f9;
+      color: #64748b;
+      cursor: default;
     }
 
     #ordersTable[data-active-tab="writeoff26"] td.col-w26-profit-pct input.table-num {
@@ -713,6 +722,7 @@
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-negative-wip td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-manual-less-than-20 td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff26-over td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff26-capped td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff20-negative td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat) {
       background: #fff1f2 !important;
     }
@@ -723,24 +733,25 @@
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-negative-wip:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-manual-less-than-20:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff26-over:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
+    #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff26-capped:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat),
     #ordersTable[data-active-tab="writeoff26"] tbody tr.row-w26-writeoff20-negative:hover td:not(.orders-col-order):not(.orders-col-shipment-vat):not(.orders-col-shipment-no-vat):not(.shipment-no-vat) {
       background: #fecaca !important;
     }
 
     #ordersTable[data-active-tab="writeoff20"] tbody tr:is(.row-w20-writeoff-over, .row-w20-negative-wip) td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat),
-    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative) td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat) {
+    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff26-capped, .row-w26-writeoff20-negative) td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat) {
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text) !important;
     }
 
     #ordersTable[data-active-tab="writeoff20"] tbody tr:is(.row-w20-writeoff-over, .row-w20-negative-wip):hover td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat),
-    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative):hover td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat) {
+    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff26-capped, .row-w26-writeoff20-negative):hover td:is(.orders-col-order, .orders-col-shipment-vat, .orders-col-shipment-no-vat, .shipment-no-vat) {
       background: var(--orders-sticky-pin-bg) !important;
       color: var(--orders-sticky-pin-text) !important;
     }
 
     #ordersTable[data-active-tab="writeoff20"] tbody tr:is(.row-w20-writeoff-over, .row-w20-negative-wip) td.orders-col-order,
-    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative) td.orders-col-order {
+    #ordersTable[data-active-tab="writeoff26"] tbody tr:is(.row-w26-writeoff-over, .row-w26-negative-wip, .row-w26-manual-less-than-20, .row-w26-writeoff26-over, .row-w26-writeoff20-negative, .row-w26-writeoff26-capped) td.orders-col-order {
       box-shadow: inset 4px 0 0 #ef4444;
     }
 
@@ -1561,6 +1572,7 @@
               <th class="orders-col-w col-w26-total-wip tab-v-writeoff26">Итого с НЗП</th>
               <th class="orders-col-w col-w26-profit-pct tab-v-writeoff26" title="Процент списания от отгрузки без НДС">% списания от отгрузки</th>
               <th class="orders-col-w col-w26-manual-writeoff tab-v-writeoff26" title="Общая сумма списания с 20 и 26 счёта">Списание всего вручную</th>
+              <th class="orders-col-w col-w26-manual-writeoff-26 tab-v-writeoff26" title="Ручное списание только с 26 счёта">Списание 26 вручную</th>
               <th class="orders-col-w col-w26-writeoff-total tab-v-writeoff26">Списано всего</th>
               <th class="orders-col-w col-w26-writeoff-26 tab-v-writeoff26">Списано с 26 сч.</th>
               <th class="orders-col-w col-w26-writeoff-20 tab-v-writeoff26">Списано с 20 сч.</th>
@@ -1628,6 +1640,7 @@
               <td class="readonly orders-col-w col-w26-total-wip tab-v-writeoff26" id="ordersFootW26TotalWip">0.00</td>
               <td class="readonly orders-col-w col-w26-profit-pct tab-v-writeoff26"></td>
               <td class="readonly orders-col-w col-w26-manual-writeoff tab-v-writeoff26"></td>
+              <td class="readonly orders-col-w col-w26-manual-writeoff-26 tab-v-writeoff26"></td>
               <td class="readonly orders-col-w col-w26-writeoff-total tab-v-writeoff26" id="ordersFootW26WriteoffTotal">0.00</td>
               <td class="readonly orders-col-w col-w26-writeoff-26 tab-v-writeoff26" id="ordersFootW26Writeoff26">0.00</td>
               <td class="readonly orders-col-w col-w26-writeoff-20 tab-v-writeoff26" id="ordersFootW26Writeoff20">0.00</td>
@@ -1880,8 +1893,10 @@
         el.classList.contains('manual-writeoff') ||
         el.classList.contains('w20-manual-writeoff') ||
         el.classList.contains('w26-manual-writeoff') ||
+        el.classList.contains('w26-manual-writeoff-26') ||
         el.classList.contains('group-w20-manual-writeoff') ||
-        el.classList.contains('group-w26-manual-writeoff')
+        el.classList.contains('group-w26-manual-writeoff') ||
+        el.classList.contains('group-w26-manual-writeoff-26')
       );
     }
 
@@ -1891,7 +1906,8 @@
         el.classList.contains('group-w20-profit-percent') ||
         el.classList.contains('group-w26-profit-percent') ||
         el.classList.contains('group-w20-manual-writeoff') ||
-        el.classList.contains('group-w26-manual-writeoff')
+        el.classList.contains('group-w26-manual-writeoff') ||
+        el.classList.contains('group-w26-manual-writeoff-26')
       );
     }
 
@@ -2287,18 +2303,20 @@
       const gc = groupCalc26[groupName];
       if (memberRows.length === 1 && !gc) {
         const row = memberRows[0];
-        return {
-          profitPercent26:
-            row.querySelector('input.w26-profit-percent')?.value ??
-            row.querySelector('input.profit-percent')?.value ??
-            '0',
-          manualTotalWriteoff26: ''
-        };
+      return {
+        profitPercent26:
+          row.querySelector('input.w26-profit-percent')?.value ??
+          row.querySelector('input.profit-percent')?.value ??
+          '0',
+        manualTotalWriteoff26: '',
+        manualWriteoff26: ''
+      };
       }
       return {
         profitPercent26: gc?.profitPercent26 != null ? String(gc.profitPercent26) : '0',
         manualTotalWriteoff26:
-          gc?.manualTotalWriteoff26 != null ? String(gc.manualTotalWriteoff26) : ''
+          gc?.manualTotalWriteoff26 != null ? String(gc.manualTotalWriteoff26) : '',
+        manualWriteoff26: gc?.manualWriteoff26 != null ? String(gc.manualWriteoff26) : ''
       };
     }
 
@@ -2317,47 +2335,49 @@
       } else if (sourceEl.classList.contains('group-w26-manual-writeoff')) {
         if (!groupCalc26[gn]) groupCalc26[gn] = {};
         groupCalc26[gn].manualTotalWriteoff26 = sourceEl.value;
+      } else if (sourceEl.classList.contains('group-w26-manual-writeoff-26')) {
+        if (!groupCalc26[gn]) groupCalc26[gn] = {};
+        groupCalc26[gn].manualWriteoff26 = sourceEl.value;
       }
     }
 
-    function computeWriteoff20Amount(sums, calc20) {
-      if (manualWriteoffPositive(calc20.manualWriteoff20)) {
-        return num(calc20.manualWriteoff20);
-      }
-      return sums.shipmentNoVat * (num(calc20.profitPercent20) / 100);
-    }
-
-    function computeGroupWriteoff20Metrics(sums, calc20) {
-      const writeOff20 = computeWriteoff20Amount(sums, calc20);
+    function computeGroupWriteoff20Metrics(sums, writeOff20) {
       const wipEnd20 = sums.totalWithWip20 - writeOff20;
       const profit20 = sums.shipmentNoVat - writeOff20;
       const margin20Pct = sums.shipmentNoVat > 0 ? (profit20 / sums.shipmentNoVat) * 100 : 0;
       return { writeOff20, wipEnd20, profit20, margin20Pct };
     }
 
-    function computeGroupWriteoff26Metrics(sums, calc26, writeOff20) {
-      const hasManualTotal = manualWriteoffPositive(calc26.manualTotalWriteoff26);
-      let writeOff26Part;
-      let writeOffTotal;
+    function computeGroupWriteoff26Metrics(sums, calc26) {
       const validation = {
-        manualLessThan20: false,
+        writeoff26CappedByTotal: false,
         writeoff26OverExpenses: false
       };
 
-      if (hasManualTotal) {
+      let writeOffTotal;
+      if (manualWriteoffPositive(calc26.manualTotalWriteoff26)) {
         writeOffTotal = num(calc26.manualTotalWriteoff26);
       } else {
         writeOffTotal = sums.shipmentNoVat * (num(calc26.profitPercent26) / 100);
       }
 
-      writeOff26Part = writeOffTotal - writeOff20;
-      if (writeOff26Part < -RECONCILE_EPS) {
-        validation.manualLessThan20 = true;
-      }
-      if (writeOff26Part > sums.acc26 + RECONCILE_EPS) {
-        validation.writeoff26OverExpenses = true;
+      let requested26;
+      if (manualWriteoffPositive(calc26.manualWriteoff26)) {
+        requested26 = num(calc26.manualWriteoff26);
+        if (requested26 > sums.acc26 + RECONCILE_EPS) {
+          validation.writeoff26OverExpenses = true;
+        }
+      } else {
+        requested26 = sums.acc26;
       }
 
+      let writeOff26Part = requested26;
+      if (writeOff26Part > writeOffTotal + RECONCILE_EPS) {
+        writeOff26Part = writeOffTotal;
+        validation.writeoff26CappedByTotal = true;
+      }
+
+      const writeOff20 = writeOffTotal - writeOff26Part;
       const wipEnd26 = sums.totalWithWip26 - writeOffTotal;
       const profit26Sum = sums.shipmentNoVat - writeOffTotal;
       const profit26Pct =
@@ -2374,10 +2394,10 @@
       };
     }
 
-    function createGroupCalculationRow(group, sums, calc20, calc26, metrics20, metrics26) {
+    function createGroupCalculationRow(group, sums, calc26, metrics20, metrics26) {
       const tr = createRow({
-        profitPercent: calc20.profitPercent20,
-        manualWriteoff: calc20.manualWriteoff20
+        profitPercent: '0',
+        manualWriteoff: ''
       });
       if (!tr) return null;
       tr.classList.remove('order-item');
@@ -2418,25 +2438,27 @@
         el.readOnly = false;
         el.disabled = false;
       };
-      markGroupInput('.w20-profit-percent', 'group-w20-profit-percent');
-      markGroupInput('.w20-manual-writeoff', 'group-w20-manual-writeoff');
+      const lockDerivedInput = selector => {
+        const el = tr.querySelector(selector);
+        if (!el) return;
+        el.readOnly = true;
+        el.disabled = true;
+      };
       markGroupInput('.w26-profit-percent', 'group-w26-profit-percent');
       markGroupInput('.w26-manual-writeoff', 'group-w26-manual-writeoff');
+      markGroupInput('.w26-manual-writeoff-26', 'group-w26-manual-writeoff-26');
+      lockDerivedInput('.w20-profit-percent');
+      lockDerivedInput('.w20-manual-writeoff');
 
-      const g20pct = tr.querySelector('.group-w20-profit-percent');
       const g26pct = tr.querySelector('.group-w26-profit-percent');
-      const g20man = tr.querySelector('.group-w20-manual-writeoff');
       const g26man = tr.querySelector('.group-w26-manual-writeoff');
-      if (g20pct) {
-        g20pct.value = calc20.profitPercent20;
-        initTableNumDisplay(g20pct);
-      }
+      const g26man26 = tr.querySelector('.group-w26-manual-writeoff-26');
       if (g26pct) {
         g26pct.value = calc26.profitPercent26;
         initTableNumDisplay(g26pct);
       }
-      if (g20man) g20man.value = calc20.manualWriteoff20;
       if (g26man) g26man.value = calc26.manualTotalWriteoff26;
+      if (g26man26) g26man26.value = calc26.manualWriteoff26;
 
       tr.querySelectorAll('input.wip-start, input.materials, input.processing, input.other-direct, input.salary, input.profit-percent, input.manual-writeoff, input.shipment-vat, input.order-name').forEach(inp => {
         inp.readOnly = true;
@@ -2516,15 +2538,13 @@
 
       groups.forEach(group => {
         const sums = sumGroupMetrics(group.rows);
-        const calc20 = getGroupCalc20Settings(group.groupName, group.rows);
         const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
-        const metrics20 = computeGroupWriteoff20Metrics(sums, calc20);
-        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26, metrics20.writeOff20);
+        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+        const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
         if (groupBody) {
           const groupRow = createGroupCalculationRow(
             group,
             sums,
-            calc20,
             calc26,
             metrics20,
             metrics26
@@ -2561,10 +2581,9 @@
       groups.forEach(group => {
         const label = group.groupName || '—';
         const sums = sumGroupMetrics(group.rows);
-        const calc20 = getGroupCalc20Settings(group.groupName, group.rows);
         const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
-        const metrics20 = computeGroupWriteoff20Metrics(sums, calc20);
-        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26, metrics20.writeOff20);
+        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+        const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
 
         if (metrics20.writeOff20 > sums.totalWithWip20 + RECONCILE_EPS) {
           writeoff20.push(
@@ -2577,12 +2596,15 @@
           );
         }
 
-        if (metrics26.validation.manualLessThan20) {
-          writeoff26.push(`Группа «${label}»: списание всего меньше списания 20.`);
+        if (metrics26.validation.writeoff26CappedByTotal) {
+          writeoff26.push(`Группа «${label}»: 26 ограничен суммой списания.`);
         }
         if (metrics26.validation.writeoff26OverExpenses) {
+          const manual26 = manualWriteoffPositive(calc26.manualWriteoff26)
+            ? num(calc26.manualWriteoff26)
+            : metrics26.writeOff26Part;
           writeoff26.push(
-            `Группа «${label}»: списание 26 (${fmt(metrics26.writeOff26Part)}) больше расходов 26 (${fmt(sums.acc26)}).`
+            `Группа «${label}»: списание 26 (${fmt(manual26)}) больше расходов 26 (${fmt(sums.acc26)}).`
           );
         }
         if (metrics26.writeOffTotal > sums.totalWithWip26 + RECONCILE_EPS) {
@@ -3277,6 +3299,7 @@
         <td class="readonly w26-total-wip orders-col-w col-w26-total-wip tab-v-writeoff26">0.00</td>
         <td class="orders-col-w col-w26-profit-pct tab-v-writeoff26"><input class="w26-profit-percent table-num" type="text" inputmode="decimal" value="0"></td>
         <td class="orders-col-w col-w26-manual-writeoff tab-v-writeoff26"><input class="w26-manual-writeoff table-num" type="text" inputmode="decimal"></td>
+        <td class="orders-col-w col-w26-manual-writeoff-26 tab-v-writeoff26"><input class="w26-manual-writeoff-26 table-num" type="text" inputmode="decimal"></td>
         <td class="readonly w26-writeoff-total orders-col-w col-w26-writeoff-total tab-v-writeoff26">0.00</td>
         <td class="readonly w26-writeoff-26 orders-col-w col-w26-writeoff-26 tab-v-writeoff26">0.00</td>
         <td class="readonly w26-writeoff-20 orders-col-w col-w26-writeoff-20 tab-v-writeoff26">0.00</td>
@@ -3803,7 +3826,8 @@
         if (
           (el.classList.contains('manual-writeoff') ||
             el.classList.contains('w20-manual-writeoff') ||
-            el.classList.contains('w26-manual-writeoff')) &&
+            el.classList.contains('w26-manual-writeoff') ||
+            el.classList.contains('w26-manual-writeoff-26')) &&
           !manualWriteoffHasValue(el)
         ) {
           continue;
@@ -3907,8 +3931,8 @@
         'row-w26-writeoff-over',
         'row-w26-negative-wip',
         'row-w26-writeoff20-negative',
-        'row-w26-manual-less-than-20',
-        'row-w26-writeoff26-over'
+        'row-w26-writeoff26-over',
+        'row-w26-writeoff26-capped'
       );
       row.querySelectorAll('input, td').forEach(el => {
         el.classList.remove(
@@ -4131,8 +4155,8 @@
         'row-w26-writeoff-over',
         'row-w26-negative-wip',
         'row-w26-writeoff20-negative',
-        'row-w26-manual-less-than-20',
-        'row-w26-writeoff26-over'
+        'row-w26-writeoff26-over',
+        'row-w26-writeoff26-capped'
       );
 
       [writeOffTotalCell, writeOff26Cell, wipEndCell, writeOff20Cell].forEach(cell => {
@@ -4146,19 +4170,18 @@
       }
 
       let status = 'ОК';
-      if (validation.manualLessThan20) {
-        status = 'Списание всего меньше списания 20';
-        row.classList.add('row-w26-manual-less-than-20');
+      if (validation.writeoff26OverExpenses) {
+        status = 'Списание 26 больше расходов 26';
+        row.classList.add('row-w26-writeoff26-over');
         if (writeOff26Cell) {
           writeOff26Cell.classList.add('cell-validate-negative');
           writeOff26Cell.title = status;
         }
         if (statusEl) statusEl.classList.add('w26-status-error');
-      } else if (validation.writeoff26OverExpenses) {
-        status = 'Списание 26 больше расходов 26';
-        row.classList.add('row-w26-writeoff26-over');
+      } else if (validation.writeoff26CappedByTotal) {
+        status = '26 ограничен суммой списания';
+        row.classList.add('row-w26-writeoff26-capped');
         if (writeOff26Cell) {
-          writeOff26Cell.classList.add('cell-validate-negative');
           writeOff26Cell.title = status;
         }
         if (statusEl) statusEl.classList.add('w26-status-error');
@@ -4411,7 +4434,8 @@
           if (
             (el.classList.contains('manual-writeoff') ||
               el.classList.contains('w20-manual-writeoff') ||
-              el.classList.contains('w26-manual-writeoff')) &&
+              el.classList.contains('w26-manual-writeoff') ||
+              el.classList.contains('w26-manual-writeoff-26')) &&
             !manualWriteoffHasValue(el)
           ) {
             return;
@@ -4858,7 +4882,7 @@
       if (groupBody) {
         groupBody
           .querySelectorAll(
-            'input.group-w20-profit-percent, input.group-w26-profit-percent, input.group-w20-manual-writeoff, input.group-w26-manual-writeoff'
+            'input.group-w26-profit-percent, input.group-w26-manual-writeoff, input.group-w26-manual-writeoff-26'
           )
           .forEach(inp => {
             inp.readOnly = locked;
@@ -5256,7 +5280,8 @@
           profitPercent26:
             c26?.profitPercent26 ?? c26?.profitPercent ?? leg?.profitPercent26 ?? '0',
           manualTotalWriteoff26:
-            c26?.manualTotalWriteoff26 ?? c26?.manualWriteoff ?? ''
+            c26?.manualTotalWriteoff26 ?? c26?.manualWriteoff ?? '',
+          manualWriteoff26: c26?.manualWriteoff26 ?? ''
         };
       });
     }
@@ -7014,13 +7039,48 @@
       const periodExp20 =
         materials + processing + otherDirect + salary + insurance + sick + acc25 + acc44;
 
+      const periodExp26 = periodExp20 + acc26;
+
       return {
         shipmentVat,
         shipmentNoVat,
         wipStart,
         acc26,
         periodExp20,
-        totalWithWip20: wipStart + periodExp20
+        periodExp26,
+        totalWithWip20: wipStart + periodExp20,
+        totalWithWip26: wipStart + periodExp26
+      };
+    }
+
+    function getGroupCalc26SettingsFromPeriodData(
+      groupName,
+      memberRows,
+      groupCalc26Data,
+      legacyGroupCalc
+    ) {
+      const gc =
+        groupCalc26Data && typeof groupCalc26Data === 'object'
+          ? groupCalc26Data[groupName]
+          : undefined;
+      const legacy =
+        legacyGroupCalc && typeof legacyGroupCalc === 'object'
+          ? legacyGroupCalc[groupName]
+          : undefined;
+      if (memberRows.length === 1 && !gc && !legacy) {
+        const row = memberRows[0];
+        return {
+          profitPercent26: row.profitPercent != null ? String(row.profitPercent) : '0',
+          manualTotalWriteoff26: '',
+          manualWriteoff26: ''
+        };
+      }
+      return {
+        profitPercent26:
+          gc?.profitPercent26 ?? gc?.profitPercent ?? legacy?.profitPercent26 ?? '0',
+        manualTotalWriteoff26:
+          gc?.manualTotalWriteoff26 ?? gc?.manualWriteoff ?? legacy?.manualWriteoff ?? '',
+        manualWriteoff26: gc?.manualWriteoff26 ?? ''
       };
     }
 
@@ -7064,20 +7124,21 @@
     function computeWriteoff20GroupsWithWipEnd(data) {
       const globals = data.globals || {};
       const totals = computePeriodTotals(data);
-      const gc20 =
-        data.groupCalc20 && typeof data.groupCalc20 === 'object' ? data.groupCalc20 : {};
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
       const legacy =
         data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
 
       return buildCalculationGroupsFromPeriodData(data).map(group => {
         const sums = sumGroupMetricsFromPeriodData(group.memberRows, globals, totals);
-        const calc20 = getGroupCalc20SettingsFromPeriodData(
+        const calc26 = getGroupCalc26SettingsFromPeriodData(
           group.groupName,
           group.memberRows,
-          gc20,
+          gc26,
           legacy
         );
-        const metrics20 = computeGroupWriteoff20Metrics(sums, calc20);
+        const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+        const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
         return Object.assign({}, group, { wipEnd20: metrics20.wipEnd20 });
       });
     }
@@ -8147,6 +8208,7 @@
         'Итого с НЗП',
         '% списания от отгрузки',
         'Списание всего вручную',
+        'Списание 26 вручную',
         'Списано всего',
         'Списано с 26 сч.',
         'Списано с 20 сч.',
@@ -8166,6 +8228,7 @@
         exportCellNum(tr.querySelector('.w26-total-wip')),
         exportCellNum(tr.querySelector('.group-w26-profit-percent, .w26-profit-percent')),
         exportCellText(tr.querySelector('.group-w26-manual-writeoff, .w26-manual-writeoff')),
+        exportCellText(tr.querySelector('.group-w26-manual-writeoff-26, .w26-manual-writeoff-26')),
         exportCellNum(tr.querySelector('.w26-writeoff-total')),
         exportCellNum(tr.querySelector('.w26-writeoff-26')),
         exportCellNum(tr.querySelector('.w26-writeoff-20')),
@@ -8183,6 +8246,7 @@
         exportCellNum(document.getElementById('ordersFootW26Acc26')),
         exportCellNum(document.getElementById('ordersFootW26PeriodTotal')),
         exportCellNum(document.getElementById('ordersFootW26TotalWip')),
+        '',
         '',
         '',
         exportCellNum(document.getElementById('ordersFootW26WriteoffTotal')),

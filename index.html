@@ -1392,7 +1392,7 @@
         <button id="pullWipFromPrevBtn" type="button" class="secondary">Подтянуть НЗП из предыдущего периода</button>
       </div>
       <div class="hint" id="wipChainSourceHint" style="margin-top: 8px;">
-        Цепочка НЗП и подтягивание из предыдущего периода используют «НЗП на 20 сч.» (без 26 сч.). Данные берутся из localStorage; Google Sheets не изменяется автоматически.
+        Цепочка НЗП и подтягивание из предыдущего периода используют «НЗП конец 20» с вкладки «Списание 20 сч.» (без 26 сч.). Данные берутся из localStorage; Google Sheets не изменяется автоматически.
       </div>
       <div class="hint wip-chain-auto-hint" id="wipChainAutoHint" hidden style="margin-top: 8px;"></div>
       <div id="wipChainReportPanel" hidden></div>
@@ -6222,17 +6222,17 @@
         return (
           '<p>В предыдущем периоде <strong>' +
           escapeHtmlForReport(result.prevPeriod) +
-          '</strong> нет заказов с переходящим НЗП (НЗП на 20 сч. &gt; 0,01).</p>'
+          '</strong> нет заказов с переходящим НЗП (НЗП конец 20 &gt; 0,01).</p>'
         );
       }
 
       let html =
         '<p>Из предыдущего периода <strong>' +
         escapeHtmlForReport(result.prevPeriod) +
-        '</strong> будут добавлены заказы с переходящим НЗП (источник — «НЗП на 20 сч.» пред. периода, без 26 сч.):</p>';
+        '</strong> будут добавлены заказы с переходящим НЗП (источник — «НЗП конец 20» пред. периода, вкладка «Списание 20 сч.»):</p>';
       html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
       html +=
-        '<th>Заказ</th><th>НЗП на 20 сч. пред. периода</th><th>Действие</th>';
+        '<th>Заказ</th><th>НЗП конец 20 пред. периода</th><th>Действие</th>';
       html += '</tr></thead><tbody>';
 
       result.items.forEach(item => {
@@ -6571,30 +6571,180 @@
       return m.wipEndNum;
     }
 
-    /** НЗП на 20 сч. (вкладка «НЗП для 1С») — источник для переходящего НЗП между периодами */
-    function getRowWip20(row, data) {
-      const isFinal = data.periodStatus === 'final';
-      if (isFinal && row.snapshot && row.snapshot.wipNo26 != null && row.snapshot.wipNo26 !== '') {
-        return num(row.snapshot.wipNo26);
+    function resolveGroupingSettingsFromData(orderName, orderGrouping) {
+      const entry =
+        orderGrouping && typeof orderGrouping === 'object' ? orderGrouping[orderName] : undefined;
+      if (!entry || typeof entry !== 'object') {
+        return { groupName: orderName, enabled: true, note: '' };
       }
-      const totals = computePeriodTotals(data);
-      const m = computeFullRowMetrics(
-        row,
-        data.globals,
-        totals.totalShipmentNoVat,
-        totals.totalSalary
-      );
-      return m.wip20Num;
+      const groupNameRaw = entry.groupName != null ? String(entry.groupName).trim() : '';
+      return {
+        groupName: groupNameRaw || orderName,
+        enabled: entry.enabled === false ? false : true,
+        note: entry.note != null ? String(entry.note) : ''
+      };
     }
 
-    function buildOrderWipEndMap(data) {
+    function buildCalculationGroupsFromPeriodData(data) {
+      const orderGrouping = data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
       const map = new Map();
       (data.rows || []).forEach(row => {
+        const orderName = String(row.order != null ? row.order : '').trim();
+        if (!orderName) return;
+        const settings = resolveGroupingSettingsFromData(orderName, orderGrouping);
+        if (settings.enabled === false) return;
+        const gn = settings.groupName || orderName;
+        if (!map.has(gn)) {
+          map.set(gn, { groupName: gn, orderNames: [], memberRows: [] });
+        }
+        const grp = map.get(gn);
+        grp.orderNames.push(orderName);
+        grp.memberRows.push(row);
+      });
+      return Array.from(map.values());
+    }
+
+    function computeRowExpenseMetricsForChain(row, globals, totals) {
+      const vatRate = num(globals.vatRate);
+      const shipmentVat = num(row.shipmentVat);
+      const shipmentNoVat = shipmentVat / (1 + vatRate / 100);
+      const salary = num(row.salary);
+      const shipmentShare = totals.totalShipmentNoVat
+        ? shipmentNoVat / totals.totalShipmentNoVat
+        : 0;
+      const salaryShare = totals.totalSalary ? salary / totals.totalSalary : 0;
+
+      return {
+        shipmentVat,
+        shipmentNoVat,
+        wipStart: num(row.wipStart),
+        materials: num(row.materials),
+        processing: num(row.processing),
+        otherDirect: num(row.other),
+        salary,
+        insurance: num(globals.totalInsurance) * salaryShare,
+        sick: num(globals.totalSick) * salaryShare,
+        acc25: num(globals.total25) * salaryShare,
+        acc26: num(globals.total26) * shipmentShare,
+        acc44: num(globals.total44) * shipmentShare
+      };
+    }
+
+    function sumGroupMetricsFromPeriodData(memberRows, globals, totals) {
+      let shipmentVat = 0;
+      let shipmentNoVat = 0;
+      let wipStart = 0;
+      let materials = 0;
+      let processing = 0;
+      let otherDirect = 0;
+      let salary = 0;
+      let insurance = 0;
+      let sick = 0;
+      let acc25 = 0;
+      let acc26 = 0;
+      let acc44 = 0;
+
+      memberRows.forEach(row => {
+        const m = computeRowExpenseMetricsForChain(row, globals, totals);
+        shipmentVat += m.shipmentVat;
+        shipmentNoVat += m.shipmentNoVat;
+        wipStart += m.wipStart;
+        materials += m.materials;
+        processing += m.processing;
+        otherDirect += m.otherDirect;
+        salary += m.salary;
+        insurance += m.insurance;
+        sick += m.sick;
+        acc25 += m.acc25;
+        acc26 += m.acc26;
+        acc44 += m.acc44;
+      });
+
+      const periodExp20 =
+        materials + processing + otherDirect + salary + insurance + sick + acc25 + acc44;
+
+      return {
+        shipmentVat,
+        shipmentNoVat,
+        wipStart,
+        acc26,
+        periodExp20,
+        totalWithWip20: wipStart + periodExp20
+      };
+    }
+
+    function getGroupCalcSettingsFromPeriodData(groupName, memberRows, groupCalc) {
+      const gc = groupCalc && typeof groupCalc === 'object' ? groupCalc[groupName] : undefined;
+      if (memberRows.length === 1 && !gc) {
+        const row = memberRows[0];
+        return {
+          profitPercent: row.profitPercent != null ? String(row.profitPercent) : '0',
+          manualWriteoff: row.manualWriteoff != null ? String(row.manualWriteoff) : ''
+        };
+      }
+      return {
+        profitPercent: gc?.profitPercent != null ? String(gc.profitPercent) : '0',
+        manualWriteoff: gc?.manualWriteoff != null ? String(gc.manualWriteoff) : ''
+      };
+    }
+
+    function computeWriteoff20GroupsWithWipEnd(data) {
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const groupCalc = data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+
+      return buildCalculationGroupsFromPeriodData(data).map(group => {
+        const sums = sumGroupMetricsFromPeriodData(group.memberRows, globals, totals);
+        const calc = getGroupCalcSettingsFromPeriodData(
+          group.groupName,
+          group.memberRows,
+          groupCalc
+        );
+        const metrics = computeGroupWriteoffMetrics(sums, calc);
+        return Object.assign({}, group, { wipEnd20: metrics.wipEnd20 });
+      });
+    }
+
+    function distributeGroupWipEnd20ToOrders(group) {
+      const shares = new Map();
+      const totalStart = group.memberRows.reduce((s, row) => s + num(row.wipStart), 0);
+
+      group.memberRows.forEach(row => {
         const order = String(row.order != null ? row.order : '').trim();
         if (!order) return;
-        map.set(order, getRowWip20(row, data));
+        let share;
+        if (group.memberRows.length === 1) {
+          share = group.wipEnd20;
+        } else if (totalStart > WIP_CHAIN_EPS) {
+          share = group.wipEnd20 * (num(row.wipStart) / totalStart);
+        } else {
+          share = group.wipEnd20 / group.memberRows.length;
+        }
+        shares.set(order, share);
+      });
+
+      return shares;
+    }
+
+    /** НЗП конец 20 (вкладка «Списание 20 сч.») — источник для переходящего НЗП между периодами */
+    function buildOrderWipEndMap(data) {
+      const map = new Map();
+      computeWriteoff20GroupsWithWipEnd(data).forEach(group => {
+        distributeGroupWipEnd20ToOrders(group).forEach((wipEnd20, order) => {
+          map.set(order, wipEnd20);
+        });
       });
       return map;
+    }
+
+    function getRowWipEnd20(row, data) {
+      const order = String(row.order != null ? row.order : '').trim();
+      if (!order) return 0;
+      return buildOrderWipEndMap(data).get(order) || 0;
+    }
+
+    function getRowWip20(row, data) {
+      return getRowWipEnd20(row, data);
     }
 
     function buildOrderWipStartMap(data) {
@@ -6633,14 +6783,14 @@
           warnings.push({
             type: 'missing_in_next',
             order,
-            message: 'Заказ отсутствует в следующем периоде, хотя НЗП на 20 сч. > 0'
+            message: 'Заказ отсутствует в следующем периоде, хотя НЗП конец 20 > 0'
           });
         }
         if (inNext && actual > WIP_CHAIN_EPS && (!inPrev || expected <= WIP_CHAIN_EPS)) {
           warnings.push({
             type: 'unexpected_start',
             order,
-            message: 'В текущем периоде есть НЗП нач., но в предыдущем НЗП на 20 сч. = 0 или заказ отсутствует'
+            message: 'В текущем периоде есть НЗП нач., но в предыдущем НЗП конец 20 = 0 или заказ отсутствует'
           });
         }
         if (inPrev && inNext && Math.abs(expected - actual) > WIP_CHAIN_EPS) {
@@ -6789,7 +6939,7 @@
 
       html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
       html +=
-        '<th>Период</th><th>Заказ</th><th>НЗП на 20 сч. пред.</th><th>НЗП нач. было</th><th>НЗП нач. новое</th><th>Разница</th><th>Статус</th><th>Примечание</th>';
+        '<th>Период</th><th>Заказ</th><th>НЗП конец 20 пред.</th><th>НЗП нач. было</th><th>НЗП нач. новое</th><th>Разница</th><th>Статус</th><th>Примечание</th>';
       html += '</tr></thead><tbody>';
 
       result.links.forEach(link => {
@@ -8027,7 +8177,7 @@
   <div id="pullWipFromPrevOverlay" class="wip-chain-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pullWipFromPrevTitle">
     <div class="wip-chain-dialog">
       <h3 id="pullWipFromPrevTitle">Подтянуть НЗП из предыдущего периода</h3>
-      <p class="hint">Будут добавлены только отсутствующие заказы или обновлено «НЗП нач.» по расхождениям. Источник — «НЗП на 20 сч.» предыдущего периода (без 26 сч.). Отгрузка, расходы и ЗП существующих строк не меняются.</p>
+      <p class="hint">Будут добавлены только отсутствующие заказы или обновлено «НЗП нач.» по расхождениям. Источник — «НЗП конец 20» предыдущего периода (вкладка «Списание 20 сч.», без 26 сч.). Отгрузка, расходы и ЗП существующих строк не меняются.</p>
       <div id="pullWipFromPrevContent"></div>
       <div class="wip-chain-actions">
         <button type="button" id="pullWipFromPrevConfirmBtn">Применить</button>

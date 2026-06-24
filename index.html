@@ -2274,7 +2274,10 @@
       if (memberRows.length === 1 && !gc) {
         const row = memberRows[0];
         return {
-          profitPercent26: row.querySelector('input.profit-percent')?.value ?? '0',
+          profitPercent26:
+            row.querySelector('input.w26-profit-percent')?.value ??
+            row.querySelector('input.profit-percent')?.value ??
+            '0',
           manualTotalWriteoff26: ''
         };
       }
@@ -2329,18 +2332,16 @@
 
       if (hasManualTotal) {
         writeOffTotal = num(calc26.manualTotalWriteoff26);
-        writeOff26Part = writeOffTotal - writeOff20;
-        if (writeOff26Part < -RECONCILE_EPS) {
-          validation.manualLessThan20 = true;
-        }
-        if (writeOff26Part > sums.acc26 + RECONCILE_EPS) {
-          validation.writeoff26OverExpenses = true;
-        }
       } else {
-        const targetByPct =
-          sums.shipmentNoVat * (num(calc26.profitPercent26) / 100);
-        writeOff26Part = Math.min(sums.acc26, Math.max(0, targetByPct - writeOff20));
-        writeOffTotal = writeOff20 + writeOff26Part;
+        writeOffTotal = sums.shipmentNoVat * (num(calc26.profitPercent26) / 100);
+      }
+
+      writeOff26Part = writeOffTotal - writeOff20;
+      if (writeOff26Part < -RECONCILE_EPS) {
+        validation.manualLessThan20 = true;
+      }
+      if (writeOff26Part > sums.acc26 + RECONCILE_EPS) {
+        validation.writeoff26OverExpenses = true;
       }
 
       const wipEnd26 = sums.totalWithWip26 - writeOffTotal;
@@ -3041,6 +3042,10 @@
         if (isGroupWriteoffCalcInput(t)) {
           if (!isManualWriteoffInput(t)) {
             sanitizeTableNumInput(t);
+          }
+          const row = t.closest('tr.order-group-item');
+          if (row && t.classList.contains('group-w26-profit-percent')) {
+            saveGroupCalcFromRow(row, t);
           }
           return;
         }

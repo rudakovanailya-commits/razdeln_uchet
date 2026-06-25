@@ -3065,14 +3065,31 @@
     function updateSummaryCardsForActiveTab() {
       const table = document.getElementById('ordersTable');
       const tab = table ? table.getAttribute('data-active-tab') : 'expenses';
+      const writtenOffEl = document.getElementById('totalWrittenOff');
       const endingWipEl = document.getElementById('totalEndingWIP');
-      if (!endingWipEl) return;
+      const costNo26El = document.getElementById('totalCostNo26');
+      if (!writtenOffEl || !endingWipEl) return;
 
       if ((tab === 'writeoff26' || tab === 'writeoff20') && lastGroupFootTotals) {
         const g = lastGroupFootTotals;
-        endingWipEl.textContent = fmt(tab === 'writeoff26' ? g.w26WipEnd : g.w20WipEnd);
-      } else if (lastAllRowsFootTotals && lastAllRowsFootTotals.totalEndingWIP != null) {
-        endingWipEl.textContent = fmt(lastAllRowsFootTotals.totalEndingWIP);
+        if (tab === 'writeoff20') {
+          writtenOffEl.textContent = fmt(g.w20Writeoff);
+          endingWipEl.textContent = fmt(g.w20WipEnd);
+          if (costNo26El) costNo26El.textContent = fmt(g.w20TotalWip);
+        } else {
+          writtenOffEl.textContent = fmt(g.w26WriteoffTotal);
+          endingWipEl.textContent = fmt(g.w26WipEnd);
+        }
+      } else if (lastAllRowsFootTotals) {
+        if (lastAllRowsFootTotals.totalWrittenOff != null) {
+          writtenOffEl.textContent = fmt(lastAllRowsFootTotals.totalWrittenOff);
+        }
+        if (lastAllRowsFootTotals.totalEndingWIP != null) {
+          endingWipEl.textContent = fmt(lastAllRowsFootTotals.totalEndingWIP);
+        }
+        if (costNo26El && lastAllRowsFootTotals.totalCostNo26 != null) {
+          costNo26El.textContent = fmt(lastAllRowsFootTotals.totalCostNo26);
+        }
       }
     }
 
@@ -4901,7 +4918,8 @@
         shipmentVat: totalShipmentVat,
         shipmentNoVat: totalShipmentNoVat,
         totalWrittenOff,
-        totalEndingWIP
+        totalEndingWIP,
+        totalCostNo26: sumFootTotalCostNo26
       };
 
       const setFoot = (id, v) => {

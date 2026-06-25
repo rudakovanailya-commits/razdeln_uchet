@@ -6913,6 +6913,92 @@
       return { shipmentNoVat, shipmentVat, writeOff, profitRub, wipEnd, totalCost };
     }
 
+    function deriveGroupWriteoffMetricsForOrderFromPeriodData(data, orderName) {
+      const target = String(orderName || '').trim();
+      if (!target || !data || !Array.isArray(data.rows)) return null;
+
+      const orderGrouping = data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
+      const settings = resolveGroupingSettingsFromData(target, orderGrouping);
+      if (settings.enabled === false) return null;
+
+      const groups = buildCalculationGroupsFromPeriodData(data);
+      const groupName = settings.groupName || target;
+      const group = groups.find(g => g.groupName === groupName);
+      if (!group) return null;
+
+      const orderInGroup = group.memberRows.some(
+        r => String(r.order != null ? r.order : '').trim() === target
+      );
+      if (!orderInGroup) return null;
+
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
+      const legacy = data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+
+      const sums = sumGroupMetricsFromPeriodData(
+        group.memberRows,
+        globals,
+        totals,
+        group.groupName,
+        transfers
+      );
+      const calc26 = getGroupCalc26SettingsFromPeriodData(
+        group.groupName,
+        group.memberRows,
+        gc26,
+        legacy
+      );
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
+
+      return {
+        groupName: group.groupName,
+        memberCount: group.memberRows.length,
+        orderNames: group.orderNames.slice(),
+        shipmentVat: sums.shipmentVat,
+        shipmentNoVat: sums.shipmentNoVat,
+        writeoffTotal: metrics26.writeOffTotal,
+        writeoff26: metrics26.writeOff26Part,
+        writeoff20: metrics26.writeOff20,
+        wipEnd20: metrics20.wipEnd20,
+        wipEnd26: metrics26.wipEnd26,
+        profit: metrics26.profit26Sum,
+        isMultiMember: group.memberRows.length > 1
+      };
+    }
+
+    function listPeriodDataSourcesForOrderReport() {
+      const sources = new Map();
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('razdelny_uchet_'))
+        .forEach(key => {
+          const period = key.slice('razdelny_uchet_'.length);
+          if (!/^\d{4}-\d{2}$/.test(period)) return;
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (data && Array.isArray(data.rows)) sources.set(period, data);
+          } catch (e) {
+            /* пропуск повреждённых записей */
+          }
+        });
+
+      const current = normalizePeriodStr(getCurrentPeriod());
+      if (current && /^\d{4}-\d{2}$/.test(current)) {
+        try {
+          sources.set(current, collectData());
+        } catch (e) {
+          /* текущий период недоступен */
+        }
+      }
+
+      return sources;
+    }
+
     const WIP_CHAIN_EPS = 0.01;
     let lastWipChainCheckResult = null;
 
@@ -8306,70 +8392,69 @@
       }
 
       const target = String(orderName).trim();
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('razdelny_uchet_'));
-      keys.sort();
+      const periodSources = listPeriodDataSourcesForOrderReport();
+      const periods = Array.from(periodSources.keys()).sort();
 
       const rows = [];
       let totalShipment = 0;
       let totalWriteoff = 0;
+      let totalWriteoff26 = 0;
+      let totalWriteoff20 = 0;
+      let totalWipEnd20 = 0;
+      let totalWipEnd26 = 0;
       let totalProfit = 0;
+      let groupHint = '';
 
-      keys.forEach(key => {
-        const period = key.slice('razdelny_uchet_'.length);
-        let data;
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) return;
-          data = JSON.parse(raw);
-        } catch (e) {
-          return;
+      periods.forEach(period => {
+        const data = periodSources.get(period);
+        const m = deriveGroupWriteoffMetricsForOrderFromPeriodData(data, target);
+        if (!m) return;
+
+        if (m.isMultiMember && !groupHint) {
+          groupHint =
+            'Заказ входит в расчётную группу «' +
+            m.groupName +
+            '» (' +
+            m.memberCount +
+            ' бух. строк). Показатели списания и НЗП — по группе целиком.';
         }
-        if (!data || !Array.isArray(data.rows) || !data.globals) return;
 
-        const g = data.globals;
-        const vatRate = num(g.vatRate);
-        let totalShipmentNoVat = 0;
-        let totalSalary = 0;
-        data.rows.forEach(r => {
-          const sv = num(r.shipmentVat);
-          totalShipmentNoVat += sv / (1 + vatRate / 100);
-          totalSalary += num(r.salary);
+        rows.push({
+          period,
+          shipment: m.shipmentVat,
+          writeoffTotal: m.writeoffTotal,
+          writeoff26: m.writeoff26,
+          writeoff20: m.writeoff20,
+          wipEnd20: m.wipEnd20,
+          wipEnd26: m.wipEnd26,
+          profit: m.profit,
+          groupName: m.groupName
         });
 
-        let pShipment = 0;
-        let pWriteoff = 0;
-        let pProfit = 0;
-        let matchedInPeriod = 0;
-
-        data.rows.forEach(r => {
-          const name = (r && r.order != null ? String(r.order) : '').trim();
-          if (name !== target) return;
-          matchedInPeriod++;
-          const m = deriveMetricsFromSavedRow(r, g, totalShipmentNoVat, totalSalary);
-          pShipment += m.shipmentVat;
-          pWriteoff += m.writeOff;
-          pProfit += m.profitRub;
-        });
-
-        if (matchedInPeriod > 0) {
-          rows.push({
-            period,
-            shipment: pShipment,
-            writeoff: pWriteoff,
-            profit: pProfit
-          });
-          totalShipment += pShipment;
-          totalWriteoff += pWriteoff;
-          totalProfit += pProfit;
-        }
+        totalShipment += m.shipmentVat;
+        totalWriteoff += m.writeoffTotal;
+        totalWriteoff26 += m.writeoff26;
+        totalWriteoff20 += m.writeoff20;
+        totalWipEnd20 += m.wipEnd20;
+        totalWipEnd26 += m.wipEnd26;
+        totalProfit += m.profit;
       });
 
-      let html = `
+      let html = '';
+      if (groupHint) {
+        html += '<div class="hint" style="margin-top:8px;">' + escapeHtmlForReport(groupHint) + '</div>';
+      }
+
+      html += `
 <table>
 <tr>
 <th>Месяц</th>
 <th>Отгрузка</th>
-<th>Списано</th>
+<th>Списано всего</th>
+<th>Списано с 26</th>
+<th>Списано с 20</th>
+<th>НЗП конец 20</th>
+<th>НЗП конец</th>
 <th>Прибыль</th>
 </tr>
 `;
@@ -8377,24 +8462,39 @@
       rows.forEach(r => {
         html += `
   <tr>
-    <td>${r.period}</td>
+    <td>${escapeHtmlForReport(r.period)}</td>
     <td>${fmt(r.shipment)}</td>
-    <td>${fmt(r.writeoff)}</td>
+    <td>${fmt(r.writeoffTotal)}</td>
+    <td>${fmt(r.writeoff26)}</td>
+    <td>${fmt(r.writeoff20)}</td>
+    <td>${fmt(r.wipEnd20)}</td>
+    <td>${fmt(r.wipEnd26)}</td>
     <td>${fmt(r.profit)}</td>
   </tr>
   `;
       });
 
+      if (rows.length) {
+        html += `
+  <tr style="font-weight:bold;">
+    <td>Итого</td>
+    <td>${fmt(totalShipment)}</td>
+    <td>${fmt(totalWriteoff)}</td>
+    <td>${fmt(totalWriteoff26)}</td>
+    <td>${fmt(totalWriteoff20)}</td>
+    <td>${fmt(totalWipEnd20)}</td>
+    <td>${fmt(totalWipEnd26)}</td>
+    <td>${fmt(totalProfit)}</td>
+  </tr>
+`;
+      }
+
       html += `</table>`;
 
-      html += `
-<div class="order-total">
-ИТОГО:<br>
-Отгрузка: ${fmt(totalShipment)}<br>
-Списано: ${fmt(totalWriteoff)}<br>
-Прибыль: ${fmt(totalProfit)}
-</div>
-`;
+      if (!rows.length) {
+        html +=
+          '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу в сохранённых периодах. Загрузите период и сохраните локально, либо выберите заказ из текущей таблицы.</div>';
+      }
 
       if (box) box.style.display = 'block';
       if (title) title.textContent = 'Карточка заказа: ' + orderName;

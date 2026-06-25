@@ -5708,7 +5708,24 @@
       });
     }
 
+    function flushGroupCalcStateFromDom() {
+      const groupBody = document.getElementById('ordersGroupBody');
+      if (!groupBody) return;
+      groupBody.querySelectorAll('tr.order-group-item[data-group-name]').forEach(tr => {
+        const gn = tr.getAttribute('data-group-name');
+        if (!gn) return;
+        if (!groupCalc26[gn]) groupCalc26[gn] = {};
+        const pct = tr.querySelector('input.group-w26-profit-percent');
+        const man = tr.querySelector('input.group-w26-manual-writeoff');
+        const man26 = tr.querySelector('input.group-w26-manual-writeoff-26');
+        if (pct) groupCalc26[gn].profitPercent26 = pct.value;
+        if (man) groupCalc26[gn].manualTotalWriteoff26 = man.value;
+        if (man26) groupCalc26[gn].manualWriteoff26 = man26.value;
+      });
+    }
+
     function collectData() {
+      flushGroupCalcStateFromDom();
       const rows = getRows().map(row => collectRowData(row));
       const groupingCopy = {};
       Object.keys(orderGrouping).forEach(k => {
@@ -7041,6 +7058,207 @@
       return map;
     }
 
+    /** Диагностика: откуда берётся НЗП конец 20 для переноса между периодами */
+    function traceOrderWipEnd20ForPeriod(data, orderName) {
+      const order = String(orderName || '').trim();
+      const period =
+        data && data._chainPeriod
+          ? String(data._chainPeriod)
+          : normalizePeriodStr(getCurrentPeriod()) || '';
+      const result = {
+        order,
+        period,
+        found: false,
+        groupName: '',
+        memberCount: 0,
+        hasGroupCalc26: false,
+        calc26Source: '',
+        profitPercent26: '0',
+        manualTotalWriteoff26: '',
+        manualWriteoff26: '',
+        totalWithWip20: 0,
+        writeOffTotal: 0,
+        writeOff20: 0,
+        groupWipEnd20: 0,
+        orderShareWipEnd20: 0,
+        shareMethod: '',
+        transferSource: 'buildOrderWipEndMap → вкладка «Списание 20 сч.»',
+        legacyWipNo26Row: null,
+        legacyWipEndRow: null,
+        snapshotWipNo26: null,
+        snapshotWipEnd: null,
+        rowWipStart: null,
+        unreliable: false,
+        warnings: []
+      };
+      if (!order || !data) return result;
+
+      const orderGrouping =
+        data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
+      const settings = resolveGroupingSettingsFromData(order, orderGrouping);
+      if (settings.enabled === false) {
+        result.warnings.push('Заказ исключён из расчётов (группировка отключена)');
+        return result;
+      }
+
+      const groups = buildCalculationGroupsFromPeriodData(data);
+      const groupName = settings.groupName || order;
+      const group = groups.find(g => g.groupName === groupName);
+      if (!group) {
+        result.warnings.push('Расчётная группа не найдена');
+        return result;
+      }
+
+      const row = group.memberRows.find(r => String(r.order || '').trim() === order);
+      if (!row) {
+        result.warnings.push('Заказ не найден в составе группы');
+        return result;
+      }
+
+      result.found = true;
+      result.groupName = groupName;
+      result.memberCount = group.memberRows.length;
+      result.rowWipStart = num(row.wipStart);
+
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
+      const legacy =
+        data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+      const gc = gc26[groupName];
+      const leg = legacy[groupName];
+
+      result.hasGroupCalc26 = !!(gc || leg);
+      if (gc) result.calc26Source = 'groupCalc26 (сохранённый период)';
+      else if (leg) result.calc26Source = 'groupCalc (устаревшее поле)';
+      else if (group.memberRows.length === 1) {
+        result.calc26Source = manualWriteoffSavedHasValue(row.manualWriteoff)
+          ? 'manualWriteoff строки'
+          : 'profitPercent строки';
+      } else {
+        result.calc26Source = 'нет (списание 0%)';
+      }
+
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+      const sums = sumGroupMetricsFromPeriodData(
+        group.memberRows,
+        globals,
+        totals,
+        groupName,
+        transfers
+      );
+      const calc26 = getGroupCalc26SettingsFromPeriodData(
+        groupName,
+        group.memberRows,
+        gc26,
+        legacy
+      );
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
+
+      result.profitPercent26 = calc26.profitPercent26;
+      result.manualTotalWriteoff26 = calc26.manualTotalWriteoff26;
+      result.manualWriteoff26 = calc26.manualWriteoff26;
+      result.totalWithWip20 = sums.totalWithWip20;
+      result.writeOffTotal = metrics26.writeOffTotal;
+      result.writeOff20 = metrics20.writeOff20;
+      result.groupWipEnd20 = metrics20.wipEnd20;
+
+      const m = computeFullRowMetrics(
+        row,
+        globals,
+        totals.totalShipmentNoVat,
+        totals.totalSalary
+      );
+      result.legacyWipNo26Row = m.wip20Num;
+      result.legacyWipEndRow = m.wipEndNum;
+      if (row.snapshot && row.snapshot.wipNo26 != null) {
+        result.snapshotWipNo26 = num(row.snapshot.wipNo26);
+      }
+      if (row.snapshot && row.snapshot.wipEnd != null) {
+        result.snapshotWipEnd = num(row.snapshot.wipEnd);
+      }
+
+      if (group.memberRows.length === 1) {
+        result.orderShareWipEnd20 = metrics20.wipEnd20;
+        result.shareMethod = 'единственная строка группы';
+      } else {
+        const totalStart = group.memberRows.reduce((s, r) => s + num(r.wipStart), 0);
+        if (totalStart > WIP_CHAIN_EPS) {
+          result.orderShareWipEnd20 =
+            metrics20.wipEnd20 * (num(row.wipStart) / totalStart);
+          result.shareMethod = 'пропорция НЗП нач.';
+        } else {
+          result.orderShareWipEnd20 = metrics20.wipEnd20 / group.memberRows.length;
+          result.shareMethod = 'поровну между строками';
+        }
+      }
+
+      if (
+        !result.hasGroupCalc26 &&
+        group.memberRows.length > 1 &&
+        metrics26.writeOffTotal <= WIP_CHAIN_EPS &&
+        metrics20.wipEnd20 > WIP_CHAIN_EPS
+      ) {
+        result.unreliable = true;
+        result.warnings.push(
+          'Нет сохранённых настроек списания (groupCalc26) для группы «' +
+            groupName +
+            '». В перенос попадёт «Всего с НЗП» (' +
+            fmt(metrics20.wipEnd20) +
+            '), а не НЗП конец 20 с вкладки «Списание 20 сч.». Сохраните период ' +
+            period +
+            ' после настройки вкладки «Списание с 26».'
+        );
+      }
+
+      if (
+        result.snapshotWipNo26 != null &&
+        Math.abs(result.snapshotWipNo26 - result.orderShareWipEnd20) > WIP_CHAIN_EPS
+      ) {
+        result.warnings.push(
+          'snapshot.wipNo26 (' +
+            fmt(result.snapshotWipNo26) +
+            ') не совпадает с НЗП конец 20 (' +
+            fmt(result.orderShareWipEnd20) +
+            ') — для переноса используется только вкладка «Списание 20 сч.»'
+        );
+      }
+
+      return result;
+    }
+
+    function logWipChainTransferDiagnostics(context, traces) {
+      if (!traces || !traces.length) return;
+      console.group('[НЗП цепочка] ' + context);
+      traces.forEach(t => {
+        console.log('Заказ:', t.order);
+        console.log('  Период-источник:', t.period);
+        console.log('  Группа:', t.groupName, '(' + t.memberCount + ' строк)');
+        console.log('  Источник настроек списания:', t.calc26Source);
+        console.log('  НЗП конец 20 (группа):', t.groupWipEnd20);
+        console.log('  Переносится (доля заказа):', t.orderShareWipEnd20);
+        console.log('  Источник значения:', t.transferSource);
+        console.log('  Метод распределения:', t.shareMethod);
+        console.log('  Списано всего:', t.writeOffTotal);
+        console.log('  Списано с 20:', t.writeOff20);
+        console.log('  Всего с НЗП 20:', t.totalWithWip20);
+        if (t.legacyWipNo26Row != null) {
+          console.log('  [старая логика] НЗП на 20 (экономист):', t.legacyWipNo26Row);
+        }
+        if (t.snapshotWipNo26 != null) {
+          console.log('  [snapshot] wipNo26:', t.snapshotWipNo26);
+        }
+        if (t.snapshotWipEnd != null) {
+          console.log('  [snapshot] wipEnd:', t.snapshotWipEnd);
+        }
+        if (t.unreliable) console.warn('  НЕНАДЁЖНО для переноса — нет сохранённых настроек списания');
+        if (t.warnings.length) console.warn('  Предупреждения:', t.warnings);
+      });
+      console.groupEnd();
+    }
+
     function analyzePullWipFromPreviousPeriod(currentPeriod) {
       const cur = normalizePeriodStr(currentPeriod);
       if (!cur || !/^\d{4}-\d{2}$/.test(cur)) {
@@ -7065,8 +7283,27 @@
       const prevWipEnd = buildOrderWipEndMap(prevClone);
       const currentOrders = getCurrentTableOrderMap();
       const items = [];
+      const skippedUnreliable = [];
+      const diagnosticTraces = [];
 
       prevWipEnd.forEach((wipEnd, order) => {
+        const trace = traceOrderWipEnd20ForPeriod(prevClone, order);
+        trace.transferAmount = wipEnd;
+        diagnosticTraces.push(trace);
+
+        if (trace.unreliable) {
+          skippedUnreliable.push({
+            order,
+            prevWipEnd: wipEnd,
+            trace,
+            reason:
+              'Нет сохранённых настроек списания в периоде ' +
+              prevPeriod +
+              ' — перенос пропущен. Сохраните период после настройки вкладки «Списание с 26».'
+          });
+          return;
+        }
+
         if (wipEnd <= WIP_CHAIN_EPS) return;
 
         const existing = currentOrders.get(order);
@@ -7074,6 +7311,7 @@
           items.push({
             order,
             prevWipEnd: wipEnd,
+            trace,
             action: 'add',
             actionLabel: 'добавить'
           });
@@ -7082,6 +7320,7 @@
             order,
             prevWipEnd: wipEnd,
             currentWipStart: existing.wipStart,
+            trace,
             action: 'update',
             actionLabel: 'обновить'
           });
@@ -7090,13 +7329,20 @@
             order,
             prevWipEnd: wipEnd,
             currentWipStart: existing.wipStart,
+            trace,
             action: 'exists',
             actionLabel: 'уже есть'
           });
         }
       });
 
+      logWipChainTransferDiagnostics(
+        'Подтянуть НЗП из ' + prevPeriod + ' → ' + cur,
+        diagnosticTraces.filter(t => t.orderShareWipEnd20 > WIP_CHAIN_EPS || t.unreliable)
+      );
+
       items.sort((a, b) => a.order.localeCompare(b.order, 'ru'));
+      skippedUnreliable.sort((a, b) => a.order.localeCompare(b.order, 'ru'));
 
       return {
         ok: true,
@@ -7105,12 +7351,15 @@
         items,
         toAdd: items.filter(i => i.action === 'add'),
         toUpdate: items.filter(i => i.action === 'update'),
-        alreadyOk: items.filter(i => i.action === 'exists')
+        alreadyOk: items.filter(i => i.action === 'exists'),
+        skippedUnreliable,
+        diagnosticTraces
       };
     }
 
     function buildPullWipFromPrevPreviewHtml(result) {
-      if (!result.items.length) {
+      const hasSkipped = result.skippedUnreliable && result.skippedUnreliable.length;
+      if (!result.items.length && !hasSkipped) {
         return (
           '<p>В предыдущем периоде <strong>' +
           escapeHtmlForReport(result.prevPeriod) +
@@ -7121,13 +7370,43 @@
       let html =
         '<p>Из предыдущего периода <strong>' +
         escapeHtmlForReport(result.prevPeriod) +
-        '</strong> будут добавлены заказы с переходящим НЗП (источник — «НЗП конец 20» пред. периода, вкладка «Списание 20 сч.»):</p>';
+        '</strong> — источник: «НЗП конец 20» (вкладка «Списание 20 сч.»). Подробности — в консоли браузера (F12).</p>';
+
+      if (hasSkipped) {
+        html +=
+          '<p class="danger"><strong>Пропущено из-за отсутствия сохранённых настроек списания:</strong> ' +
+          result.skippedUnreliable.length +
+          ' заказ(ов). Сначала откройте период ' +
+          escapeHtmlForReport(result.prevPeriod) +
+          ', проверьте вкладку «Списание с 26» и сохраните период локально.</p>';
+        html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
+        html +=
+          '<th>Заказ</th><th>Группа</th><th>НЗП конец 20 (расчёт)</th><th>Причина</th>';
+        html += '</tr></thead><tbody>';
+        result.skippedUnreliable.forEach(item => {
+          html +=
+            '<tr><td>' +
+            escapeHtmlForReport(item.order) +
+            '</td><td>' +
+            escapeHtmlForReport(item.trace.groupName) +
+            '</td><td>' +
+            fmt(item.prevWipEnd) +
+            '</td><td>' +
+            escapeHtmlForReport(item.reason) +
+            '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+
+      if (!result.items.length) return html;
+
       html += '<div class="wip-chain-scroll"><table class="wip-chain-table"><thead><tr>';
       html +=
-        '<th>Заказ</th><th>НЗП конец 20 пред. периода</th><th>Действие</th>';
+        '<th>Заказ</th><th>Группа</th><th>НЗП конец 20 пред.</th><th>Источник</th><th>Переносится</th><th>Действие</th>';
       html += '</tr></thead><tbody>';
 
       result.items.forEach(item => {
+        const t = item.trace || {};
         let actionCell = item.actionLabel;
         if (item.action === 'update') {
           actionCell =
@@ -7136,6 +7415,12 @@
         html +=
           '<tr><td>' +
           escapeHtmlForReport(item.order) +
+          '</td><td>' +
+          escapeHtmlForReport(t.groupName || '—') +
+          '</td><td>' +
+          fmt(t.groupWipEnd20 != null ? t.groupWipEnd20 : item.prevWipEnd) +
+          '</td><td>' +
+          escapeHtmlForReport(t.calc26Source || t.transferSource || '—') +
           '</td><td>' +
           fmt(item.prevWipEnd) +
           '</td><td>' +
@@ -7165,6 +7450,19 @@
     function applyPullWipFromPreviousPeriod(preview) {
       let addedCount = 0;
       let updatedCount = 0;
+
+      const applyTraces = []
+        .concat(preview.toAdd || [])
+        .concat(preview.toUpdate || [])
+        .map(i => i.trace)
+        .filter(Boolean);
+      logWipChainTransferDiagnostics(
+        'Применение подтягивания НЗП ' +
+          preview.prevPeriod +
+          ' → ' +
+          preview.currentPeriod,
+        applyTraces
+      );
 
       if (!ordersTableHasNonEmptyRows()) {
         ordersBody.innerHTML = '';
@@ -7205,6 +7503,14 @@
       let msg = 'Добавлено строк из переходящего НЗП: ' + addedCount;
       if (updatedCount) {
         msg += '\nОбновлено НЗП нач.: ' + updatedCount;
+      }
+      if (preview.skippedUnreliable && preview.skippedUnreliable.length) {
+        msg +=
+          '\n\nПропущено (нет сохранённых настроек списания в ' +
+          preview.prevPeriod +
+          '): ' +
+          preview.skippedUnreliable.length +
+          ' заказ(ов). См. консоль (F12).';
       }
       alert(msg);
 
@@ -7588,9 +7894,12 @@
           : undefined;
       if (memberRows.length === 1 && !gc && !legacy) {
         const row = memberRows[0];
+        const manualTotal = manualWriteoffSavedHasValue(row.manualWriteoff)
+          ? String(row.manualWriteoff)
+          : '';
         return {
           profitPercent26: row.profitPercent != null ? String(row.profitPercent) : '0',
-          manualTotalWriteoff26: '',
+          manualTotalWriteoff26: manualTotal,
           manualWriteoff26: ''
         };
       }
@@ -8207,13 +8516,31 @@
         }
 
         const prevWipEnd = buildOrderWipEndMap(prevData);
+        const chainTraces = [];
         link.discrepancies.forEach(d => {
+          const trace = traceOrderWipEnd20ForPeriod(prevData, d.order);
+          trace.transferAmount = d.expected;
+          chainTraces.push(trace);
+          if (trace.unreliable) {
+            applyReport.warnings.push(
+              'Заказ «' +
+                d.order +
+                '»: перенос пропущен — в периоде ' +
+                (prevData._chainPeriod || startPeriod) +
+                ' нет сохранённых настроек списания (groupCalc26). Сохраните период после вкладки «Списание с 26».'
+            );
+            return;
+          }
           const row = findRowByOrderInData(nextData, d.order);
           if (row) {
             row.wipStart = formatWipStartStorage(d.expected);
             applyReport.ordersUpdated++;
           }
         });
+        logWipChainTransferDiagnostics(
+          'Применение цепочки НЗП ' + (prevData._chainPeriod || startPeriod) + ' → ' + nextPeriod,
+          chainTraces
+        );
 
         recalculatePeriodDataInMemory(nextData);
         savePeriodDataToLocalStorage(nextPeriod, nextData, {

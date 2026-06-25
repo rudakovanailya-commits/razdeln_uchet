@@ -1872,23 +1872,26 @@
       return isNaN(n) ? 0 : n;
     }
 
+    function formatMoney(value) {
+      const n = num(value);
+      if (!Number.isFinite(n)) return '0,00';
+      return n
+        .toLocaleString('ru-RU', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })
+        .replace(/\u00a0/g, ' ')
+        .replace(/\u202f/g, ' ');
+    }
+
     function formatNumber(value) {
-      const nVal = Number(
-        String(value == null ? '' : value).replace(/\s/g, '').replace(/,/g, '.')
-      );
-      if (!nVal) return '';
-      return nVal.toLocaleString('ru-RU');
+      return formatMoney(value);
     }
 
     function formatSeparatedInputNumber(value) {
-      const s = String(value == null ? '' : value)
-        .replace(/\s/g, '')
-        .replace(/,/g, '.');
-      if (s === '' || s === '.') return '';
-      const n = Number(s);
+      const n = num(value);
       if (!Number.isFinite(n)) return '';
-      if (n === 0) return '0';
-      return n.toLocaleString('ru-RU');
+      return formatMoney(n);
     }
 
     function formatAllCalculatedFields() {
@@ -1903,9 +1906,7 @@
         if (!/^[\d\s.,+\-]+$/.test(t)) return;
         const n = num(t);
         if (!Number.isFinite(n)) return;
-        let out = formatNumber(String(n));
-        if (out === '' && n === 0) out = '0';
-        cell.textContent = out;
+        cell.textContent = formatMoney(n);
       });
 
       [
@@ -1921,9 +1922,7 @@
         if (!raw || !String(raw).trim()) return;
         const n = num(raw);
         if (!Number.isFinite(n)) return;
-        let out = formatNumber(String(n));
-        if (out === '' && n === 0) out = '0';
-        el.textContent = out;
+        el.textContent = formatMoney(n);
       });
     }
 
@@ -2000,21 +1999,7 @@
     }
 
     function formatTableNumWithSpaces(str) {
-      let s = String(str).replace(/\s/g, '').replace(',', '.');
-      const neg = s.startsWith('-');
-      if (neg) s = s.slice(1);
-      s = s.replace(/[^\d.]/g, '');
-      if (s === '' || s === '.') return '0';
-      const dot = s.indexOf('.');
-      let intRaw = dot === -1 ? s : s.slice(0, dot);
-      let decRaw = dot === -1 ? '' : s.slice(dot + 1).replace(/\./g, '');
-      intRaw = intRaw.replace(/\D/g, '');
-      if (intRaw === '') intRaw = '0';
-      else intRaw = intRaw.replace(/^0+(?=\d)/, '') || '0';
-      const intFormatted = intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-      let out = (neg ? '-' : '') + intFormatted;
-      if (decRaw !== '') out += '.' + decRaw.slice(0, 12);
-      return out;
+      return formatMoney(str);
     }
 
     function sanitizeTableNumInput(el) {
@@ -3133,7 +3118,7 @@
     }
 
     function fmt(value) {
-      return num(value).toFixed(2);
+      return formatMoney(value);
     }
 
     function getRows() {
@@ -7248,9 +7233,8 @@
     }
 
     function formatWipStartStorage(n) {
-      if (!Number.isFinite(n) || Math.abs(n) < 1e-9) return '0';
-      const out = formatNumber(String(n));
-      return out === '' ? '0' : out;
+      if (!Number.isFinite(n) || Math.abs(n) < 1e-9) return '0,00';
+      return formatMoney(n);
     }
 
     function computeFullRowMetrics(row, globals, totalShipmentNoVat, totalSalary) {

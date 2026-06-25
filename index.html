@@ -2841,7 +2841,8 @@
       return tr;
     }
 
-    function calculateAndRenderGroupedRows() {
+    function calculateAndRenderGroupedRows(options) {
+      options = options || {};
       const panel = document.getElementById('ordersGroupingPanel');
       if (panel && !panel.hidden) {
         collectGroupingFromPanel();
@@ -2854,7 +2855,7 @@
       }
 
       const active = document.activeElement;
-      if (isGroupCalcActiveInput(active)) {
+      if (!options.force && isGroupCalcActiveInput(active)) {
         return null;
       }
 
@@ -8520,10 +8521,77 @@
       return String(el.textContent ?? '').trim();
     }
 
+    function exportDisplayedNum(el) {
+      if (!el) return 0;
+      const tag = el.tagName;
+      if (tag === 'TD' || tag === 'TH' || tag === 'DIV') {
+        const inp = el.querySelector('input, select, textarea');
+        const text = String(el.textContent ?? '').trim();
+        if (!inp && text) return num(text);
+        if (inp && text) {
+          const fromText = num(text);
+          if (fromText !== 0) return fromText;
+        }
+        if (text) return num(text);
+      }
+      return exportCellNum(el);
+    }
+
     function exportCellNum(el) {
       const text = exportCellText(el);
       if (!text) return 0;
       return num(text);
+    }
+
+    function exportGroupShipmentVat(tr) {
+      const td = tr.querySelector('td.orders-col-shipment-vat');
+      return exportDisplayedNum(td);
+    }
+
+    function exportGroupShipmentNoVat(tr) {
+      const td = tr.querySelector('td.shipment-no-vat, td.orders-col-shipment-no-vat');
+      return exportDisplayedNum(td);
+    }
+
+    function exportTransferTypeLabel(type) {
+      return type === 'periodExp20' ? 'Из расходов периода 20' : 'Из НЗП нач. 20';
+    }
+
+    function prepareActiveTabForExport(activeTab) {
+      if (activeTab === 'grouping') {
+        renderGroupingPanel();
+        return;
+      }
+      if (activeTab === 'transfers') {
+        collectTransfersFromPanel();
+        return;
+      }
+      if (activeTab === 'writeoff20' || activeTab === 'writeoff26') {
+        const groupingPanel = document.getElementById('ordersGroupingPanel');
+        if (groupingPanel && !groupingPanel.hidden) {
+          collectGroupingFromPanel();
+        } else {
+          ensureGroupingForAllRows();
+        }
+        const transfersBody = document.getElementById('transfersTableBody');
+        if (transfersBody && transfersBody.querySelector('tr[data-transfer-index]')) {
+          collectTransfersFromPanel();
+        }
+        calculateAndRenderGroupedRows({ force: true });
+        const setFoot = (fid, v) => {
+          const el = document.getElementById(fid);
+          if (el) el.textContent = fmt(v);
+        };
+        const setFootPct = (fid, pct) => {
+          const el = document.getElementById(fid);
+          if (el) el.textContent = pct.toFixed(1) + '%';
+        };
+        updateFootForActiveTab(setFoot, setFootPct);
+        return;
+      }
+      if (!isPeriodFinal()) {
+        calculateAll();
+      }
     }
 
     function exportGroupOrderName(tr) {
@@ -8570,15 +8638,15 @@
         exportCellNum(tr.querySelector('.processing')),
         exportCellNum(tr.querySelector('.other-direct')),
         exportCellNum(tr.querySelector('.salary')),
-        exportCellNum(tr.querySelector('.acc25')),
-        exportCellNum(tr.querySelector('.acc26')),
-        exportCellNum(tr.querySelector('.acc44')),
-        exportCellNum(tr.querySelector('.total-cost-no26')),
-        exportCellNum(tr.querySelector('.total-cost')),
-        exportCellNum(tr.querySelector('.write-off')),
-        exportCellNum(tr.querySelector('.wip-end')),
-        exportCellNum(tr.querySelector('.profit-rub')),
-        exportCellNum(tr.querySelector('.profit-margin'))
+        exportDisplayedNum(tr.querySelector('.acc25')),
+        exportDisplayedNum(tr.querySelector('.acc26')),
+        exportDisplayedNum(tr.querySelector('.acc44')),
+        exportDisplayedNum(tr.querySelector('.total-cost-no26')),
+        exportDisplayedNum(tr.querySelector('.total-cost')),
+        exportDisplayedNum(tr.querySelector('.write-off')),
+        exportDisplayedNum(tr.querySelector('.wip-end')),
+        exportDisplayedNum(tr.querySelector('.profit-rub')),
+        exportCellText(tr.querySelector('.profit-margin'))
       ]);
 
       downloadExcelAoA([header, ...body], 'Расходы', buildExportFilename('rashody'));
@@ -8603,32 +8671,32 @@
 
       const body = getGroupRows().map(tr => [
         exportGroupOrderName(tr),
-        exportCellNum(tr.querySelector('.orders-col-shipment-vat')),
-        exportCellNum(tr.querySelector('.shipment-no-vat')),
-        exportCellNum(tr.querySelector('.w20-wip-start')),
-        exportCellNum(tr.querySelector('.w20-period-exp')),
-        exportCellNum(tr.querySelector('.w20-total-wip')),
+        exportGroupShipmentVat(tr),
+        exportGroupShipmentNoVat(tr),
+        exportDisplayedNum(tr.querySelector('.w20-wip-start')),
+        exportDisplayedNum(tr.querySelector('.w20-period-exp')),
+        exportDisplayedNum(tr.querySelector('.w20-total-wip')),
         exportCellNum(tr.querySelector('.group-w20-profit-percent, .w20-profit-percent')),
         exportCellText(tr.querySelector('.group-w20-manual-writeoff, .w20-manual-writeoff')),
-        exportCellNum(tr.querySelector('.w20-writeoff')),
-        exportCellNum(tr.querySelector('.w20-wip-end')),
-        exportCellNum(tr.querySelector('.w20-profit')),
+        exportDisplayedNum(tr.querySelector('.w20-writeoff')),
+        exportDisplayedNum(tr.querySelector('.w20-wip-end')),
+        exportDisplayedNum(tr.querySelector('.w20-profit')),
         exportCellText(tr.querySelector('.w20-margin')),
         exportCellText(tr.querySelector('.w20-control'))
       ]);
 
       const footer = [
         'Итого',
-        exportCellNum(document.getElementById('ordersFootShipmentVat')),
-        exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
-        exportCellNum(document.getElementById('ordersFootW20WipStart')),
-        exportCellNum(document.getElementById('ordersFootW20PeriodExp')),
-        exportCellNum(document.getElementById('ordersFootW20TotalWip')),
+        exportDisplayedNum(document.getElementById('ordersFootShipmentVat')),
+        exportDisplayedNum(document.getElementById('ordersFootShipmentNoVat')),
+        exportDisplayedNum(document.getElementById('ordersFootW20WipStart')),
+        exportDisplayedNum(document.getElementById('ordersFootW20PeriodExp')),
+        exportDisplayedNum(document.getElementById('ordersFootW20TotalWip')),
         '',
         '',
-        exportCellNum(document.getElementById('ordersFootW20Writeoff')),
-        exportCellNum(document.getElementById('ordersFootW20WipEnd')),
-        exportCellNum(document.getElementById('ordersFootW20Profit')),
+        exportDisplayedNum(document.getElementById('ordersFootW20Writeoff')),
+        exportDisplayedNum(document.getElementById('ordersFootW20WipEnd')),
+        exportDisplayedNum(document.getElementById('ordersFootW20Profit')),
         exportCellText(document.getElementById('ordersFootW20Margin')),
         ''
       ];
@@ -8659,40 +8727,40 @@
 
       const body = getGroupRows().map(tr => [
         exportGroupOrderName(tr),
-        exportCellNum(tr.querySelector('.orders-col-shipment-vat')),
-        exportCellNum(tr.querySelector('.shipment-no-vat')),
-        exportCellNum(tr.querySelector('.w26-wip-start')),
-        exportCellNum(tr.querySelector('.w26-acc26-period')),
-        exportCellNum(tr.querySelector('.w26-period-total')),
-        exportCellNum(tr.querySelector('.w26-total-wip')),
+        exportGroupShipmentVat(tr),
+        exportGroupShipmentNoVat(tr),
+        exportDisplayedNum(tr.querySelector('.w26-wip-start')),
+        exportDisplayedNum(tr.querySelector('.w26-acc26-period')),
+        exportDisplayedNum(tr.querySelector('.w26-period-total')),
+        exportDisplayedNum(tr.querySelector('.w26-total-wip')),
         exportCellNum(tr.querySelector('.group-w26-profit-percent, .w26-profit-percent')),
         exportCellText(tr.querySelector('.group-w26-manual-writeoff, .w26-manual-writeoff')),
         exportCellText(tr.querySelector('.group-w26-manual-writeoff-26, .w26-manual-writeoff-26')),
-        exportCellNum(tr.querySelector('.w26-writeoff-total')),
-        exportCellNum(tr.querySelector('.w26-writeoff-26')),
-        exportCellNum(tr.querySelector('.w26-writeoff-20')),
-        exportCellNum(tr.querySelector('.w26-wip-end')),
-        exportCellNum(tr.querySelector('.w26-profit')),
+        exportDisplayedNum(tr.querySelector('.w26-writeoff-total')),
+        exportDisplayedNum(tr.querySelector('.w26-writeoff-26')),
+        exportDisplayedNum(tr.querySelector('.w26-writeoff-20')),
+        exportDisplayedNum(tr.querySelector('.w26-wip-end')),
+        exportDisplayedNum(tr.querySelector('.w26-profit')),
         exportCellText(tr.querySelector('.w26-profit-margin')),
         exportCellText(tr.querySelector('.w26-control'))
       ]);
 
       const footer = [
         'Итого',
-        exportCellNum(document.getElementById('ordersFootShipmentVat')),
-        exportCellNum(document.getElementById('ordersFootShipmentNoVat')),
-        exportCellNum(document.getElementById('ordersFootW26WipStart')),
-        exportCellNum(document.getElementById('ordersFootW26Acc26')),
-        exportCellNum(document.getElementById('ordersFootW26PeriodTotal')),
-        exportCellNum(document.getElementById('ordersFootW26TotalWip')),
+        exportDisplayedNum(document.getElementById('ordersFootShipmentVat')),
+        exportDisplayedNum(document.getElementById('ordersFootShipmentNoVat')),
+        exportDisplayedNum(document.getElementById('ordersFootW26WipStart')),
+        exportDisplayedNum(document.getElementById('ordersFootW26Acc26')),
+        exportDisplayedNum(document.getElementById('ordersFootW26PeriodTotal')),
+        exportDisplayedNum(document.getElementById('ordersFootW26TotalWip')),
         '',
         '',
         '',
-        exportCellNum(document.getElementById('ordersFootW26WriteoffTotal')),
-        exportCellNum(document.getElementById('ordersFootW26Writeoff26')),
-        exportCellNum(document.getElementById('ordersFootW26Writeoff20')),
-        exportCellNum(document.getElementById('ordersFootW26WipEnd')),
-        exportCellNum(document.getElementById('ordersFootW26Profit')),
+        exportDisplayedNum(document.getElementById('ordersFootW26WriteoffTotal')),
+        exportDisplayedNum(document.getElementById('ordersFootW26Writeoff26')),
+        exportDisplayedNum(document.getElementById('ordersFootW26Writeoff20')),
+        exportDisplayedNum(document.getElementById('ordersFootW26WipEnd')),
+        exportDisplayedNum(document.getElementById('ordersFootW26Profit')),
         exportCellText(document.getElementById('ordersFootW26ProfitMargin')),
         ''
       ];
@@ -8720,6 +8788,31 @@
       downloadExcelAoA([header, ...body], 'Группировка', buildExportFilename('gruppirovka'));
     }
 
+    function exportTransfersTabToExcel() {
+      collectTransfersFromPanel();
+      const header = [
+        'Источник',
+        'Получатель',
+        'Сумма',
+        'Тип переноса',
+        'Комментарий',
+        'Контроль'
+      ];
+
+      const body = Array.from(
+        document.querySelectorAll('#transfersTableBody tr[data-transfer-index]')
+      ).map(tr => [
+        exportCellText(tr.querySelector('.transfer-from')),
+        exportCellText(tr.querySelector('.transfer-to')),
+        exportCellNum(tr.querySelector('.transfer-amount')),
+        exportTransferTypeLabel(tr.querySelector('.transfer-type')?.value),
+        exportCellText(tr.querySelector('.transfer-comment')),
+        exportCellText(tr.querySelector('.transfer-control'))
+      ]);
+
+      downloadExcelAoA([header, ...body], 'Перенос НЗП', buildExportFilename('perenos_nzp'));
+    }
+
     function exportEconomistTabToExcel() {
       const header = [
         'Заказ',
@@ -8738,15 +8831,15 @@
       const body = getRows().map(tr => [
         exportCellText(tr.querySelector('.order-name')),
         exportCellNum(tr.querySelector('.shipment-vat')),
-        exportCellNum(tr.querySelector('.shipment-no-vat')),
-        exportCellNum(tr.querySelector('.total-cost-no26')),
-        exportCellNum(tr.querySelector('.total-cost')),
+        exportDisplayedNum(tr.querySelector('.shipment-no-vat')),
+        exportDisplayedNum(tr.querySelector('.total-cost-no26')),
+        exportDisplayedNum(tr.querySelector('.total-cost')),
         exportCellNum(tr.querySelector('.profit-percent')),
         exportCellText(tr.querySelector('.manual-writeoff')),
-        exportCellNum(tr.querySelector('.write-off')),
-        exportCellNum(tr.querySelector('.wip-end')),
-        exportCellNum(tr.querySelector('.profit-rub')),
-        exportCellNum(tr.querySelector('.profit-margin'))
+        exportDisplayedNum(tr.querySelector('.write-off')),
+        exportDisplayedNum(tr.querySelector('.wip-end')),
+        exportDisplayedNum(tr.querySelector('.profit-rub')),
+        exportCellText(tr.querySelector('.profit-margin'))
       ]);
 
       const footer = [
@@ -8760,7 +8853,7 @@
         exportCellNum(document.getElementById('ordersFootWriteOff')),
         exportCellNum(document.getElementById('ordersFootWipEnd')),
         exportCellNum(document.getElementById('ordersFootProfit')),
-        exportCellNum(document.getElementById('ordersFootMargin'))
+        exportCellText(document.getElementById('ordersFootMargin'))
       ];
 
       downloadExcelAoA([header, ...body, footer], 'План списания', buildExportFilename('plan_nzp'));
@@ -8783,13 +8876,13 @@
       const body = getRows().map(tr => [
         exportCellText(tr.querySelector('.order-name')),
         exportCellNum(tr.querySelector('.shipment-vat')),
-        exportCellNum(tr.querySelector('.shipment-no-vat')),
-        exportCellNum(tr.querySelector('.acc26')),
-        exportCellNum(tr.querySelector('.total-cost-no26')),
-        exportCellNum(tr.querySelector('.total-cost')),
-        exportCellNum(tr.querySelector('.writeoff-26-1c')),
-        exportCellNum(tr.querySelector('.writeoff-no26')),
-        exportCellNum(tr.querySelector('.wip-no26')),
+        exportDisplayedNum(tr.querySelector('.shipment-no-vat')),
+        exportDisplayedNum(tr.querySelector('.acc26')),
+        exportDisplayedNum(tr.querySelector('.total-cost-no26')),
+        exportDisplayedNum(tr.querySelector('.total-cost')),
+        exportDisplayedNum(tr.querySelector('.writeoff-26-1c')),
+        exportDisplayedNum(tr.querySelector('.writeoff-no26')),
+        exportDisplayedNum(tr.querySelector('.wip-no26')),
         exportCellText(tr.querySelector('.reconcile-status-1c'))
       ]);
 
@@ -8816,18 +8909,7 @@
       }
 
       const activeTab = getActiveOrdersTab();
-
-      if (activeTab === 'grouping') {
-        renderGroupingPanel();
-      } else if (activeTab === 'writeoff20' || activeTab === 'writeoff26') {
-        if (!isPeriodFinal()) {
-          calculateAll();
-        } else {
-          calculateAndRenderGroupedRows();
-        }
-      } else if (!isPeriodFinal()) {
-        calculateAll();
-      }
+      prepareActiveTabForExport(activeTab);
 
       switch (activeTab) {
         case 'writeoff20':
@@ -8838,6 +8920,9 @@
           break;
         case 'grouping':
           exportGroupingTabToExcel();
+          break;
+        case 'transfers':
+          exportTransfersTabToExcel();
           break;
         case 'economist':
           exportEconomistTabToExcel();

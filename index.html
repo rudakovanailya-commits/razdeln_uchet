@@ -9314,6 +9314,16 @@
 
     let lastOrderCardReport = null;
 
+    function pickOrderCardEndBalance(rows, field) {
+      if (!rows || !rows.length) return 0;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const v = rows[i][field];
+        if (v === null || v === undefined || v === '') continue;
+        if (Number.isFinite(Number(v))) return num(v);
+      }
+      return 0;
+    }
+
     function collectOrderCardReportData(orderName) {
       const target = String(orderName || '').trim();
       if (!target) return null;
@@ -9326,8 +9336,6 @@
       let totalWriteoff = 0;
       let totalWriteoff26 = 0;
       let totalWriteoff20 = 0;
-      let totalWipEnd20 = 0;
-      let totalWipEnd26 = 0;
       let totalProfit = 0;
       let groupHint = '';
 
@@ -9361,14 +9369,13 @@
         totalWriteoff += m.writeoffTotal;
         totalWriteoff26 += m.writeoff26;
         totalWriteoff20 += m.writeoff20;
-        totalWipEnd20 += m.wipEnd20;
-        totalWipEnd26 += m.wipEnd26;
         totalProfit += m.profit;
       });
 
       const periodFrom = rows.length ? rows[0].period : '';
       const periodTo = rows.length ? rows[rows.length - 1].period : '';
       const reportPeriod = normalizePeriodStr(getCurrentPeriod()) || '';
+      const endBalancePeriod = periodTo;
 
       return {
         orderName: target,
@@ -9376,14 +9383,15 @@
         groupHint,
         periodFrom,
         periodTo,
+        endBalancePeriod,
         reportPeriod,
         totals: {
           shipment: totalShipment,
           writeoffTotal: totalWriteoff,
           writeoff26: totalWriteoff26,
           writeoff20: totalWriteoff20,
-          wipEnd20: totalWipEnd20,
-          wipEnd26: totalWipEnd26,
+          wipEnd20: pickOrderCardEndBalance(rows, 'wipEnd20'),
+          wipEnd26: pickOrderCardEndBalance(rows, 'wipEnd26'),
           profit: totalProfit
         }
       };
@@ -9632,20 +9640,42 @@
       });
 
       if (rows.length) {
+        const balanceTitle =
+          'Остаток на конец периода' +
+          (report.endBalancePeriod ? ' (' + report.endBalancePeriod + ')' : '');
         html +=
-          '<tr style="font-weight:bold;">' +
-          '<td>Итого</td>' +
+          '<tr class="order-report-totals-row" style="font-weight:bold;">' +
+          '<td title="Обороты — сумма по месяцам; НЗП — остаток на конец периода">Итого</td>' +
           orderCardExportNumCell(totals.shipment) +
           orderCardExportNumCell(totals.writeoffTotal) +
           orderCardExportNumCell(totals.writeoff26) +
           orderCardExportNumCell(totals.writeoff20) +
-          orderCardExportNumCell(totals.wipEnd20) +
-          orderCardExportNumCell(totals.wipEnd26) +
+          '<td data-export-value="' +
+          num(totals.wipEnd20) +
+          '" title="' +
+          escapeHtmlForReport(balanceTitle) +
+          '">' +
+          fmt(totals.wipEnd20) +
+          '</td>' +
+          '<td data-export-value="' +
+          num(totals.wipEnd26) +
+          '" title="' +
+          escapeHtmlForReport(balanceTitle) +
+          '">' +
+          fmt(totals.wipEnd26) +
+          '</td>' +
           orderCardExportNumCell(totals.profit) +
           '</tr>';
       }
 
       html += `</table>`;
+
+      if (rows.length) {
+        html +=
+          '<p class="hint order-report-totals-hint">По колонкам «НЗП конец 20» и «НЗП конец» в строке «Итого» показан остаток на конец периода' +
+          (report.endBalancePeriod ? ' (' + escapeHtmlForReport(report.endBalancePeriod) + ')' : '') +
+          ', а не сумма по месяцам.</p>';
+      }
 
       if (!rows.length) {
         html +=

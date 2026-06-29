@@ -8558,16 +8558,6 @@
           result: 'ok'
         };
 
-        if (inPrev && expected > WIP_CHAIN_EPS && !inNext) {
-          warnings.push({
-            type: 'missing_in_next',
-            order: displayOrder,
-            canonicalKey: key,
-            message: 'Заказ отсутствует в следующем периоде, хотя НЗП конец 20 > 0'
-          });
-          diag.result = 'missing_in_next';
-        }
-
         if (Math.abs(expected - actual) > WIP_CHAIN_EPS) {
           let status = 'будет пересчитан';
           let fixType = 'update';
@@ -8579,6 +8569,15 @@
             fixType = 'set_start';
           }
 
+          let note = '';
+          if (fixType === 'zero_out' && inNext) {
+            note = 'Старое НЗП нач. будет обнулено';
+          } else if (fixType === 'set_start' && !inNext) {
+            note = 'Будет добавлена строка заказа';
+          } else if (fixType === 'set_start' && inNext) {
+            note = 'Будет обновлено НЗП нач.';
+          }
+
           discrepancies.push({
             order: displayOrder,
             canonicalKey: key,
@@ -8588,12 +8587,19 @@
             diff: expected - actual,
             status,
             fixType,
-            note:
-              fixType === 'zero_out' && inNext
-                ? 'Старое НЗП нач. будет обнулено'
-                : ''
+            inNext,
+            prevOrders: prevEntry ? prevEntry.orders : [],
+            note
           });
           diag.result = fixType;
+        } else if (inPrev && expected > WIP_CHAIN_EPS && !inNext) {
+          warnings.push({
+            type: 'missing_in_next',
+            order: displayOrder,
+            canonicalKey: key,
+            message: 'Заказ отсутствует в следующем периоде, хотя НЗП конец 20 > 0'
+          });
+          diag.result = 'missing_in_next';
         }
 
         if (diag.result !== 'ok' || actual > WIP_CHAIN_EPS || expected > WIP_CHAIN_EPS) {
@@ -8777,12 +8783,16 @@
               '</td><td>' +
               escapeHtmlForReport(d.status || link.periodStatus) +
               '</td><td>' +
-              escapeHtmlForReport(note || 'будет пересчитан') +
+              escapeHtmlForReport(note) +
               '</td></tr>';
           });
         }
         if (link.warnings && link.warnings.length) {
+          const coveredKeys = new Set(
+            (link.discrepancies || []).map(d => d.canonicalKey).filter(Boolean)
+          );
           link.warnings.forEach(w => {
+            if (w.canonicalKey && coveredKeys.has(w.canonicalKey)) return;
             html +=
               '<tr><td>' +
               escapeHtmlForReport(link.period) +
@@ -8994,6 +9004,54 @@
       return renderWipChainReportHtml(result);
     }
 
+    function createWipChainPeriodRow(orderName, wipStart) {
+      return {
+        order: String(orderName || '').trim(),
+        wipStart: formatWipStartStorage(wipStart),
+        shipmentVat: '0',
+        materials: '0',
+        processing: '0',
+        other: '0',
+        salary: '0',
+        profitPercent: '0',
+        manualWriteoff: ''
+      };
+    }
+
+    function applyWipChainDiscrepancyToPeriodData(nextData, d, applyReport) {
+      if (!nextData || !d) return false;
+
+      let row =
+        findRowByCanonicalOrderInData(nextData, d.canonicalKey) ||
+        findRowByOrderInData(nextData, d.order);
+
+      if (!row && d.expected > WIP_CHAIN_EPS) {
+        const orderName =
+          d.order ||
+          (d.prevOrders && d.prevOrders.length ? d.prevOrders[0] : '') ||
+          '';
+        if (!orderName) return false;
+        row = createWipChainPeriodRow(orderName, d.expected);
+        if (!Array.isArray(nextData.rows)) nextData.rows = [];
+        nextData.rows.push(row);
+        applyReport.ordersAdded = (applyReport.ordersAdded || 0) + 1;
+        return true;
+      }
+
+      if (row) {
+        row.wipStart = formatWipStartStorage(d.expected);
+        applyReport.ordersUpdated++;
+        if (d.fixType === 'zero_out' && isOrderRowAllZeros(row)) {
+          applyReport.warnings.push(
+            'Строка осталась без сумм: ' + String(row.order || d.order).trim()
+          );
+        }
+        return true;
+      }
+
+      return false;
+    }
+
     async function applyWipChainFixes(startPeriod, options) {
       options = options || {};
       const reopenComment = options.reopenComment || '';
@@ -9003,6 +9061,7 @@
         periodsChecked: 0,
         periodsModified: 0,
         ordersUpdated: 0,
+        ordersAdded: 0,
         reopenedFromFinal: [],
         stoppedAt: null,
         warnings: []
@@ -9052,6 +9111,7 @@
         }
 
         const chainTraces = [];
+        let periodChanged = false;
         link.discrepancies.forEach(d => {
           const traceOrder =
             (d.prevOrders && d.prevOrders[0]) || d.order;
@@ -9068,23 +9128,21 @@
             );
             return;
           }
-          const row =
-            findRowByCanonicalOrderInData(nextData, d.canonicalKey) ||
-            findRowByOrderInData(nextData, d.order);
-          if (row) {
-            row.wipStart = formatWipStartStorage(d.expected);
-            applyReport.ordersUpdated++;
-            if (d.fixType === 'zero_out' && isOrderRowAllZeros(row)) {
-              applyReport.warnings.push(
-                'Строка осталась без сумм: ' + String(row.order || d.order).trim()
-              );
-            }
+          if (applyWipChainDiscrepancyToPeriodData(nextData, d, applyReport)) {
+            periodChanged = true;
           }
         });
         logWipChainTransferDiagnostics(
           'Применение цепочки НЗП ' + (prevData._chainPeriod || startPeriod) + ' → ' + nextPeriod,
           chainTraces
         );
+
+        if (!periodChanged) {
+          prevData = clonePeriodData(nextData);
+          prevData._chainPeriod = nextPeriod;
+          recalculatePeriodDataInMemory(prevData);
+          continue;
+        }
 
         recalculatePeriodDataInMemory(nextData);
         savePeriodDataToLocalStorage(nextPeriod, nextData, {
@@ -9201,6 +9259,9 @@
               '\n' +
               'Обновлено заказов (НЗП нач.): ' +
               applyReport.ordersUpdated;
+            if (applyReport.ordersAdded) {
+              msg += '\nДобавлено заказов: ' + applyReport.ordersAdded;
+            }
             if (changed.length) {
               msg +=
                 '\n\nИзменены периоды: ' +

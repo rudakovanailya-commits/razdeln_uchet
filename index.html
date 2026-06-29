@@ -1195,6 +1195,18 @@
       background: #f5fbf7;
     }
 
+    #orderReportBox .order-report-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #orderReportBox .order-report-head h3 {
+      margin: 0;
+    }
+
     #orderReportBox table {
       width: 100%;
       border-collapse: collapse;
@@ -1853,7 +1865,10 @@
     </div>
 
     <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
-      <h3 id="orderReportTitle">Карточка заказа</h3>
+      <div class="order-report-head">
+        <h3 id="orderReportTitle">Карточка заказа</h3>
+        <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
+      </div>
       <div id="orderReportContent"></div>
     </div>
   </div>
@@ -8707,18 +8722,12 @@
       });
     }
 
-    function buildOrderReport() {
-      const orderName = document.getElementById('orderSelect').value;
-      const box = document.getElementById('orderReportBox');
-      const title = document.getElementById('orderReportTitle');
-      const content = document.getElementById('orderReportContent');
+    let lastOrderCardReport = null;
 
-      if (!orderName || !String(orderName).trim()) {
-        if (box) box.style.display = 'none';
-        return;
-      }
+    function collectOrderCardReportData(orderName) {
+      const target = String(orderName || '').trim();
+      if (!target) return null;
 
-      const target = String(orderName).trim();
       const periodSources = listPeriodDataSourcesForOrderReport();
       const periods = Array.from(periodSources.keys()).sort();
 
@@ -8767,13 +8776,242 @@
         totalProfit += m.profit;
       });
 
+      const periodFrom = rows.length ? rows[0].period : '';
+      const periodTo = rows.length ? rows[rows.length - 1].period : '';
+      const reportPeriod = normalizePeriodStr(getCurrentPeriod()) || '';
+
+      return {
+        orderName: target,
+        rows,
+        groupHint,
+        periodFrom,
+        periodTo,
+        reportPeriod,
+        totals: {
+          shipment: totalShipment,
+          writeoffTotal: totalWriteoff,
+          writeoff26: totalWriteoff26,
+          writeoff20: totalWriteoff20,
+          wipEnd20: totalWipEnd20,
+          wipEnd26: totalWipEnd26,
+          profit: totalProfit
+        }
+      };
+    }
+
+    function slugifyOrderForFilename(orderName) {
+      const slug = String(orderName || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[№#]/g, '')
+        .replace(/[^a-z0-9\u0400-\u04ff]+/gi, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/_+/g, '_');
+      return slug.slice(0, 80) || 'zakaz';
+    }
+
+    function buildOrderCardExportFilename(report) {
+      const from = report.periodFrom || report.reportPeriod || 'bez_perioda';
+      const to = report.periodTo || report.periodFrom || report.reportPeriod || from;
+      return (
+        'kartochka_zakaza_' +
+        from +
+        '_' +
+        to +
+        '_' +
+        slugifyOrderForFilename(report.orderName) +
+        '.xlsx'
+      );
+    }
+
+    function setExcelCellNumber(ws, addr) {
+      const cell = ws[addr];
+      if (!cell || typeof cell.v !== 'number') return;
+      cell.t = 'n';
+      cell.z = '#,##0.00';
+    }
+
+    function setExcelRowBold(ws, rowIndex, colCount) {
+      for (let c = 0; c < colCount; c++) {
+        const addr = XLSX.utils.encode_cell({ r: rowIndex, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = Object.assign({}, ws[addr].s, { font: { bold: true } });
+      }
+    }
+
+    function orderCardExportNumCell(value) {
+      const n = num(value);
+      return '<td data-export-value="' + n + '">' + fmt(value) + '</td>';
+    }
+
+    function exportOrderCardCellValue(td, colIndex) {
+      if (colIndex === 0) {
+        return String(td.textContent ?? '').trim();
+      }
+      if (td.hasAttribute('data-export-value')) {
+        return num(td.getAttribute('data-export-value'));
+      }
+      const text = String(td.textContent ?? '').trim();
+      if (!text || text === '—' || text === '-') return 0;
+      return num(text);
+    }
+
+    function readOrderCardTableForExport() {
+      const table = document.querySelector('#orderReportContent table');
+      if (!table) return null;
+
+      const allRows = Array.from(table.querySelectorAll('tr'));
+      const headerRow = allRows.find(tr => tr.querySelector('th'));
+      if (!headerRow) return null;
+
+      const headers = Array.from(headerRow.querySelectorAll('th')).map(th =>
+        String(th.textContent ?? '').trim()
+      );
+      const colCount = headers.length;
+      if (!colCount) return null;
+
+      const dataRows = [];
+      const rowMetas = [];
+
+      allRows.forEach(tr => {
+        if (tr === headerRow || tr.querySelector('th')) return;
+        const tds = Array.from(tr.querySelectorAll('td'));
+        if (!tds.length) return;
+
+        const row = [];
+        for (let c = 0; c < colCount; c++) {
+          row.push(tds[c] ? exportOrderCardCellValue(tds[c], c) : c === 0 ? '' : 0);
+        }
+
+        const isTotal = String(row[0] || '')
+          .trim()
+          .toLowerCase() === 'итого';
+        dataRows.push(row);
+        rowMetas.push({ isTotal });
+      });
+
+      return { headers, dataRows, rowMetas, colCount };
+    }
+
+    function buildOrderCardExcelColumnWidths(headers, dataRows) {
+      return headers.map((header, colIndex) => {
+        let maxLen = String(header || '').length;
+        dataRows.forEach(row => {
+          const val = row[colIndex];
+          const len =
+            typeof val === 'number'
+              ? formatMoney(val).length
+              : String(val ?? '').length;
+          if (len > maxLen) maxLen = len;
+        });
+        const minWidth = colIndex === 0 ? 12 : 14;
+        return { wch: Math.min(Math.max(maxLen + 2, minWidth), 28) };
+      });
+    }
+
+    function exportOrderCardToExcel() {
+      const box = document.getElementById('orderReportBox');
+      const selectedOrder = String(document.getElementById('orderSelect')?.value ?? '').trim();
+
+      if (!box || box.style.display === 'none' || !lastOrderCardReport) {
+        alert('Сначала откройте карточку заказа: выберите заказ и нажмите «Отчет по заказу».');
+        return;
+      }
+
+      if (selectedOrder !== lastOrderCardReport.orderName) {
+        alert(
+          'В списке выбран другой заказ. Сначала обновите карточку кнопкой «Отчет по заказу».'
+        );
+        return;
+      }
+
+      const tableData = readOrderCardTableForExport();
+      if (!tableData || !tableData.dataRows.length) {
+        alert('В карточке заказа нет данных для выгрузки.');
+        return;
+      }
+
+      if (typeof XLSX === 'undefined') {
+        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
+        return;
+      }
+
+      const report = lastOrderCardReport;
+      const aoa = [];
+      aoa.push(['Карточка заказа: ' + report.orderName]);
+
+      if (report.periodFrom && report.periodTo) {
+        const periodLine =
+          report.periodFrom === report.periodTo
+            ? report.periodFrom
+            : report.periodFrom + ' — ' + report.periodTo;
+        aoa.push(['Период: ' + periodLine]);
+      } else if (report.reportPeriod) {
+        aoa.push(['Период: ' + report.reportPeriod]);
+      }
+
+      aoa.push([]);
+      const headerRowIndex = aoa.length;
+      aoa.push(tableData.headers.slice());
+
+      const dataStartRow = aoa.length;
+      tableData.dataRows.forEach(row => {
+        aoa.push(row.slice());
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const colCount = tableData.colCount;
+      const lastRowIndex = aoa.length - 1;
+
+      for (let r = dataStartRow; r <= lastRowIndex; r++) {
+        const rowMeta = tableData.rowMetas[r - dataStartRow];
+        for (let c = 1; c < colCount; c++) {
+          setExcelCellNumber(ws, XLSX.utils.encode_cell({ r, c }));
+        }
+        if (rowMeta && rowMeta.isTotal) {
+          setExcelRowBold(ws, r, colCount);
+        }
+      }
+
+      setExcelRowBold(ws, headerRowIndex, colCount);
+      setExcelRowBold(ws, 0, 1);
+      if (headerRowIndex > 1) {
+        setExcelRowBold(ws, 1, 1);
+      }
+
+      ws['!cols'] = buildOrderCardExcelColumnWidths(tableData.headers, tableData.dataRows);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Карточка');
+      XLSX.writeFile(wb, buildOrderCardExportFilename(report), { cellStyles: true });
+    }
+
+    function buildOrderReport() {
+      const orderName = document.getElementById('orderSelect').value;
+      const box = document.getElementById('orderReportBox');
+      const title = document.getElementById('orderReportTitle');
+      const content = document.getElementById('orderReportContent');
+
+      if (!orderName || !String(orderName).trim()) {
+        lastOrderCardReport = null;
+        if (box) box.style.display = 'none';
+        return;
+      }
+
+      const target = String(orderName).trim();
+      const report = collectOrderCardReportData(target);
+      lastOrderCardReport = report;
+      const rows = report.rows;
+      const totals = report.totals;
+      const groupHint = report.groupHint;
+
       let html = '';
       if (groupHint) {
         html += '<div class="hint" style="margin-top:8px;">' + escapeHtmlForReport(groupHint) + '</div>';
       }
 
       html += `
-<table>
+<table id="orderReportTable">
 <tr>
 <th>Месяц</th>
 <th>Отгрузка</th>
@@ -8787,33 +9025,33 @@
 `;
 
       rows.forEach(r => {
-        html += `
-  <tr>
-    <td>${escapeHtmlForReport(r.period)}</td>
-    <td>${fmt(r.shipment)}</td>
-    <td>${fmt(r.writeoffTotal)}</td>
-    <td>${fmt(r.writeoff26)}</td>
-    <td>${fmt(r.writeoff20)}</td>
-    <td>${fmt(r.wipEnd20)}</td>
-    <td>${fmt(r.wipEnd26)}</td>
-    <td>${fmt(r.profit)}</td>
-  </tr>
-  `;
+        html +=
+          '<tr>' +
+          '<td>' +
+          escapeHtmlForReport(r.period) +
+          '</td>' +
+          orderCardExportNumCell(r.shipment) +
+          orderCardExportNumCell(r.writeoffTotal) +
+          orderCardExportNumCell(r.writeoff26) +
+          orderCardExportNumCell(r.writeoff20) +
+          orderCardExportNumCell(r.wipEnd20) +
+          orderCardExportNumCell(r.wipEnd26) +
+          orderCardExportNumCell(r.profit) +
+          '</tr>';
       });
 
       if (rows.length) {
-        html += `
-  <tr style="font-weight:bold;">
-    <td>Итого</td>
-    <td>${fmt(totalShipment)}</td>
-    <td>${fmt(totalWriteoff)}</td>
-    <td>${fmt(totalWriteoff26)}</td>
-    <td>${fmt(totalWriteoff20)}</td>
-    <td>${fmt(totalWipEnd20)}</td>
-    <td>${fmt(totalWipEnd26)}</td>
-    <td>${fmt(totalProfit)}</td>
-  </tr>
-`;
+        html +=
+          '<tr style="font-weight:bold;">' +
+          '<td>Итого</td>' +
+          orderCardExportNumCell(totals.shipment) +
+          orderCardExportNumCell(totals.writeoffTotal) +
+          orderCardExportNumCell(totals.writeoff26) +
+          orderCardExportNumCell(totals.writeoff20) +
+          orderCardExportNumCell(totals.wipEnd20) +
+          orderCardExportNumCell(totals.wipEnd26) +
+          orderCardExportNumCell(totals.profit) +
+          '</tr>';
       }
 
       html += `</table>`;
@@ -8853,6 +9091,11 @@
 
     document.getElementById('orderReportBtn')
       .addEventListener('click', buildOrderReport);
+
+    const exportOrderCardBtn = document.getElementById('exportOrderCardBtn');
+    if (exportOrderCardBtn) {
+      exportOrderCardBtn.addEventListener('click', () => exportOrderCardToExcel());
+    }
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());
 

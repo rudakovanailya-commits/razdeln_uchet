@@ -1471,9 +1471,57 @@
       line-height: 1.5;
     }
 
+    #salaryScenarioCard .salary-scenario-load-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #dbeafe;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #salaryScenarioCard .salary-scenario-load-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
+
     #salaryScenarioCard .salary-scenario-unbalanced {
       color: #b45309;
       font-weight: 600;
+    }
+
+    #salaryScenarioCard .salary-scenario-saved-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #fafafa;
+      border: 1px solid #e5e7eb;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #salaryScenarioCard #savedSalaryScenariosList {
+      width: 100%;
+      max-width: 640px;
+      min-height: 88px;
+      margin-top: 4px;
+      padding: 6px 8px;
+      border: 1px solid #c5e4cf;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    #salaryScenarioCard #salaryScenarioName {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #9ec9ae;
+      border-radius: 6px;
+      font-size: 13px;
+      box-sizing: border-box;
     }
 
     #salaryScenarioYearField[hidden] {
@@ -2132,7 +2180,10 @@
       </div>
       <p class="hint" style="margin-top:8px;">
         Песочница: перераспределение ЗП между заказами без изменения общей суммы. От новой ЗП автоматически пересчитываются взносы, больничные и 25 счёт.
-        Реальные данные, localStorage и Google Sheets не изменяются.
+        Реальные данные учёта и Google Sheets не изменяются.
+      </p>
+      <p class="hint" style="margin-top:4px;">
+        Сценарии сохраняются только локально в этом браузере. Это черновики для анализа: они не меняют учёт, не участвуют в НЗП-цепочке и не отправляются в Google Sheets.
       </p>
       <div class="period-report-controls">
         <div class="field" style="width: 200px;">
@@ -2157,14 +2208,33 @@
         <button type="button" id="salaryScenarioManualBtn" class="secondary">Распределить ЗП вручную</button>
         <button type="button" id="salaryScenarioBalanceBtn" class="secondary">Сбалансировать ЗП</button>
       </div>
+      <div class="salary-scenario-saved-panel">
+        <div class="period-report-controls" style="margin-top: 0;">
+          <div class="field" style="width: 280px;">
+            <label for="salaryScenarioName">Название сценария</label>
+            <input type="text" id="salaryScenarioName" autocomplete="off" placeholder="Например: ЗП по отгрузке">
+          </div>
+          <button type="button" id="saveSalaryScenarioBtn" class="secondary">Сохранить сценарий</button>
+          <button type="button" id="loadSavedSalaryScenarioBtn" class="secondary">Загрузить сценарий</button>
+          <button type="button" id="deleteSavedSalaryScenarioBtn" class="secondary">Удалить сценарий</button>
+        </div>
+        <div class="field" style="margin-top: 10px; max-width: 640px;">
+          <label for="savedSalaryScenariosList">Сохранённые сценарии</label>
+          <select id="savedSalaryScenariosList" size="4" autocomplete="off"></select>
+        </div>
+      </div>
       <div class="hint" id="salaryScenarioStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div id="salaryScenarioBalancePanel" class="salary-scenario-balance-panel" hidden></div>
+      <div id="salaryScenarioLoadPanel" class="salary-scenario-load-panel" hidden></div>
       <div id="salaryScenarioTableHints" class="salary-scenario-table-hints" hidden>
         <p>
           Чтобы увидеть изменение сценария, измените значения в колонке «ЗП сценарий». Если ЗП сценарий равна ЗП факт, результат сценария совпадает с фактом.
         </p>
         <p>
           Списание в сценарии считается по той же логике, что на вкладке «Списание с 26»: «Списано всего» = «Списано с 26» + «Списано с 20»; 26 счёт не переходит в НЗП.
+        </p>
+        <p>
+          Коэффициент нагрузки показывает, как меняются расходы 20 при изменении ЗП. Например, коэффициент 6,37 означает, что изменение ЗП на 1&nbsp;руб. меняет расходы 20 примерно на 6,37&nbsp;руб. с учётом взносов и 25&nbsp;счёта.
         </p>
         <p>
           Например: уменьшите ЗП у одного заказа на 100&nbsp;000 и увеличьте у другого на 100&nbsp;000, затем нажмите «Рассчитать сценарий».
@@ -10657,12 +10727,276 @@
 
     let salaryScenarioSandbox = null;
 
+    const SALARY_SCENARIOS_STORAGE_KEY = 'salary_scenarios_v1';
+    const SALARY_SCENARIOS_MAX = 20;
+
+    function loadSalaryScenariosFromStorage() {
+      try {
+        const raw = localStorage.getItem(SALARY_SCENARIOS_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveSalaryScenariosToStorage(scenarios) {
+      localStorage.setItem(
+        SALARY_SCENARIOS_STORAGE_KEY,
+        JSON.stringify((scenarios || []).slice(0, SALARY_SCENARIOS_MAX))
+      );
+    }
+
+    function formatSavedSalaryScenarioDate(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function renderSavedSalaryScenariosList(selectId) {
+      const select = document.getElementById('savedSalaryScenariosList');
+      if (!select) return;
+      const scenarios = loadSalaryScenariosFromStorage().slice().sort((a, b) => {
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+      });
+      select.innerHTML = '';
+      if (!scenarios.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— нет сохранённых сценариев —';
+        select.appendChild(opt);
+        select.disabled = true;
+        return;
+      }
+      select.disabled = false;
+      scenarios.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        const periodLabel =
+          s.mode === 'year' ? String(s.year || '—') : String(s.period || '—');
+        opt.textContent =
+          (s.name || 'Без названия') +
+          ' · ' +
+          periodLabel +
+          ' · ' +
+          formatSavedSalaryScenarioDate(s.createdAt);
+        select.appendChild(opt);
+      });
+      if (selectId) select.value = selectId;
+    }
+
+    function buildSalaryScenarioStorageRecord(name, existingId) {
+      const sandbox = salaryScenarioSandbox;
+      let profitFact = 0;
+      let profitScenario = 0;
+      let wipEndFact = 0;
+      let wipEndScenario = 0;
+      let shipmentNoVat = 0;
+
+      const salaryRows = sandbox.rows.map(r => {
+        const sc = r.scenario;
+        profitFact += num(r.profit);
+        profitScenario += sc ? num(sc.profitScenario) : 0;
+        wipEndFact += num(r.wipEndTotal);
+        wipEndScenario += sc ? num(sc.wipEndTotalScenario) : 0;
+        shipmentNoVat += num(r.shipmentNoVat);
+        return {
+          groupName: r.groupName,
+          salaryFact: num(r.salary),
+          salaryScenario: num(r.scenarioSalary)
+        };
+      });
+
+      const totalSalaryScenario = sandbox.rows.reduce((s, r) => s + num(r.scenarioSalary), 0);
+      const record = {
+        id:
+          existingId ||
+          'ss_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+        name,
+        createdAt: new Date().toISOString(),
+        mode: sandbox.scope === 'year' ? 'year' : 'month',
+        salaryRows,
+        totals: {
+          totalSalaryFact: num(sandbox.totalSalary),
+          totalSalaryScenario,
+          salaryDiff: totalSalaryScenario - num(sandbox.totalSalary),
+          profitFact,
+          profitScenario,
+          marginFact: computeAnnualMarginPct(profitFact, shipmentNoVat),
+          marginScenario: computeAnnualMarginPct(profitScenario, shipmentNoVat),
+          wipEndFact,
+          wipEndScenario
+        }
+      };
+      if (record.mode === 'year') {
+        record.year = String(sandbox.periodLabel || '');
+      } else {
+        record.period = normalizePeriodStr(sandbox.periodLabel || '');
+      }
+      return record;
+    }
+
+    function saveSalaryScenarioToStorage() {
+      readSalaryScenarioInputsFromDom();
+      const statusEl = document.getElementById('salaryScenarioStatus');
+      const nameEl = document.getElementById('salaryScenarioName');
+      const name = nameEl ? String(nameEl.value || '').trim() : '';
+
+      if (!salaryScenarioSandbox || !salaryScenarioSandbox.calculated) {
+        alert('Сначала рассчитайте сценарий.');
+        return;
+      }
+      if (!name) {
+        alert('Укажите название сценария.');
+        if (nameEl) nameEl.focus();
+        return;
+      }
+
+      let scenarios = loadSalaryScenariosFromStorage();
+      const existingIdx = scenarios.findIndex(s => s.name === name);
+      if (existingIdx < 0 && scenarios.length >= SALARY_SCENARIOS_MAX) {
+        alert(
+          'Достигнут лимит 20 сценариев. Удалите старый сценарий или перезапишите существующий.'
+        );
+        return;
+      }
+
+      const snapshot = buildSalaryScenarioStorageRecord(
+        name,
+        existingIdx >= 0 ? scenarios[existingIdx].id : null
+      );
+      if (existingIdx >= 0) {
+        scenarios[existingIdx] = snapshot;
+      } else {
+        scenarios.push(snapshot);
+      }
+      saveSalaryScenariosToStorage(scenarios);
+      renderSavedSalaryScenariosList(snapshot.id);
+
+      if (statusEl) {
+        statusEl.textContent =
+          'Сценарий сохранён локально. Он не меняет данные учёта и не отправляется в Google Sheets.';
+      }
+    }
+
+    function syncSalaryScenarioScopeUi(scope, periodOrYear) {
+      const scopeEl = document.getElementById('salaryScenarioScope');
+      if (scopeEl) {
+        scopeEl.value = scope === 'year' ? 'year' : 'month';
+        updateSalaryScenarioScopeUi();
+      }
+      if (scope === 'year') {
+        const yearEl = document.getElementById('salaryScenarioYear');
+        if (yearEl && periodOrYear) yearEl.value = String(periodOrYear);
+      } else {
+        const period = normalizePeriodStr(periodOrYear || '');
+        const inputEl = getElementByIdDeep('periodInput');
+        const selectEl = getElementByIdDeep('periodSelect');
+        if (inputEl && period) inputEl.value = period;
+        if (selectEl && period) {
+          const match = Array.from(selectEl.options).find(
+            o => normalizePeriodStr(o.value) === period
+          );
+          if (match) selectEl.value = match.value;
+        }
+      }
+    }
+
+    function loadSavedSalaryScenarioFromStorage() {
+      const select = document.getElementById('savedSalaryScenariosList');
+      const id = select ? select.value : '';
+      if (!id) {
+        alert('Выберите сценарий из списка «Сохранённые сценарии».');
+        return;
+      }
+
+      const saved = loadSalaryScenariosFromStorage().find(s => s.id === id);
+      if (!saved) {
+        alert('Сценарий не найден.');
+        renderSavedSalaryScenariosList();
+        return;
+      }
+
+      const scope = saved.mode === 'year' ? 'year' : 'month';
+      const periodOrYear =
+        scope === 'year' ? String(saved.year || '') : normalizePeriodStr(saved.period || '');
+
+      syncSalaryScenarioScopeUi(scope, periodOrYear);
+      const fact = loadSalaryScenarioFact(false, { scope, periodOrYear });
+      if (!fact) return;
+
+      const salaryMap = new Map(
+        (saved.salaryRows || []).map(r => [r.groupName, num(r.salaryScenario)])
+      );
+      salaryScenarioSandbox.rows.forEach(r => {
+        if (salaryMap.has(r.groupName)) {
+          r.scenarioSalary = salaryMap.get(r.groupName);
+          r.scenario = null;
+        }
+      });
+
+      const missingGroups = (saved.salaryRows || [])
+        .filter(sr => !salaryScenarioSandbox.rows.some(r => r.groupName === sr.groupName))
+        .map(sr => sr.groupName);
+
+      calculateSalaryScenario();
+
+      const nameEl = document.getElementById('salaryScenarioName');
+      if (nameEl) nameEl.value = saved.name || '';
+
+      const statusEl = document.getElementById('salaryScenarioStatus');
+      let msg = 'Сценарий «' + (saved.name || '') + '» загружен и пересчитан.';
+      if (missingGroups.length) {
+        msg += ' Некоторые группы из сценария не найдены в текущих данных.';
+      }
+      if (statusEl) statusEl.textContent = msg;
+    }
+
+    function deleteSavedSalaryScenarioFromStorage() {
+      const select = document.getElementById('savedSalaryScenariosList');
+      const id = select ? select.value : '';
+      if (!id) {
+        alert('Выберите сценарий из списка «Сохранённые сценарии».');
+        return;
+      }
+      if (
+        !confirm('Удалить сохранённый сценарий? Это не повлияет на учётные данные.')
+      ) {
+        return;
+      }
+
+      const scenarios = loadSalaryScenariosFromStorage().filter(s => s.id !== id);
+      saveSalaryScenariosToStorage(scenarios);
+      renderSavedSalaryScenariosList();
+
+      const statusEl = document.getElementById('salaryScenarioStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Сценарий удалён из локального хранилища.';
+      }
+    }
+
     function scenarioFmtMoney(n) {
       return aiAnalysisFmtMoney(n);
     }
 
     function scenarioFmtPct(n) {
       return aiAnalysisFmtPct(n);
+    }
+
+    function scenarioFmtCoeff(n) {
+      if (n === null || n === undefined || !Number.isFinite(Number(n))) return '—';
+      return num(n).toLocaleString('ru-RU', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
     }
 
     function getSalaryScenarioPeriodKey(scope, periodOrYear) {
@@ -11001,16 +11335,22 @@
       const marginScenario =
         factRow.shipmentNoVat > 0 ? (profitScenario / factRow.shipmentNoVat) * 100 : 0;
       const wipEnd20Scenario = metrics20.wipEnd20;
+      const salaryDelta = scenarioSalary - factRow.salary;
+      const periodExp20Delta = periodExp20Scenario - num(factRow.periodExp20);
+      const salaryLoadCoeff =
+        Math.abs(salaryDelta) > RECONCILE_EPS ? periodExp20Delta / salaryDelta : null;
 
       return {
         scenarioSalary,
-        salaryDelta: scenarioSalary - factRow.salary,
+        salaryDelta,
         salaryShareScenarioPct: salaryShareScenario * 100,
         insuranceScenario,
         sickScenario,
         acc25Scenario,
         acc26Scenario,
         periodExp20Scenario,
+        periodExp20Delta,
+        salaryLoadCoeff,
         totalWithWip26Scenario: sumsScenario.totalWithWip26,
         writeoffTotalScenario: metrics26.writeOffTotal,
         writeoff26Scenario: metrics26.writeOff26Part,
@@ -11132,14 +11472,23 @@
       return salaryScenarioSandbox;
     }
 
-    function loadSalaryScenarioFact(preserveScenario) {
+    function loadSalaryScenarioFact(preserveScenario, loadParams) {
       const statusEl = document.getElementById('salaryScenarioStatus');
-      const { scope, periodOrYear } = getSalaryScenarioScopeParams();
+      let scope;
+      let periodOrYear;
+      if (loadParams && loadParams.scope) {
+        scope = loadParams.scope;
+        periodOrYear = loadParams.periodOrYear;
+      } else {
+        ({ scope, periodOrYear } = getSalaryScenarioScopeParams());
+      }
       const factData = collectSalaryScenarioFactData(scope, periodOrYear);
       if (factData.error) {
         if (statusEl) statusEl.textContent = factData.error;
         document.getElementById('salaryScenarioTableWrap').hidden = true;
         document.getElementById('salaryScenarioBalancePanel').hidden = true;
+        const loadPanelHide = document.getElementById('salaryScenarioLoadPanel');
+        if (loadPanelHide) loadPanelHide.hidden = true;
         const hintsHide = document.getElementById('salaryScenarioTableHints');
         if (hintsHide) hintsHide.hidden = true;
         salaryScenarioSandbox = null;
@@ -11229,6 +11578,87 @@
       return salaryScenarioSandbox;
     }
 
+    function getSalaryScenarioLoadInfo(sandbox) {
+      if (!sandbox || !Array.isArray(sandbox.rows)) {
+        return {
+          totalSalaryFact: 0,
+          totalSalaryScenario: 0,
+          salaryDiff: 0,
+          totalExp20Delta: 0,
+          avgLoadCoeff: null
+        };
+      }
+      let totalSalaryFact = 0;
+      let totalSalaryScenario = 0;
+      let totalExp20Delta = 0;
+      let absSalaryDeltaSum = 0;
+      let absExp20DeltaSum = 0;
+      const calculated = !!sandbox.calculated;
+
+      sandbox.rows.forEach(r => {
+        totalSalaryFact += num(r.salary);
+        totalSalaryScenario += num(r.scenarioSalary);
+        if (calculated && r.scenario) {
+          const expDelta = num(r.scenario.periodExp20Delta);
+          const salDelta = num(r.scenario.salaryDelta);
+          totalExp20Delta += expDelta;
+          absSalaryDeltaSum += Math.abs(salDelta);
+          absExp20DeltaSum += Math.abs(expDelta);
+        }
+      });
+
+      const salaryDiff = totalSalaryScenario - totalSalaryFact;
+      const avgLoadCoeff =
+        absSalaryDeltaSum > RECONCILE_EPS ? absExp20DeltaSum / absSalaryDeltaSum : null;
+
+      return {
+        totalSalaryFact,
+        totalSalaryScenario,
+        salaryDiff,
+        totalExp20Delta,
+        avgLoadCoeff
+      };
+    }
+
+    function renderSalaryScenarioLoadPanel() {
+      const panel = document.getElementById('salaryScenarioLoadPanel');
+      if (!panel || !salaryScenarioSandbox) return;
+
+      const calculated = !!salaryScenarioSandbox.calculated;
+      const info = getSalaryScenarioLoadInfo(salaryScenarioSandbox);
+      const salaryDiffClass = salaryScenarioDeltaCellClass(info.salaryDiff);
+      const exp20DeltaClass = calculated ? salaryScenarioDeltaCellClass(info.totalExp20Delta) : '';
+
+      let html = '<div><strong>Эффект изменения ЗП на расходы 20</strong></div>';
+      html += '<div class="salary-scenario-load-grid">';
+      html +=
+        '<div>Общая ЗП факт: <strong>' + scenarioFmtMoney(info.totalSalaryFact) + '</strong></div>';
+      html +=
+        '<div>Общая ЗП сценарий: <strong>' +
+        scenarioFmtMoney(info.totalSalaryScenario) +
+        '</strong></div>';
+      html +=
+        '<div>Разница ЗП: <strong' +
+        (salaryDiffClass ? ' class="' + salaryDiffClass + '"' : '') +
+        '>' +
+        scenarioFmtMoney(info.salaryDiff) +
+        '</strong></div>';
+      html +=
+        '<div>Общее изменение расходов 20: <strong' +
+        (exp20DeltaClass ? ' class="' + exp20DeltaClass + '"' : '') +
+        '>' +
+        (calculated ? scenarioFmtMoney(info.totalExp20Delta) : '—') +
+        '</strong></div>';
+      html +=
+        '<div>Средний коэффициент нагрузки: <strong>' +
+        (calculated ? scenarioFmtCoeff(info.avgLoadCoeff) : '—') +
+        '</strong></div>';
+      html += '</div>';
+
+      panel.innerHTML = html;
+      panel.hidden = false;
+    }
+
     function formatSalaryScenarioGroupLabel(row) {
       let label = escapeHtmlForReport(row.groupName || '—');
       if (row.isMultiMember) label += ' <span class="hint">(' + row.memberCount + ')</span>';
@@ -11283,6 +11713,7 @@
       if (!wrap || !salaryScenarioSandbox) return;
 
       renderSalaryScenarioBalancePanel();
+      renderSalaryScenarioLoadPanel();
 
       const calculated = !!salaryScenarioSandbox.calculated;
       const showScenario = sc => (calculated && sc ? scenarioFmtMoney(sc) : '—');
@@ -11305,6 +11736,8 @@
         '25 счёт сценарий',
         'Расходы 20 факт',
         'Расходы 20 сценарий',
+        'Изменение расходов 20',
+        'Коэффициент нагрузки',
         '26 счёт факт',
         '26 счёт сценарий',
         'Итого с 26 факт',
@@ -11342,6 +11775,9 @@
         salaryDelta: 0,
         periodExp20: 0,
         periodExp20Scenario: 0,
+        periodExp20Delta: 0,
+        absSalaryDeltaSum: 0,
+        absExp20DeltaSum: 0,
         acc26: 0,
         acc26Scenario: 0,
         totalWithWip26: 0,
@@ -11400,6 +11836,18 @@
         html += '<td>' + showScenario(sc && sc.acc25Scenario) + '</td>';
         html += '<td>' + scenarioFmtMoney(r.periodExp20) + '</td>';
         html += '<td>' + showScenario(sc && sc.periodExp20Scenario) + '</td>';
+        const exp20DeltaClass =
+          calculated && sc ? salaryScenarioDeltaCellClass(sc.periodExp20Delta) : '';
+        html +=
+          '<td' +
+          (exp20DeltaClass ? ' class="' + exp20DeltaClass + '"' : '') +
+          '>' +
+          (calculated && sc ? scenarioFmtMoney(sc.periodExp20Delta) : '—') +
+          '</td>';
+        html +=
+          '<td>' +
+          (calculated && sc ? scenarioFmtCoeff(sc.salaryLoadCoeff) : '—') +
+          '</td>';
         html += '<td>' + scenarioFmtMoney(r.acc26) + '</td>';
         html += '<td>' + showScenario(sc && sc.acc26Scenario) + '</td>';
         html += '<td>' + scenarioFmtMoney(r.totalWithWip26) + '</td>';
@@ -11436,6 +11884,9 @@
         if (calculated && sc) {
           totals.salaryDelta += sc.salaryDelta;
           totals.periodExp20Scenario += sc.periodExp20Scenario;
+          totals.periodExp20Delta += sc.periodExp20Delta;
+          totals.absSalaryDeltaSum += Math.abs(sc.salaryDelta);
+          totals.absExp20DeltaSum += Math.abs(sc.periodExp20Delta);
           totals.acc26Scenario += sc.acc26Scenario;
           totals.totalWithWip26Scenario += sc.totalWithWip26Scenario;
           totals.writeoffTotalScenario += sc.writeoffTotalScenario;
@@ -11456,6 +11907,11 @@
         ? salaryScenarioDeltaCellClass(totals.salaryDelta)
         : '';
 
+      const avgLoadCoeffFooter =
+        calculated && totals.absSalaryDeltaSum > RECONCILE_EPS
+          ? totals.absExp20DeltaSum / totals.absSalaryDeltaSum
+          : null;
+
       html += '</tbody><tfoot><tr>';
       html += '<td class="salary-scenario-col-order">Итого</td>';
       html += '<td>' + scenarioFmtMoney(totals.shipmentNoVat) + '</td>';
@@ -11469,7 +11925,17 @@
         (calculated ? scenarioFmtMoney(totals.salaryDelta) : '—') +
         '</td>';
       html += '<td>—</td>';
-      html += '<td colspan="12">—</td>';
+      html += '<td colspan="6">—</td>';
+      html += '<td>' + scenarioFmtMoney(totals.periodExp20) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.periodExp20Scenario) : '—') + '</td>';
+      html +=
+        '<td' +
+        (calculated ? ' class="' + salaryScenarioDeltaCellClass(totals.periodExp20Delta) + '"' : '') +
+        '>' +
+        (calculated ? scenarioFmtMoney(totals.periodExp20Delta) : '—') +
+        '</td>';
+      html += '<td>' + (calculated ? scenarioFmtCoeff(avgLoadCoeffFooter) : '—') + '</td>';
+      html += '<td colspan="2">—</td>';
       html += '<td>' + scenarioFmtMoney(totals.totalWithWip26) + '</td>';
       html += '<td>' + (calculated ? scenarioFmtMoney(totals.totalWithWip26Scenario) : '—') + '</td>';
       html += '<td>' + scenarioFmtMoney(totals.writeoffTotal) + '</td>';
@@ -11500,11 +11966,13 @@
           readSalaryScenarioInputsFromDom();
           salaryScenarioSandbox.calculated = false;
           renderSalaryScenarioBalancePanel();
+          renderSalaryScenarioLoadPanel();
         });
         inp.addEventListener('change', () => {
           readSalaryScenarioInputsFromDom();
           salaryScenarioSandbox.calculated = false;
           renderSalaryScenarioBalancePanel();
+          renderSalaryScenarioLoadPanel();
         });
       });
     }
@@ -11558,6 +12026,7 @@
           'Режим ручного ввода: измените «ЗП сценарий» по нужным заказам, затем нажмите «Рассчитать сценарий».';
       }
       renderSalaryScenarioBalancePanel();
+      renderSalaryScenarioLoadPanel();
     }
 
     function salaryScenarioBalance() {
@@ -11570,6 +12039,7 @@
       let diff = target - current;
       if (Math.abs(diff) < 0.01) {
         renderSalaryScenarioBalancePanel();
+        renderSalaryScenarioLoadPanel();
         return;
       }
       const weights = salaryScenarioSandbox.rows.map(r =>
@@ -12054,6 +12524,21 @@
     if (salaryScenarioBalanceBtn) {
       salaryScenarioBalanceBtn.addEventListener('click', () => salaryScenarioBalance());
     }
+    const saveSalaryScenarioBtn = document.getElementById('saveSalaryScenarioBtn');
+    if (saveSalaryScenarioBtn) {
+      saveSalaryScenarioBtn.addEventListener('click', () => saveSalaryScenarioToStorage());
+    }
+    const loadSavedSalaryScenarioBtn = document.getElementById('loadSavedSalaryScenarioBtn');
+    if (loadSavedSalaryScenarioBtn) {
+      loadSavedSalaryScenarioBtn.addEventListener('click', () => loadSavedSalaryScenarioFromStorage());
+    }
+    const deleteSavedSalaryScenarioBtn = document.getElementById('deleteSavedSalaryScenarioBtn');
+    if (deleteSavedSalaryScenarioBtn) {
+      deleteSavedSalaryScenarioBtn.addEventListener('click', () =>
+        deleteSavedSalaryScenarioFromStorage()
+      );
+    }
+    renderSavedSalaryScenariosList();
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());
 

@@ -1344,10 +1344,29 @@
       background: #f8fdf9;
     }
 
+    #salaryScenarioCard .salary-scenario-table-hints {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #dbeafe;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #salaryScenarioCard .salary-scenario-table-hints p {
+      margin: 0 0 6px;
+    }
+
+    #salaryScenarioCard .salary-scenario-table-hints p:last-child {
+      margin-bottom: 0;
+    }
+
     #salaryScenarioCard .salary-scenario-table {
       width: max-content;
       min-width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       font-size: 12px;
     }
 
@@ -1358,10 +1377,24 @@
       text-align: right;
       white-space: nowrap;
       vertical-align: middle;
+      background: #f8fdf9;
     }
 
-    #salaryScenarioCard .salary-scenario-table th:first-child,
-    #salaryScenarioCard .salary-scenario-table td:first-child,
+    #salaryScenarioCard .salary-scenario-col-order {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      min-width: 320px;
+      max-width: 380px;
+      width: 340px;
+      text-align: left;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.35;
+      border-right: 1px solid #c5e4cf;
+      box-shadow: 2px 0 4px rgba(15, 23, 42, 0.06);
+    }
+
     #salaryScenarioCard .salary-scenario-table td.salary-scenario-comment {
       text-align: left;
       white-space: normal;
@@ -1370,21 +1403,52 @@
     }
 
     #salaryScenarioCard .salary-scenario-table thead th {
-      background: #e0f2e8;
       color: #14532d;
       font-weight: 600;
       position: sticky;
       top: 0;
       z-index: 1;
+      background: #e0f2e8;
+    }
+
+    #salaryScenarioCard .salary-scenario-table thead th.salary-scenario-col-order {
+      z-index: 5;
+      background: #e0f2e8 !important;
+    }
+
+    #salaryScenarioCard .salary-scenario-table tbody td.salary-scenario-col-order {
+      background: #f8fdf9 !important;
     }
 
     #salaryScenarioCard .salary-scenario-table tfoot td {
       font-weight: 600;
       background: #ecf8f0;
+      border-top: 2px solid #9ec9ae;
+    }
+
+    #salaryScenarioCard .salary-scenario-table tfoot td.salary-scenario-col-order {
+      z-index: 3;
+      background: #d8efe0 !important;
     }
 
     #salaryScenarioCard .salary-scenario-table tr.salary-scenario-warn td {
       background: #fff7ed;
+    }
+
+    #salaryScenarioCard .salary-scenario-table tr.salary-scenario-warn td.salary-scenario-col-order {
+      background: #fff7ed !important;
+    }
+
+    #salaryScenarioCard .salary-scenario-delta-up {
+      background: #ecfdf5 !important;
+      color: #166534;
+      font-weight: 600;
+    }
+
+    #salaryScenarioCard .salary-scenario-delta-down {
+      background: #fff1f2 !important;
+      color: #9f1239;
+      font-weight: 600;
     }
 
     #salaryScenarioCard input.salary-scenario-input {
@@ -2095,6 +2159,17 @@
       </div>
       <div class="hint" id="salaryScenarioStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div id="salaryScenarioBalancePanel" class="salary-scenario-balance-panel" hidden></div>
+      <div id="salaryScenarioTableHints" class="salary-scenario-table-hints" hidden>
+        <p>
+          Чтобы увидеть изменение сценария, измените значения в колонке «ЗП сценарий». Если ЗП сценарий равна ЗП факт, результат сценария совпадает с фактом.
+        </p>
+        <p>
+          Списание в сценарии считается по той же логике, что на вкладке «Списание с 26»: «Списано всего» = «Списано с 26» + «Списано с 20»; 26 счёт не переходит в НЗП.
+        </p>
+        <p>
+          Например: уменьшите ЗП у одного заказа на 100&nbsp;000 и увеличьте у другого на 100&nbsp;000, затем нажмите «Рассчитать сценарий».
+        </p>
+      </div>
       <div id="salaryScenarioTableWrap" class="salary-scenario-scroll-wrap" hidden></div>
     </div>
 
@@ -10657,9 +10732,13 @@
         processing: breakdown.processing,
         otherDirect: breakdown.otherDirect,
         periodExp20: sums.periodExp20,
+        totalWithWip26: sums.totalWithWip26,
         writeoffTotal: metrics26.writeOffTotal,
-        wipEnd: metrics26.wipEnd26,
+        writeoff26: metrics26.writeOff26Part,
+        writeoff20: metrics20.writeOff20,
         wipStart20: sums.wipStart,
+        wipEnd20: metrics20.wipEnd20,
+        wipEndTotal: metrics20.wipEnd20,
         profit: metrics26.profit26Sum,
         marginPct,
         calc26,
@@ -10693,10 +10772,14 @@
         processing: 0,
         otherDirect: 0,
         periodExp20: 0,
+        totalWithWip26: 0,
         writeoffTotal: 0,
+        writeoff26: 0,
+        writeoff20: 0,
         profit: 0,
         wipStart20: first.wipStart20,
-        wipEnd: pickOrderCardEndBalance(groupMonths, 'wipEnd'),
+        wipEnd20: pickOrderCardEndBalance(groupMonths, 'wipEnd20'),
+        wipEndTotal: pickOrderCardEndBalance(groupMonths, 'wipEndTotal'),
         calc26: last.calc26,
         controlCommentsSet: new Set()
       };
@@ -10712,7 +10795,10 @@
         agg.processing += m.processing;
         agg.otherDirect += m.otherDirect;
         agg.periodExp20 += m.periodExp20;
+        agg.totalWithWip26 += m.totalWithWip26;
         agg.writeoffTotal += m.writeoffTotal;
+        agg.writeoff26 += m.writeoff26;
+        agg.writeoff20 += m.writeoff20;
         agg.profit += m.profit;
         if (m.controlComments && m.controlComments !== '—') {
           agg.controlCommentsSet.add(m.controlComments);
@@ -10875,14 +10961,30 @@
         totalWithWip26: wipStart + periodExp26Scenario
       };
 
-      const metrics26 = computeGroupWriteoff26Metrics(sumsScenario, factRow.calc26);
+      const calc26Scenario = Object.assign({}, factRow.calc26 || {});
+      let writeoffTotalCapped = false;
+      let desiredWriteoffTotal;
+      if (manualWriteoffPositive(calc26Scenario.manualTotalWriteoff26)) {
+        desiredWriteoffTotal = num(calc26Scenario.manualTotalWriteoff26);
+      } else {
+        desiredWriteoffTotal =
+          sumsScenario.shipmentNoVat * (num(calc26Scenario.profitPercent26) / 100);
+      }
+      if (desiredWriteoffTotal > sumsScenario.totalWithWip26 + RECONCILE_EPS) {
+        writeoffTotalCapped = true;
+        calc26Scenario.manualTotalWriteoff26 = String(sumsScenario.totalWithWip26);
+      }
+
+      const metrics26 = computeGroupWriteoff26Metrics(sumsScenario, calc26Scenario);
       const metrics20 = computeGroupWriteoff20Metrics(sumsScenario, metrics26.writeOff20);
 
       const control = [];
-      if (metrics20.validation && metrics20.validation.writeoff20OverAvailable) {
-        control.push('Списание 20 больше доступного НЗП/расходов');
+      if (writeoffTotalCapped) {
+        control.push('Списание ограничено итого с 26');
       }
-      if (metrics20.rawWipEnd20 < -RECONCILE_EPS && metrics20.wipEnd20 <= RECONCILE_EPS) {
+      if (metrics20.validation && metrics20.validation.writeoff20OverAvailable) {
+        control.push('Списание 20 больше доступных расходов 20 / НЗП. Списание ограничено.');
+      } else if (metrics20.rawWipEnd20 < -RECONCILE_EPS && metrics20.wipEnd20 <= RECONCILE_EPS) {
         control.push('НЗП конец 20 обнулён (было отрицательное)');
       }
       if (metrics26.validation && metrics26.validation.writeoff26CappedByTotal) {
@@ -10892,15 +10994,13 @@
         control.push('Списание 26 больше расходов 26');
       }
       if (metrics26.writeOffTotal > sumsScenario.totalWithWip26 + RECONCILE_EPS) {
-        control.push('Списано всего больше итого с НЗП');
-      }
-      if (metrics26.wipEnd26 < -RECONCILE_EPS) {
-        control.push('Отрицательное НЗП конец');
+        control.push('Списано всего больше итого с 26');
       }
 
       const profitScenario = factRow.shipmentNoVat - metrics26.writeOffTotal;
       const marginScenario =
         factRow.shipmentNoVat > 0 ? (profitScenario / factRow.shipmentNoVat) * 100 : 0;
+      const wipEnd20Scenario = metrics20.wipEnd20;
 
       return {
         scenarioSalary,
@@ -10909,9 +11009,14 @@
         insuranceScenario,
         sickScenario,
         acc25Scenario,
+        acc26Scenario,
         periodExp20Scenario,
+        totalWithWip26Scenario: sumsScenario.totalWithWip26,
         writeoffTotalScenario: metrics26.writeOffTotal,
-        wipEndScenario: metrics26.wipEnd26,
+        writeoff26Scenario: metrics26.writeOff26Part,
+        writeoff20Scenario: metrics20.writeOff20,
+        wipEnd20Scenario,
+        wipEndTotalScenario: wipEnd20Scenario,
         profitScenario,
         marginScenario,
         scenarioControl: control.length ? control.join('; ') : '—',
@@ -11035,6 +11140,8 @@
         if (statusEl) statusEl.textContent = factData.error;
         document.getElementById('salaryScenarioTableWrap').hidden = true;
         document.getElementById('salaryScenarioBalancePanel').hidden = true;
+        const hintsHide = document.getElementById('salaryScenarioTableHints');
+        if (hintsHide) hintsHide.hidden = true;
         salaryScenarioSandbox = null;
         return null;
       }
@@ -11051,6 +11158,35 @@
           '.';
       }
       return salaryScenarioSandbox;
+    }
+
+    function salaryScenarioHasSalaryChanges(rows) {
+      if (!rows || !rows.length) return false;
+      return rows.some(r => Math.abs(num(r.scenarioSalary) - num(r.salary)) >= 0.01);
+    }
+
+    function salaryScenarioDeltaCellClass(delta) {
+      const d = num(delta);
+      if (Math.abs(d) < 0.01) return '';
+      return d > 0 ? 'salary-scenario-delta-up' : 'salary-scenario-delta-down';
+    }
+
+    function buildSalaryScenarioStatusMessage(unbalanced, hasChanges, rowCount) {
+      const parts = [];
+      if (unbalanced) {
+        parts.push('Сценарий не сбалансирован: общая ЗП сценария отличается от факта.');
+      }
+      if (!hasChanges && !unbalanced) {
+        return 'ЗП сценарий совпадает с фактом. Изменений в расчёте нет.';
+      }
+      if (hasChanges) {
+        parts.push(
+          'Сценарий рассчитан для ' + rowCount + ' групп/заказов. Изменения ЗП применены.'
+        );
+      } else if (!unbalanced) {
+        parts.push('Сценарий рассчитан для ' + rowCount + ' групп/заказов.');
+      }
+      return parts.join(' ');
     }
 
     function calculateSalaryScenario() {
@@ -11080,14 +11216,13 @@
 
       renderSalaryScenarioPanel();
 
+      const hasChanges = salaryScenarioHasSalaryChanges(salaryScenarioSandbox.rows);
       if (statusEl) {
-        let msg =
-          'Сценарий рассчитан для ' + salaryScenarioSandbox.rows.length + ' групп/заказов.';
-        if (unbalanced) {
-          msg +=
-            ' Общая ЗП сценария отличается от фактической. Сценарий несбалансирован.';
-        }
-        statusEl.textContent = msg;
+        statusEl.textContent = buildSalaryScenarioStatusMessage(
+          unbalanced,
+          hasChanges,
+          salaryScenarioSandbox.rows.length
+        );
         if (unbalanced) statusEl.classList.add('salary-scenario-unbalanced');
         else statusEl.classList.remove('salary-scenario-unbalanced');
       }
@@ -11170,18 +11305,33 @@
         '25 счёт сценарий',
         'Расходы 20 факт',
         'Расходы 20 сценарий',
+        '26 счёт факт',
+        '26 счёт сценарий',
+        'Итого с 26 факт',
+        'Итого с 26 сценарий',
         'Списано всего факт',
         'Списано всего сценарий',
-        'НЗП конец факт',
-        'НЗП конец сценарий',
+        'Списано с 26 факт',
+        'Списано с 26 сценарий',
+        'Списано с 20 факт',
+        'Списано с 20 сценарий',
+        'НЗП конец 20 факт',
+        'НЗП конец 20 сценарий',
+        'НЗП конец общий факт',
+        'НЗП конец общий сценарий',
         'Прибыль факт',
         'Прибыль сценарий',
         'Маржа факт',
         'Маржа сценарий',
         'Комментарий / контроль'
       ];
-      headers.forEach(h => {
-        html += '<th>' + escapeHtmlForReport(h) + '</th>';
+      headers.forEach((h, colIndex) => {
+        html +=
+          '<th' +
+          (colIndex === 0 ? ' class="salary-scenario-col-order"' : '') +
+          '>' +
+          escapeHtmlForReport(h) +
+          '</th>';
       });
       html += '</tr></thead><tbody>';
 
@@ -11190,12 +11340,24 @@
         salary: 0,
         scenarioSalary: 0,
         salaryDelta: 0,
+        periodExp20: 0,
+        periodExp20Scenario: 0,
+        acc26: 0,
+        acc26Scenario: 0,
+        totalWithWip26: 0,
+        totalWithWip26Scenario: 0,
         writeoffTotal: 0,
         writeoffTotalScenario: 0,
+        writeoff26: 0,
+        writeoff26Scenario: 0,
+        writeoff20: 0,
+        writeoff20Scenario: 0,
         profit: 0,
         profitScenario: 0,
-        wipEnd: 0,
-        wipEndScenario: 0
+        wipEnd20: 0,
+        wipEnd20Scenario: 0,
+        wipEndTotal: 0,
+        wipEndTotalScenario: 0
       };
 
       salaryScenarioSandbox.rows.forEach((r, rowIndex) => {
@@ -11206,7 +11368,12 @@
           : r.controlComments || '—';
 
         html += '<tr' + (warn ? ' class="salary-scenario-warn"' : '') + '>';
-        html += '<td>' + formatSalaryScenarioGroupLabel(r) + '</td>';
+        html +=
+          '<td class="salary-scenario-col-order" title="' +
+          escapeHtmlForReport(r.groupName || '') +
+          '">' +
+          formatSalaryScenarioGroupLabel(r) +
+          '</td>';
         html += '<td>' + scenarioFmtMoney(r.shipmentNoVat) + '</td>';
         html += '<td>' + scenarioFmtMoney(r.salary) + '</td>';
         html += '<td>' + scenarioFmtPct(r.salarySharePct) + '%</td>';
@@ -11216,8 +11383,12 @@
           '" value="' +
           scenarioFmtMoney(r.scenarioSalary) +
           '"></td>';
+        const deltaClass =
+          calculated && sc ? salaryScenarioDeltaCellClass(sc.salaryDelta) : '';
         html +=
-          '<td>' +
+          '<td' +
+          (deltaClass ? ' class="' + deltaClass + '"' : '') +
+          '>' +
           (calculated && sc ? scenarioFmtMoney(sc.salaryDelta) : '—') +
           '</td>';
         html += '<td>' + showScenarioPct(sc && sc.salaryShareScenarioPct) + '</td>';
@@ -11229,10 +11400,20 @@
         html += '<td>' + showScenario(sc && sc.acc25Scenario) + '</td>';
         html += '<td>' + scenarioFmtMoney(r.periodExp20) + '</td>';
         html += '<td>' + showScenario(sc && sc.periodExp20Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.acc26) + '</td>';
+        html += '<td>' + showScenario(sc && sc.acc26Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.totalWithWip26) + '</td>';
+        html += '<td>' + showScenario(sc && sc.totalWithWip26Scenario) + '</td>';
         html += '<td>' + scenarioFmtMoney(r.writeoffTotal) + '</td>';
         html += '<td>' + showScenario(sc && sc.writeoffTotalScenario) + '</td>';
-        html += '<td>' + scenarioFmtMoney(r.wipEnd) + '</td>';
-        html += '<td>' + showScenario(sc && sc.wipEndScenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.writeoff26) + '</td>';
+        html += '<td>' + showScenario(sc && sc.writeoff26Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.writeoff20) + '</td>';
+        html += '<td>' + showScenario(sc && sc.writeoff20Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.wipEnd20) + '</td>';
+        html += '<td>' + showScenario(sc && sc.wipEnd20Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.wipEndTotal) + '</td>';
+        html += '<td>' + showScenario(sc && sc.wipEndTotalScenario) + '</td>';
         html += '<td>' + scenarioFmtMoney(r.profit) + '</td>';
         html += '<td>' + showScenario(sc && sc.profitScenario) + '</td>';
         html += '<td>' + scenarioFmtPct(r.marginPct) + '%</td>';
@@ -11243,18 +11424,26 @@
         totals.shipmentNoVat += r.shipmentNoVat;
         totals.salary += r.salary;
         totals.scenarioSalary += num(r.scenarioSalary);
+        totals.periodExp20 += r.periodExp20;
+        totals.acc26 += r.acc26;
+        totals.totalWithWip26 += r.totalWithWip26;
+        totals.writeoffTotal += r.writeoffTotal;
+        totals.writeoff26 += r.writeoff26;
+        totals.writeoff20 += r.writeoff20;
+        totals.profit += r.profit;
+        totals.wipEnd20 += r.wipEnd20;
+        totals.wipEndTotal += r.wipEndTotal;
         if (calculated && sc) {
           totals.salaryDelta += sc.salaryDelta;
-          totals.writeoffTotal += r.writeoffTotal;
+          totals.periodExp20Scenario += sc.periodExp20Scenario;
+          totals.acc26Scenario += sc.acc26Scenario;
+          totals.totalWithWip26Scenario += sc.totalWithWip26Scenario;
           totals.writeoffTotalScenario += sc.writeoffTotalScenario;
-          totals.profit += r.profit;
+          totals.writeoff26Scenario += sc.writeoff26Scenario;
+          totals.writeoff20Scenario += sc.writeoff20Scenario;
           totals.profitScenario += sc.profitScenario;
-          totals.wipEnd += r.wipEnd;
-          totals.wipEndScenario += sc.wipEndScenario;
-        } else {
-          totals.writeoffTotal += r.writeoffTotal;
-          totals.profit += r.profit;
-          totals.wipEnd += r.wipEnd;
+          totals.wipEnd20Scenario += sc.wipEnd20Scenario;
+          totals.wipEndTotalScenario += sc.wipEndTotalScenario;
         }
       });
 
@@ -11263,19 +11452,36 @@
         ? computeAnnualMarginPct(totals.profitScenario, totals.shipmentNoVat)
         : 0;
 
+      const totalsDeltaClass = calculated
+        ? salaryScenarioDeltaCellClass(totals.salaryDelta)
+        : '';
+
       html += '</tbody><tfoot><tr>';
-      html += '<td>Итого</td>';
+      html += '<td class="salary-scenario-col-order">Итого</td>';
       html += '<td>' + scenarioFmtMoney(totals.shipmentNoVat) + '</td>';
       html += '<td>' + scenarioFmtMoney(totals.salary) + '</td>';
       html += '<td>100.0%</td>';
       html += '<td>' + scenarioFmtMoney(totals.scenarioSalary) + '</td>';
-      html += '<td>' + (calculated ? scenarioFmtMoney(totals.salaryDelta) : '—') + '</td>';
+      html +=
+        '<td' +
+        (totalsDeltaClass ? ' class="' + totalsDeltaClass + '"' : '') +
+        '>' +
+        (calculated ? scenarioFmtMoney(totals.salaryDelta) : '—') +
+        '</td>';
       html += '<td>—</td>';
-      html += '<td colspan="8">—</td>';
+      html += '<td colspan="12">—</td>';
+      html += '<td>' + scenarioFmtMoney(totals.totalWithWip26) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.totalWithWip26Scenario) : '—') + '</td>';
       html += '<td>' + scenarioFmtMoney(totals.writeoffTotal) + '</td>';
       html += '<td>' + (calculated ? scenarioFmtMoney(totals.writeoffTotalScenario) : '—') + '</td>';
-      html += '<td>' + scenarioFmtMoney(totals.wipEnd) + '</td>';
-      html += '<td>' + (calculated ? scenarioFmtMoney(totals.wipEndScenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.writeoff26) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.writeoff26Scenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.writeoff20) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.writeoff20Scenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.wipEnd20) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.wipEnd20Scenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.wipEndTotal) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.wipEndTotalScenario) : '—') + '</td>';
       html += '<td>' + scenarioFmtMoney(totals.profit) + '</td>';
       html += '<td>' + (calculated ? scenarioFmtMoney(totals.profitScenario) : '—') + '</td>';
       html += '<td>' + scenarioFmtPct(marginFact) + '%</td>';
@@ -11285,6 +11491,9 @@
 
       wrap.innerHTML = html;
       wrap.hidden = false;
+
+      const hintsEl = document.getElementById('salaryScenarioTableHints');
+      if (hintsEl) hintsEl.hidden = false;
 
       wrap.querySelectorAll('input.salary-scenario-input').forEach(inp => {
         inp.addEventListener('input', () => {
@@ -11810,6 +12019,8 @@
         const panel = document.getElementById('salaryScenarioBalancePanel');
         if (wrap) wrap.hidden = true;
         if (panel) panel.hidden = true;
+        const hintsEl = document.getElementById('salaryScenarioTableHints');
+        if (hintsEl) hintsEl.hidden = true;
       });
       updateSalaryScenarioScopeUi();
     } else {

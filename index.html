@@ -9413,7 +9413,8 @@
           if (!groupMonths.has(gn)) groupMonths.set(gn, []);
           groupMonths.get(gn).push({
             period,
-            shipment: m.shipmentVat,
+            shipmentVat: m.shipmentVat,
+            shipmentNoVat: m.shipmentNoVat,
             writeoffTotal: m.writeoffTotal,
             writeoff26: m.writeoff26,
             writeoff20: m.writeoff20,
@@ -9429,13 +9430,15 @@
       const rows = [];
       groupMonths.forEach((months, gn) => {
         months.sort((a, b) => a.period.localeCompare(b.period));
-        let shipment = 0;
+        let shipmentVat = 0;
+        let shipmentNoVat = 0;
         let writeoffTotal = 0;
         let writeoff26 = 0;
         let writeoff20 = 0;
         let profit = 0;
         months.forEach(m => {
-          shipment += m.shipment;
+          shipmentVat += m.shipmentVat;
+          shipmentNoVat += m.shipmentNoVat;
           writeoffTotal += m.writeoffTotal;
           writeoff26 += m.writeoff26;
           writeoff20 += m.writeoff20;
@@ -9449,21 +9452,23 @@
           memberCount: last.memberCount,
           monthCount: months.length,
           endBalancePeriod: last.period,
-          shipment,
+          shipmentVat,
+          shipmentNoVat,
           writeoffTotal,
           writeoff26,
           writeoff20,
           wipEnd20: pickOrderCardEndBalance(months, 'wipEnd20'),
           wipEnd26: pickOrderCardEndBalance(months, 'wipEnd26'),
           profit,
-          marginPct: computeAnnualMarginPct(profit, shipment)
+          marginPct: computeAnnualMarginPct(profit, shipmentNoVat)
         });
       });
 
       rows.sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
 
       const totals = {
-        shipment: 0,
+        shipmentVat: 0,
+        shipmentNoVat: 0,
         writeoffTotal: 0,
         writeoff26: 0,
         writeoff20: 0,
@@ -9473,7 +9478,8 @@
         marginPct: 0
       };
       rows.forEach(r => {
-        totals.shipment += r.shipment;
+        totals.shipmentVat += r.shipmentVat;
+        totals.shipmentNoVat += r.shipmentNoVat;
         totals.writeoffTotal += r.writeoffTotal;
         totals.writeoff26 += r.writeoff26;
         totals.writeoff20 += r.writeoff20;
@@ -9481,7 +9487,7 @@
         totals.wipEnd26 += r.wipEnd26;
         totals.profit += r.profit;
       });
-      totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipment);
+      totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipmentNoVat);
 
       return {
         year: y,
@@ -9523,7 +9529,7 @@
         '</p>';
       html += '<div class="period-report-scroll-wrap"><table class="annual-summary-table" id="annualSummaryTable">';
       html +=
-        '<thead><tr><th>Заказ / расчётная группа</th><th>Отгрузка за год</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>НЗП конец</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
+        '<thead><tr><th>Заказ / расчётная группа</th><th>Отгрузка с НДС</th><th>Отгрузка без НДС</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>НЗП конец</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
 
       report.rows.forEach(r => {
         let nameCell = escapeHtmlForReport(r.label);
@@ -9537,7 +9543,8 @@
           '<tr><td>' +
           nameCell +
           '</td>' +
-          orderCardExportNumCell(r.shipment) +
+          orderCardExportNumCell(r.shipmentVat) +
+          orderCardExportNumCell(r.shipmentNoVat) +
           orderCardExportNumCell(r.writeoffTotal) +
           orderCardExportNumCell(r.writeoff26) +
           orderCardExportNumCell(r.writeoff20) +
@@ -9551,7 +9558,8 @@
       const t = report.totals;
       html +=
         '<tr class="annual-summary-totals-row" style="font-weight:bold;"><td>Итого</td>' +
-        orderCardExportNumCell(t.shipment) +
+        orderCardExportNumCell(t.shipmentVat) +
+        orderCardExportNumCell(t.shipmentNoVat) +
         orderCardExportNumCell(t.writeoffTotal) +
         orderCardExportNumCell(t.writeoff26) +
         orderCardExportNumCell(t.writeoff20) +

@@ -1336,6 +1336,86 @@
       display: none;
     }
 
+    #salaryScenarioCard .salary-scenario-scroll-wrap {
+      overflow-x: auto;
+      margin-top: 12px;
+      border: 1px solid #c5e4cf;
+      border-radius: 8px;
+      background: #f8fdf9;
+    }
+
+    #salaryScenarioCard .salary-scenario-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    #salaryScenarioCard .salary-scenario-table th,
+    #salaryScenarioCard .salary-scenario-table td {
+      border-bottom: 1px solid #d1f0db;
+      padding: 6px 8px;
+      text-align: right;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    #salaryScenarioCard .salary-scenario-table th:first-child,
+    #salaryScenarioCard .salary-scenario-table td:first-child,
+    #salaryScenarioCard .salary-scenario-table td.salary-scenario-comment {
+      text-align: left;
+      white-space: normal;
+      min-width: 160px;
+      max-width: 260px;
+    }
+
+    #salaryScenarioCard .salary-scenario-table thead th {
+      background: #e0f2e8;
+      color: #14532d;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    #salaryScenarioCard .salary-scenario-table tfoot td {
+      font-weight: 600;
+      background: #ecf8f0;
+    }
+
+    #salaryScenarioCard .salary-scenario-table tr.salary-scenario-warn td {
+      background: #fff7ed;
+    }
+
+    #salaryScenarioCard input.salary-scenario-input {
+      width: 88px;
+      padding: 4px 6px;
+      border: 1px solid #9ec9ae;
+      border-radius: 6px;
+      text-align: right;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+
+    #salaryScenarioCard .salary-scenario-balance-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f0f9f4;
+      border: 1px solid #c5e4cf;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #salaryScenarioCard .salary-scenario-unbalanced {
+      color: #b45309;
+      font-weight: 600;
+    }
+
+    #salaryScenarioYearField[hidden] {
+      display: none;
+    }
+
     #periodReportTableWrap table {
       width: max-content;
       min-width: 100%;
@@ -1980,6 +2060,42 @@
       <div id="aiAnalysisOutputPanel" class="ai-analysis-output-panel" hidden>
         <textarea id="aiAnalysisOutput" readonly spellcheck="false"></textarea>
       </div>
+    </div>
+
+    <div class="card" id="salaryScenarioCard" style="margin-top:20px;">
+      <div class="period-summary-head">
+        <h2>Сценарий перераспределения ЗП</h2>
+      </div>
+      <p class="hint" style="margin-top:8px;">
+        Песочница: перераспределение ЗП между заказами без изменения общей суммы. От новой ЗП автоматически пересчитываются взносы, больничные и 25 счёт.
+        Реальные данные, localStorage и Google Sheets не изменяются.
+      </p>
+      <div class="period-report-controls">
+        <div class="field" style="width: 200px;">
+          <label for="salaryScenarioScope">Период анализа</label>
+          <select id="salaryScenarioScope" autocomplete="off">
+            <option value="month">Текущий месяц</option>
+            <option value="year">Год</option>
+          </select>
+        </div>
+        <div class="field annual-summary-year-field" id="salaryScenarioYearField" hidden>
+          <label for="salaryScenarioYear">Год</label>
+          <select id="salaryScenarioYear" autocomplete="off"></select>
+        </div>
+        <button type="button" id="loadSalaryScenarioBtn" class="secondary">Загрузить факт</button>
+        <button type="button" id="calcSalaryScenarioBtn" class="secondary">Рассчитать сценарий</button>
+        <button type="button" id="applySalaryScenarioBtn" class="secondary" disabled title="На первом этапе недоступно">Применить сценарий</button>
+      </div>
+      <div class="period-report-controls" style="margin-top: 4px;">
+        <button type="button" id="salaryScenarioCopyFactBtn" class="secondary">Скопировать факт в сценарий</button>
+        <button type="button" id="salaryScenarioClearBtn" class="secondary">Очистить сценарий</button>
+        <button type="button" id="salaryScenarioByShipmentBtn" class="secondary">Распределить ЗП по отгрузке</button>
+        <button type="button" id="salaryScenarioManualBtn" class="secondary">Распределить ЗП вручную</button>
+        <button type="button" id="salaryScenarioBalanceBtn" class="secondary">Сбалансировать ЗП</button>
+      </div>
+      <div class="hint" id="salaryScenarioStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+      <div id="salaryScenarioBalancePanel" class="salary-scenario-balance-panel" hidden></div>
+      <div id="salaryScenarioTableWrap" class="salary-scenario-scroll-wrap" hidden></div>
     </div>
 
     <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
@@ -10464,6 +10580,807 @@
       }
     }
 
+    let salaryScenarioSandbox = null;
+
+    function scenarioFmtMoney(n) {
+      return aiAnalysisFmtMoney(n);
+    }
+
+    function scenarioFmtPct(n) {
+      return aiAnalysisFmtPct(n);
+    }
+
+    function getSalaryScenarioPeriodKey(scope, periodOrYear) {
+      return scope + ':' + periodOrYear;
+    }
+
+    function aggregateGlobalsForSalaryScenarioYear(sources, periods) {
+      const g = {
+        totalInsurance: 0,
+        totalSick: 0,
+        total25: 0,
+        total26: 0,
+        total44: 0
+      };
+      periods.forEach(period => {
+        const data = sources.get(period);
+        const gg = (data && data.globals) || {};
+        g.totalInsurance += num(gg.totalInsurance);
+        g.totalSick += num(gg.totalSick);
+        g.total25 += num(gg.total25);
+        g.total26 += num(gg.total26);
+        g.total44 += num(gg.total44);
+      });
+      return g;
+    }
+
+    function collectSalaryScenarioFactRowForPeriod(data, group, periodShipmentNoVat, periodSalary) {
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
+      const legacy = data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+
+      const sums = sumGroupMetricsFromPeriodData(
+        group.memberRows,
+        globals,
+        totals,
+        group.groupName,
+        transfers
+      );
+      const breakdown = sumGroupExpenseBreakdownForAi(group.memberRows, globals, totals);
+      const calc26 = getGroupCalc26SettingsFromPeriodData(
+        group.groupName,
+        group.memberRows,
+        gc26,
+        legacy
+      );
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
+      const marginPct =
+        sums.shipmentNoVat > 0 ? (metrics26.profit26Sum / sums.shipmentNoVat) * 100 : 0;
+
+      return {
+        groupName: group.groupName,
+        isMultiMember: group.memberRows.length > 1,
+        memberCount: group.memberRows.length,
+        shipmentNoVat: sums.shipmentNoVat,
+        salary: breakdown.salary,
+        salarySharePct: periodSalary > 0 ? (breakdown.salary / periodSalary) * 100 : 0,
+        insurance: breakdown.insurance,
+        sick: breakdown.sick,
+        acc25: breakdown.acc25,
+        acc44: breakdown.acc44,
+        acc26: breakdown.acc26,
+        materials: breakdown.materials,
+        processing: breakdown.processing,
+        otherDirect: breakdown.otherDirect,
+        periodExp20: sums.periodExp20,
+        writeoffTotal: metrics26.writeOffTotal,
+        wipEnd: metrics26.wipEnd26,
+        wipStart20: sums.wipStart,
+        profit: metrics26.profit26Sum,
+        marginPct,
+        calc26,
+        controlComments: buildGroupAiControlComments(
+          data,
+          group,
+          sums,
+          calc26,
+          metrics26,
+          metrics20
+        )
+      };
+    }
+
+    function aggregateSalaryScenarioYearRows(groupMonths) {
+      groupMonths.sort((a, b) => a.period.localeCompare(b.period));
+      const first = groupMonths[0];
+      const last = groupMonths[groupMonths.length - 1];
+      const agg = {
+        groupName: first.groupName,
+        isMultiMember: first.isMultiMember,
+        memberCount: first.memberCount,
+        shipmentNoVat: 0,
+        salary: 0,
+        insurance: 0,
+        sick: 0,
+        acc25: 0,
+        acc44: 0,
+        acc26: 0,
+        materials: 0,
+        processing: 0,
+        otherDirect: 0,
+        periodExp20: 0,
+        writeoffTotal: 0,
+        profit: 0,
+        wipStart20: first.wipStart20,
+        wipEnd: pickOrderCardEndBalance(groupMonths, 'wipEnd'),
+        calc26: last.calc26,
+        controlCommentsSet: new Set()
+      };
+      groupMonths.forEach(m => {
+        agg.shipmentNoVat += m.shipmentNoVat;
+        agg.salary += m.salary;
+        agg.insurance += m.insurance;
+        agg.sick += m.sick;
+        agg.acc25 += m.acc25;
+        agg.acc44 += m.acc44;
+        agg.acc26 += m.acc26;
+        agg.materials += m.materials;
+        agg.processing += m.processing;
+        agg.otherDirect += m.otherDirect;
+        agg.periodExp20 += m.periodExp20;
+        agg.writeoffTotal += m.writeoffTotal;
+        agg.profit += m.profit;
+        if (m.controlComments && m.controlComments !== '—') {
+          agg.controlCommentsSet.add(m.controlComments);
+        }
+      });
+      agg.marginPct =
+        agg.shipmentNoVat > 0 ? (agg.profit / agg.shipmentNoVat) * 100 : 0;
+      agg.salarySharePct = 0;
+      if (last.controlComments && last.controlComments !== '—') {
+        agg.controlCommentsSet.add(last.controlComments);
+      }
+      agg.controlComments = agg.controlCommentsSet.size
+        ? Array.from(agg.controlCommentsSet).join(' | ')
+        : '—';
+      delete agg.controlCommentsSet;
+      return agg;
+    }
+
+    function collectSalaryScenarioFactData(scope, periodOrYear) {
+      const mode = scope === 'year' ? 'year' : 'month';
+      if (mode === 'month') {
+        const period = normalizePeriodStr(periodOrYear || getCurrentPeriod());
+        if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+          return { error: 'Укажите период в формате YYYY-MM (поле «Период» вверху страницы).' };
+        }
+        const sources = listPeriodDataSourcesForOrderReport();
+        const data = sources.get(period);
+        if (!data || !Array.isArray(data.rows) || !data.rows.length) {
+          return { error: 'Нет данных за ' + period + ' в localStorage.' };
+        }
+        const periodTotals = computePeriodTotals(data);
+        const groups = buildCalculationGroupsFromPeriodData(data);
+        if (!groups.length) {
+          return { error: 'Нет расчётных групп/заказов за ' + period + '.' };
+        }
+        const gg = data.globals || {};
+        const globals = {
+          totalInsurance: num(gg.totalInsurance),
+          totalSick: num(gg.totalSick),
+          total25: num(gg.total25),
+          total26: num(gg.total26),
+          total44: num(gg.total44)
+        };
+        const rows = groups
+          .map(group =>
+            collectSalaryScenarioFactRowForPeriod(
+              data,
+              group,
+              periodTotals.totalShipmentNoVat,
+              periodTotals.totalSalary
+            )
+          )
+          .map(r => ({
+            ...r,
+            salarySharePct:
+              periodTotals.totalSalary > 0 ? (r.salary / periodTotals.totalSalary) * 100 : 0
+          }))
+          .sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+        return {
+          scope: 'month',
+          periodLabel: period,
+          globals,
+          totalSalary: periodTotals.totalSalary,
+          totalShipmentNoVat: periodTotals.totalShipmentNoVat,
+          rows
+        };
+      }
+
+      const year = String(periodOrYear || '').trim();
+      if (!/^\d{4}$/.test(year)) {
+        return { error: 'Укажите год в формате YYYY.' };
+      }
+      const sources = listPeriodDataSourcesForYear(year);
+      const periods = Array.from(sources.keys()).sort();
+      if (!periods.length) {
+        return { error: 'Нет данных за ' + year + ' год в localStorage.' };
+      }
+
+      const globals = aggregateGlobalsForSalaryScenarioYear(sources, periods);
+      const groupMonths = new Map();
+      let totalShipmentNoVat = 0;
+      let totalSalary = 0;
+
+      periods.forEach(period => {
+        const data = sources.get(period);
+        const periodTotals = computePeriodTotals(data);
+        totalShipmentNoVat += periodTotals.totalShipmentNoVat;
+        totalSalary += periodTotals.totalSalary;
+        buildCalculationGroupsFromPeriodData(data).forEach(group => {
+          const row = collectSalaryScenarioFactRowForPeriod(
+            data,
+            group,
+            periodTotals.totalShipmentNoVat,
+            periodTotals.totalSalary
+          );
+          row.period = period;
+          if (!groupMonths.has(row.groupName)) groupMonths.set(row.groupName, []);
+          groupMonths.get(row.groupName).push(row);
+        });
+      });
+
+      const rows = Array.from(groupMonths.values())
+        .map(aggregateSalaryScenarioYearRows)
+        .map(r => ({
+          ...r,
+          salarySharePct: totalSalary > 0 ? (r.salary / totalSalary) * 100 : 0
+        }))
+        .sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+
+      if (!rows.length) {
+        return { error: 'Нет расчётных групп/заказов за ' + year + ' год.' };
+      }
+
+      return {
+        scope: 'year',
+        periodLabel: year,
+        periods,
+        globals,
+        totalSalary,
+        totalShipmentNoVat,
+        rows
+      };
+    }
+
+    function computeSalaryScenarioRowMetrics(factRow, scenarioSalary, totalScenarioSalary, totalShipmentNoVat, globals) {
+      const salaryShareScenario =
+        totalScenarioSalary > 0 ? scenarioSalary / totalScenarioSalary : 0;
+      const shipmentShare =
+        totalShipmentNoVat > 0 ? factRow.shipmentNoVat / totalShipmentNoVat : 0;
+
+      const insuranceScenario = num(globals.totalInsurance) * salaryShareScenario;
+      const sickScenario = num(globals.totalSick) * salaryShareScenario;
+      const acc25Scenario = num(globals.total25) * salaryShareScenario;
+      const acc44Scenario = num(globals.total44) * shipmentShare;
+      const acc26Scenario = num(globals.total26) * shipmentShare;
+
+      const materials = num(factRow.materials);
+      const processing = num(factRow.processing);
+      const otherDirect = num(factRow.otherDirect);
+      const wipStart = num(factRow.wipStart20);
+
+      const periodExp20Scenario =
+        materials +
+        processing +
+        otherDirect +
+        scenarioSalary +
+        insuranceScenario +
+        sickScenario +
+        acc25Scenario +
+        acc44Scenario;
+      const periodExp26Scenario = periodExp20Scenario + acc26Scenario;
+
+      const sumsScenario = {
+        shipmentNoVat: factRow.shipmentNoVat,
+        wipStart,
+        acc26: acc26Scenario,
+        periodExp20: periodExp20Scenario,
+        periodExp26: periodExp26Scenario,
+        totalWithWip20: wipStart + periodExp20Scenario,
+        totalWithWip26: wipStart + periodExp26Scenario
+      };
+
+      const metrics26 = computeGroupWriteoff26Metrics(sumsScenario, factRow.calc26);
+      const metrics20 = computeGroupWriteoff20Metrics(sumsScenario, metrics26.writeOff20);
+
+      const control = [];
+      if (metrics20.validation && metrics20.validation.writeoff20OverAvailable) {
+        control.push('Списание 20 больше доступного НЗП/расходов');
+      }
+      if (metrics20.rawWipEnd20 < -RECONCILE_EPS && metrics20.wipEnd20 <= RECONCILE_EPS) {
+        control.push('НЗП конец 20 обнулён (было отрицательное)');
+      }
+      if (metrics26.validation && metrics26.validation.writeoff26CappedByTotal) {
+        control.push('26 ограничен суммой списания');
+      }
+      if (metrics26.validation && metrics26.validation.writeoff26OverExpenses) {
+        control.push('Списание 26 больше расходов 26');
+      }
+      if (metrics26.writeOffTotal > sumsScenario.totalWithWip26 + RECONCILE_EPS) {
+        control.push('Списано всего больше итого с НЗП');
+      }
+      if (metrics26.wipEnd26 < -RECONCILE_EPS) {
+        control.push('Отрицательное НЗП конец');
+      }
+
+      const profitScenario = factRow.shipmentNoVat - metrics26.writeOffTotal;
+      const marginScenario =
+        factRow.shipmentNoVat > 0 ? (profitScenario / factRow.shipmentNoVat) * 100 : 0;
+
+      return {
+        scenarioSalary,
+        salaryDelta: scenarioSalary - factRow.salary,
+        salaryShareScenarioPct: salaryShareScenario * 100,
+        insuranceScenario,
+        sickScenario,
+        acc25Scenario,
+        periodExp20Scenario,
+        writeoffTotalScenario: metrics26.writeOffTotal,
+        wipEndScenario: metrics26.wipEnd26,
+        profitScenario,
+        marginScenario,
+        scenarioControl: control.length ? control.join('; ') : '—',
+        scenarioWarn: control.length > 0
+      };
+    }
+
+    function getSalaryScenarioBalanceInfo(sandbox) {
+      if (!sandbox || !sandbox.rows) {
+        return { scenarioTotal: 0, diff: 0, balanced: true, increased: [], decreased: [] };
+      }
+      const scenarioTotal = sandbox.rows.reduce((s, r) => s + num(r.scenarioSalary), 0);
+      const diff = scenarioTotal - sandbox.totalSalary;
+      const increased = [];
+      const decreased = [];
+      sandbox.rows.forEach(r => {
+        const delta = num(r.scenarioSalary) - num(r.salary);
+        if (delta > 0.01) increased.push({ name: r.groupName, delta });
+        if (delta < -0.01) decreased.push({ name: r.groupName, delta });
+      });
+      return {
+        scenarioTotal,
+        diff,
+        balanced: Math.abs(diff) < 0.01,
+        increased,
+        decreased,
+        redistributed: increased.reduce((s, x) => s + x.delta, 0)
+      };
+    }
+
+    function readSalaryScenarioInputsFromDom() {
+      if (!salaryScenarioSandbox) return;
+      document
+        .querySelectorAll('#salaryScenarioTableWrap input.salary-scenario-input[data-row-index]')
+        .forEach(inp => {
+          const idx = Number(inp.getAttribute('data-row-index'));
+          if (!Number.isFinite(idx) || !salaryScenarioSandbox.rows[idx]) return;
+          salaryScenarioSandbox.rows[idx].scenarioSalary = num(inp.value);
+        });
+    }
+
+    function populateSalaryScenarioYearSelect() {
+      const el = document.getElementById('salaryScenarioYear');
+      if (!el || el.tagName !== 'SELECT') return;
+      const minYear = parseInt(WORKING_PERIOD_MIN.slice(0, 4), 10);
+      const maxYear = parseInt(WORKING_PERIOD_MAX.slice(0, 4), 10);
+      const prev = String(el.value || '').trim();
+      el.innerHTML = '';
+      for (let y = maxYear; y >= minYear; y--) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        el.appendChild(opt);
+      }
+      const defaultYear = getDefaultAnnualSummaryYear();
+      const pick =
+        prev && /^\d{4}$/.test(prev) && Number(prev) >= minYear && Number(prev) <= maxYear
+          ? prev
+          : defaultYear;
+      el.value = pick;
+    }
+
+    function updateSalaryScenarioScopeUi() {
+      const scopeEl = document.getElementById('salaryScenarioScope');
+      const yearField = document.getElementById('salaryScenarioYearField');
+      if (!scopeEl || !yearField) return;
+      yearField.hidden = scopeEl.value !== 'year';
+      if (scopeEl.value === 'year') populateSalaryScenarioYearSelect();
+    }
+
+    function getSalaryScenarioScopeParams() {
+      const scopeEl = document.getElementById('salaryScenarioScope');
+      const scope = scopeEl ? scopeEl.value : 'month';
+      let periodOrYear = '';
+      if (scope === 'year') {
+        const yearEl = document.getElementById('salaryScenarioYear');
+        periodOrYear = yearEl ? String(yearEl.value || '').trim() : '';
+      } else {
+        periodOrYear = normalizePeriodStr(getCurrentPeriod());
+      }
+      return { scope, periodOrYear };
+    }
+
+    function initSalaryScenarioSandboxFromFact(factData, preserveScenario) {
+      const key = getSalaryScenarioPeriodKey(factData.scope, factData.periodLabel);
+      const prevMap = new Map();
+      if (
+        preserveScenario &&
+        salaryScenarioSandbox &&
+        salaryScenarioSandbox.key === key &&
+        Array.isArray(salaryScenarioSandbox.rows)
+      ) {
+        salaryScenarioSandbox.rows.forEach(r => {
+          prevMap.set(r.groupName, r.scenarioSalary);
+        });
+      }
+
+      salaryScenarioSandbox = {
+        key,
+        scope: factData.scope,
+        periodLabel: factData.periodLabel,
+        globals: factData.globals,
+        totalSalary: factData.totalSalary,
+        totalShipmentNoVat: factData.totalShipmentNoVat,
+        calculated: false,
+        rows: factData.rows.map(r => ({
+          ...r,
+          scenarioSalary:
+            prevMap.has(r.groupName) ? num(prevMap.get(r.groupName)) : num(r.salary),
+          scenario: null
+        }))
+      };
+      return salaryScenarioSandbox;
+    }
+
+    function loadSalaryScenarioFact(preserveScenario) {
+      const statusEl = document.getElementById('salaryScenarioStatus');
+      const { scope, periodOrYear } = getSalaryScenarioScopeParams();
+      const factData = collectSalaryScenarioFactData(scope, periodOrYear);
+      if (factData.error) {
+        if (statusEl) statusEl.textContent = factData.error;
+        document.getElementById('salaryScenarioTableWrap').hidden = true;
+        document.getElementById('salaryScenarioBalancePanel').hidden = true;
+        salaryScenarioSandbox = null;
+        return null;
+      }
+      initSalaryScenarioSandboxFromFact(factData, preserveScenario);
+      salaryScenarioSandbox.calculated = false;
+      renderSalaryScenarioPanel();
+      if (statusEl) {
+        statusEl.textContent =
+          'Загружен факт: ' +
+          salaryScenarioSandbox.rows.length +
+          ' групп/заказов за ' +
+          factData.periodLabel +
+          (factData.scope === 'year' ? ' (год)' : '') +
+          '.';
+      }
+      return salaryScenarioSandbox;
+    }
+
+    function calculateSalaryScenario() {
+      readSalaryScenarioInputsFromDom();
+      if (!salaryScenarioSandbox) {
+        const loaded = loadSalaryScenarioFact(false);
+        if (!loaded) return null;
+      }
+
+      const statusEl = document.getElementById('salaryScenarioStatus');
+      const totalScenarioSalary = salaryScenarioSandbox.rows.reduce(
+        (s, r) => s + num(r.scenarioSalary),
+        0
+      );
+      const unbalanced = Math.abs(totalScenarioSalary - salaryScenarioSandbox.totalSalary) >= 0.01;
+
+      salaryScenarioSandbox.rows.forEach(r => {
+        r.scenario = computeSalaryScenarioRowMetrics(
+          r,
+          num(r.scenarioSalary),
+          totalScenarioSalary,
+          salaryScenarioSandbox.totalShipmentNoVat,
+          salaryScenarioSandbox.globals
+        );
+      });
+      salaryScenarioSandbox.calculated = true;
+
+      renderSalaryScenarioPanel();
+
+      if (statusEl) {
+        let msg =
+          'Сценарий рассчитан для ' + salaryScenarioSandbox.rows.length + ' групп/заказов.';
+        if (unbalanced) {
+          msg +=
+            ' Общая ЗП сценария отличается от фактической. Сценарий несбалансирован.';
+        }
+        statusEl.textContent = msg;
+        if (unbalanced) statusEl.classList.add('salary-scenario-unbalanced');
+        else statusEl.classList.remove('salary-scenario-unbalanced');
+      }
+      return salaryScenarioSandbox;
+    }
+
+    function formatSalaryScenarioGroupLabel(row) {
+      let label = escapeHtmlForReport(row.groupName || '—');
+      if (row.isMultiMember) label += ' <span class="hint">(' + row.memberCount + ')</span>';
+      return label;
+    }
+
+    function renderSalaryScenarioBalancePanel() {
+      const panel = document.getElementById('salaryScenarioBalancePanel');
+      if (!panel || !salaryScenarioSandbox) return;
+      const info = getSalaryScenarioBalanceInfo(salaryScenarioSandbox);
+      let html = '<div><strong>Баланс ЗП сценария</strong></div>';
+      html +=
+        '<div>ЗП факт (всего): ' +
+        scenarioFmtMoney(salaryScenarioSandbox.totalSalary) +
+        ' · ЗП сценарий (всего): ' +
+        scenarioFmtMoney(info.scenarioTotal) +
+        '</div>';
+      if (info.balanced) {
+        html += '<div>Остаток до баланса: 0.00</div>';
+      } else {
+        html +=
+          '<div class="salary-scenario-unbalanced">Осталось до баланса: ' +
+          scenarioFmtMoney(-info.diff) +
+          ' (разница ' +
+          scenarioFmtMoney(info.diff) +
+          ')</div>';
+      }
+      html +=
+        '<div>Перераспределено (увеличения): ' + scenarioFmtMoney(info.redistributed) + '</div>';
+      if (info.increased.length) {
+        html +=
+          '<div>Увеличены: ' +
+          info.increased
+            .map(x => escapeHtmlForReport(x.name) + ' +' + scenarioFmtMoney(x.delta))
+            .join('; ') +
+          '</div>';
+      }
+      if (info.decreased.length) {
+        html +=
+          '<div>Уменьшены: ' +
+          info.decreased
+            .map(x => escapeHtmlForReport(x.name) + ' ' + scenarioFmtMoney(x.delta))
+            .join('; ') +
+          '</div>';
+      }
+      panel.innerHTML = html;
+      panel.hidden = false;
+    }
+
+    function renderSalaryScenarioPanel() {
+      const wrap = document.getElementById('salaryScenarioTableWrap');
+      if (!wrap || !salaryScenarioSandbox) return;
+
+      renderSalaryScenarioBalancePanel();
+
+      const calculated = !!salaryScenarioSandbox.calculated;
+      const showScenario = sc => (calculated && sc ? scenarioFmtMoney(sc) : '—');
+      const showScenarioPct = sc => (calculated && sc != null ? scenarioFmtPct(sc) + '%' : '—');
+
+      let html = '<table class="salary-scenario-table"><thead><tr>';
+      const headers = [
+        'Заказ / группа',
+        'Отгрузка без НДС',
+        'ЗП факт',
+        'Доля ЗП факт, %',
+        'ЗП сценарий',
+        'Изменение ЗП',
+        'Доля ЗП сценарий, %',
+        'Взносы факт',
+        'Взносы сценарий',
+        'Больничные факт',
+        'Больничные сценарий',
+        '25 счёт факт',
+        '25 счёт сценарий',
+        'Расходы 20 факт',
+        'Расходы 20 сценарий',
+        'Списано всего факт',
+        'Списано всего сценарий',
+        'НЗП конец факт',
+        'НЗП конец сценарий',
+        'Прибыль факт',
+        'Прибыль сценарий',
+        'Маржа факт',
+        'Маржа сценарий',
+        'Комментарий / контроль'
+      ];
+      headers.forEach(h => {
+        html += '<th>' + escapeHtmlForReport(h) + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      const totals = {
+        shipmentNoVat: 0,
+        salary: 0,
+        scenarioSalary: 0,
+        salaryDelta: 0,
+        writeoffTotal: 0,
+        writeoffTotalScenario: 0,
+        profit: 0,
+        profitScenario: 0,
+        wipEnd: 0,
+        wipEndScenario: 0
+      };
+
+      salaryScenarioSandbox.rows.forEach((r, rowIndex) => {
+        const sc = r.scenario;
+        const warn = calculated && sc && sc.scenarioWarn;
+        const comment = calculated && sc
+          ? (sc.scenarioControl !== '—' ? sc.scenarioControl : r.controlComments || '—')
+          : r.controlComments || '—';
+
+        html += '<tr' + (warn ? ' class="salary-scenario-warn"' : '') + '>';
+        html += '<td>' + formatSalaryScenarioGroupLabel(r) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.shipmentNoVat) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.salary) + '</td>';
+        html += '<td>' + scenarioFmtPct(r.salarySharePct) + '%</td>';
+        html +=
+          '<td><input type="text" inputmode="decimal" class="salary-scenario-input" data-row-index="' +
+          rowIndex +
+          '" value="' +
+          scenarioFmtMoney(r.scenarioSalary) +
+          '"></td>';
+        html +=
+          '<td>' +
+          (calculated && sc ? scenarioFmtMoney(sc.salaryDelta) : '—') +
+          '</td>';
+        html += '<td>' + showScenarioPct(sc && sc.salaryShareScenarioPct) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.insurance) + '</td>';
+        html += '<td>' + showScenario(sc && sc.insuranceScenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.sick) + '</td>';
+        html += '<td>' + showScenario(sc && sc.sickScenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.acc25) + '</td>';
+        html += '<td>' + showScenario(sc && sc.acc25Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.periodExp20) + '</td>';
+        html += '<td>' + showScenario(sc && sc.periodExp20Scenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.writeoffTotal) + '</td>';
+        html += '<td>' + showScenario(sc && sc.writeoffTotalScenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.wipEnd) + '</td>';
+        html += '<td>' + showScenario(sc && sc.wipEndScenario) + '</td>';
+        html += '<td>' + scenarioFmtMoney(r.profit) + '</td>';
+        html += '<td>' + showScenario(sc && sc.profitScenario) + '</td>';
+        html += '<td>' + scenarioFmtPct(r.marginPct) + '%</td>';
+        html += '<td>' + showScenarioPct(sc && sc.marginScenario) + '</td>';
+        html += '<td class="salary-scenario-comment">' + escapeHtmlForReport(comment) + '</td>';
+        html += '</tr>';
+
+        totals.shipmentNoVat += r.shipmentNoVat;
+        totals.salary += r.salary;
+        totals.scenarioSalary += num(r.scenarioSalary);
+        if (calculated && sc) {
+          totals.salaryDelta += sc.salaryDelta;
+          totals.writeoffTotal += r.writeoffTotal;
+          totals.writeoffTotalScenario += sc.writeoffTotalScenario;
+          totals.profit += r.profit;
+          totals.profitScenario += sc.profitScenario;
+          totals.wipEnd += r.wipEnd;
+          totals.wipEndScenario += sc.wipEndScenario;
+        } else {
+          totals.writeoffTotal += r.writeoffTotal;
+          totals.profit += r.profit;
+          totals.wipEnd += r.wipEnd;
+        }
+      });
+
+      const marginFact = computeAnnualMarginPct(totals.profit, totals.shipmentNoVat);
+      const marginScenario = calculated
+        ? computeAnnualMarginPct(totals.profitScenario, totals.shipmentNoVat)
+        : 0;
+
+      html += '</tbody><tfoot><tr>';
+      html += '<td>Итого</td>';
+      html += '<td>' + scenarioFmtMoney(totals.shipmentNoVat) + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.salary) + '</td>';
+      html += '<td>100.0%</td>';
+      html += '<td>' + scenarioFmtMoney(totals.scenarioSalary) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.salaryDelta) : '—') + '</td>';
+      html += '<td>—</td>';
+      html += '<td colspan="8">—</td>';
+      html += '<td>' + scenarioFmtMoney(totals.writeoffTotal) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.writeoffTotalScenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.wipEnd) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.wipEndScenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtMoney(totals.profit) + '</td>';
+      html += '<td>' + (calculated ? scenarioFmtMoney(totals.profitScenario) : '—') + '</td>';
+      html += '<td>' + scenarioFmtPct(marginFact) + '%</td>';
+      html += '<td>' + (calculated ? scenarioFmtPct(marginScenario) + '%' : '—') + '</td>';
+      html += '<td></td>';
+      html += '</tr></tfoot></table>';
+
+      wrap.innerHTML = html;
+      wrap.hidden = false;
+
+      wrap.querySelectorAll('input.salary-scenario-input').forEach(inp => {
+        inp.addEventListener('input', () => {
+          readSalaryScenarioInputsFromDom();
+          salaryScenarioSandbox.calculated = false;
+          renderSalaryScenarioBalancePanel();
+        });
+        inp.addEventListener('change', () => {
+          readSalaryScenarioInputsFromDom();
+          salaryScenarioSandbox.calculated = false;
+          renderSalaryScenarioBalancePanel();
+        });
+      });
+    }
+
+    function salaryScenarioCopyFactToScenario() {
+      if (!salaryScenarioSandbox) {
+        if (!loadSalaryScenarioFact(false)) return;
+      }
+      salaryScenarioSandbox.rows.forEach(r => {
+        r.scenarioSalary = num(r.salary);
+        r.scenario = null;
+      });
+      salaryScenarioSandbox.calculated = false;
+      renderSalaryScenarioPanel();
+    }
+
+    function salaryScenarioClear() {
+      if (!salaryScenarioSandbox) {
+        if (!loadSalaryScenarioFact(false)) return;
+      }
+      salaryScenarioSandbox.rows.forEach(r => {
+        r.scenarioSalary = 0;
+        r.scenario = null;
+      });
+      salaryScenarioSandbox.calculated = false;
+      renderSalaryScenarioPanel();
+    }
+
+    function salaryScenarioDistributeByShipment() {
+      if (!salaryScenarioSandbox) {
+        if (!loadSalaryScenarioFact(false)) return;
+      }
+      const total = salaryScenarioSandbox.totalSalary;
+      const shipTotal = salaryScenarioSandbox.totalShipmentNoVat;
+      salaryScenarioSandbox.rows.forEach(r => {
+        r.scenarioSalary =
+          shipTotal > 0 ? total * (r.shipmentNoVat / shipTotal) : 0;
+        r.scenario = null;
+      });
+      salaryScenarioSandbox.calculated = false;
+      renderSalaryScenarioPanel();
+    }
+
+    function salaryScenarioManualMode() {
+      const statusEl = document.getElementById('salaryScenarioStatus');
+      if (!salaryScenarioSandbox) {
+        if (!loadSalaryScenarioFact(false)) return;
+      }
+      if (statusEl) {
+        statusEl.textContent =
+          'Режим ручного ввода: измените «ЗП сценарий» по нужным заказам, затем нажмите «Рассчитать сценарий».';
+      }
+      renderSalaryScenarioBalancePanel();
+    }
+
+    function salaryScenarioBalance() {
+      if (!salaryScenarioSandbox) {
+        if (!loadSalaryScenarioFact(false)) return;
+      }
+      readSalaryScenarioInputsFromDom();
+      const target = salaryScenarioSandbox.totalSalary;
+      let current = salaryScenarioSandbox.rows.reduce((s, r) => s + num(r.scenarioSalary), 0);
+      let diff = target - current;
+      if (Math.abs(diff) < 0.01) {
+        renderSalaryScenarioBalancePanel();
+        return;
+      }
+      const weights = salaryScenarioSandbox.rows.map(r =>
+        r.shipmentNoVat > 0 ? r.shipmentNoVat : 1
+      );
+      const wsum = weights.reduce((a, b) => a + b, 0) || salaryScenarioSandbox.rows.length;
+      salaryScenarioSandbox.rows.forEach((r, i) => {
+        r.scenarioSalary = num(r.scenarioSalary) + diff * (weights[i] / wsum);
+        if (r.scenarioSalary < 0) r.scenarioSalary = 0;
+        r.scenario = null;
+      });
+      current = salaryScenarioSandbox.rows.reduce((s, r) => s + num(r.scenarioSalary), 0);
+      diff = target - current;
+      if (Math.abs(diff) >= 0.01 && salaryScenarioSandbox.rows.length) {
+        salaryScenarioSandbox.rows[0].scenarioSalary = num(salaryScenarioSandbox.rows[0].scenarioSalary) + diff;
+      }
+      salaryScenarioSandbox.calculated = false;
+      renderSalaryScenarioPanel();
+    }
+
     function collectOrderCardReportData(orderName) {
       const target = String(orderName || '').trim();
       if (!target) return null;
@@ -10882,6 +11799,49 @@
     const copyAiAnalysisBtn = document.getElementById('copyAiAnalysisBtn');
     if (copyAiAnalysisBtn) {
       copyAiAnalysisBtn.addEventListener('click', () => copyAiAnalysisDataToClipboard());
+    }
+
+    const salaryScenarioScopeEl = document.getElementById('salaryScenarioScope');
+    if (salaryScenarioScopeEl) {
+      salaryScenarioScopeEl.addEventListener('change', () => {
+        updateSalaryScenarioScopeUi();
+        salaryScenarioSandbox = null;
+        const wrap = document.getElementById('salaryScenarioTableWrap');
+        const panel = document.getElementById('salaryScenarioBalancePanel');
+        if (wrap) wrap.hidden = true;
+        if (panel) panel.hidden = true;
+      });
+      updateSalaryScenarioScopeUi();
+    } else {
+      populateSalaryScenarioYearSelect();
+    }
+    const loadSalaryScenarioBtn = document.getElementById('loadSalaryScenarioBtn');
+    if (loadSalaryScenarioBtn) {
+      loadSalaryScenarioBtn.addEventListener('click', () => loadSalaryScenarioFact(true));
+    }
+    const calcSalaryScenarioBtn = document.getElementById('calcSalaryScenarioBtn');
+    if (calcSalaryScenarioBtn) {
+      calcSalaryScenarioBtn.addEventListener('click', () => calculateSalaryScenario());
+    }
+    const salaryScenarioCopyFactBtn = document.getElementById('salaryScenarioCopyFactBtn');
+    if (salaryScenarioCopyFactBtn) {
+      salaryScenarioCopyFactBtn.addEventListener('click', () => salaryScenarioCopyFactToScenario());
+    }
+    const salaryScenarioClearBtn = document.getElementById('salaryScenarioClearBtn');
+    if (salaryScenarioClearBtn) {
+      salaryScenarioClearBtn.addEventListener('click', () => salaryScenarioClear());
+    }
+    const salaryScenarioByShipmentBtn = document.getElementById('salaryScenarioByShipmentBtn');
+    if (salaryScenarioByShipmentBtn) {
+      salaryScenarioByShipmentBtn.addEventListener('click', () => salaryScenarioDistributeByShipment());
+    }
+    const salaryScenarioManualBtn = document.getElementById('salaryScenarioManualBtn');
+    if (salaryScenarioManualBtn) {
+      salaryScenarioManualBtn.addEventListener('click', () => salaryScenarioManualMode());
+    }
+    const salaryScenarioBalanceBtn = document.getElementById('salaryScenarioBalanceBtn');
+    if (salaryScenarioBalanceBtn) {
+      salaryScenarioBalanceBtn.addEventListener('click', () => salaryScenarioBalance());
     }
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());

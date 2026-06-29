@@ -1250,6 +1250,13 @@
       margin-top: 12px;
     }
 
+    .annual-summary-year-field {
+      width: 120px;
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+
     #periodReportBox {
       margin-top: 12px;
     }
@@ -1893,9 +1900,9 @@
         Источник: localStorage (расчётные группы, списание 20/26, переносы НЗП). Обороты суммируются за год; НЗП конец — остаток на последний месяц года по каждой группе.
       </p>
       <div class="period-report-controls">
-        <div class="field" style="width: 120px;">
+        <div class="field annual-summary-year-field">
           <label for="annualSummaryYear">Год</label>
-          <input id="annualSummaryYear" type="text" inputmode="numeric" placeholder="2025" autocomplete="off">
+          <select id="annualSummaryYear" autocomplete="off"></select>
         </div>
         <button type="button" id="buildAnnualSummaryBtn" class="secondary">Сформировать годовую сводку</button>
         <button type="button" id="exportAnnualSummaryBtn" class="secondary">Выгрузить годовую сводку в Excel</button>
@@ -5410,6 +5417,7 @@
       const returnBtn = document.getElementById('returnToDraftBtn');
       if (returnBtn) returnBtn.hidden = !locked;
 
+      ensureAnnualSummaryControlsEditable();
       updatePeriodStatusUI();
     }
 
@@ -9558,19 +9566,55 @@
       return html;
     }
 
-    function getAnnualSummaryYearInput() {
-      const el = document.getElementById('annualSummaryYear');
-      const raw = el ? String(el.value || '').trim() : '';
-      if (raw && /^\d{4}$/.test(raw)) return raw;
+    function getDefaultAnnualSummaryYear() {
       const cur = normalizePeriodStr(getCurrentPeriod());
       if (cur && /^\d{4}-\d{2}$/.test(cur)) return cur.slice(0, 4);
       return String(new Date().getFullYear());
     }
 
-    function buildAnnualSummaryReport() {
-      const year = getAnnualSummaryYearInput();
+    function populateAnnualSummaryYearSelect() {
+      const el = document.getElementById('annualSummaryYear');
+      if (!el || el.tagName !== 'SELECT') return;
+
+      const minYear = parseInt(WORKING_PERIOD_MIN.slice(0, 4), 10);
+      const maxYear = parseInt(WORKING_PERIOD_MAX.slice(0, 4), 10);
+      const prev = String(el.value || '').trim();
+      el.innerHTML = '';
+
+      for (let y = maxYear; y >= minYear; y--) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        el.appendChild(opt);
+      }
+
+      const defaultYear = getDefaultAnnualSummaryYear();
+      const pick =
+        prev && /^\d{4}$/.test(prev) && Number(prev) >= minYear && Number(prev) <= maxYear
+          ? prev
+          : defaultYear;
+      el.value = pick;
+      el.disabled = false;
+    }
+
+    function ensureAnnualSummaryControlsEditable() {
+      populateAnnualSummaryYearSelect();
       const yearEl = document.getElementById('annualSummaryYear');
-      if (yearEl && !String(yearEl.value || '').trim()) yearEl.value = year;
+      if (yearEl) yearEl.disabled = false;
+      setButtonDisabled('buildAnnualSummaryBtn', false);
+      setButtonDisabled('exportAnnualSummaryBtn', false);
+    }
+
+    function getAnnualSummaryYearInput() {
+      const el = document.getElementById('annualSummaryYear');
+      const raw = el ? String(el.value || '').trim() : '';
+      if (raw && /^\d{4}$/.test(raw)) return raw;
+      return getDefaultAnnualSummaryYear();
+    }
+
+    function buildAnnualSummaryReport() {
+      ensureAnnualSummaryControlsEditable();
+      const year = getAnnualSummaryYearInput();
 
       const statusEl = document.getElementById('annualSummaryStatus');
       const contentEl = document.getElementById('annualSummaryContent');
@@ -10103,10 +10147,7 @@
     if (exportAnnualSummaryBtn) {
       exportAnnualSummaryBtn.addEventListener('click', () => exportAnnualSummaryToExcel());
     }
-    const annualSummaryYearEl = document.getElementById('annualSummaryYear');
-    if (annualSummaryYearEl && !String(annualSummaryYearEl.value || '').trim()) {
-      annualSummaryYearEl.value = getAnnualSummaryYearInput();
-    }
+    ensureAnnualSummaryControlsEditable();
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());
 

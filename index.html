@@ -1314,6 +1314,28 @@
       min-width: 200px;
     }
 
+    #aiAnalysisCard .ai-analysis-output-panel {
+      margin-top: 12px;
+    }
+
+    #aiAnalysisOutput {
+      width: 100%;
+      min-height: 320px;
+      padding: 12px;
+      border: 1px solid #c5e4cf;
+      border-radius: 8px;
+      background: #f8fdf9;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+
+    #aiAnalysisYearField[hidden] {
+      display: none;
+    }
+
     #periodReportTableWrap table {
       width: max-content;
       min-width: 100%;
@@ -1929,6 +1951,35 @@
       </div>
       <div class="hint" id="annualSummaryStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div id="annualSummaryContent" hidden></div>
+    </div>
+
+    <div class="card" id="aiAnalysisCard" style="margin-top:20px;">
+      <div class="period-summary-head">
+        <h2>ИИ-анализ распределения</h2>
+      </div>
+      <p class="hint" style="margin-top:8px;">
+        Подготовка текстовых данных для копирования в ChatGPT. Внешние API не используются, расчёты и localStorage не изменяются.
+        Учитываются группировка, переносы НЗП, списание 20 и списание с 26.
+      </p>
+      <div class="period-report-controls">
+        <div class="field" style="width: 200px;">
+          <label for="aiAnalysisScope">Период анализа</label>
+          <select id="aiAnalysisScope" autocomplete="off">
+            <option value="month">Текущий месяц</option>
+            <option value="year">Год</option>
+          </select>
+        </div>
+        <div class="field annual-summary-year-field" id="aiAnalysisYearField" hidden>
+          <label for="aiAnalysisYear">Год</label>
+          <select id="aiAnalysisYear" autocomplete="off"></select>
+        </div>
+        <button type="button" id="prepareAiAnalysisBtn" class="secondary">Подготовить данные для ИИ</button>
+        <button type="button" id="copyAiAnalysisBtn" class="secondary" disabled>Скопировать данные для ИИ</button>
+      </div>
+      <div class="hint" id="aiAnalysisStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+      <div id="aiAnalysisOutputPanel" class="ai-analysis-output-panel" hidden>
+        <textarea id="aiAnalysisOutput" readonly spellcheck="false"></textarea>
+      </div>
     </div>
 
     <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
@@ -9872,6 +9923,547 @@
       XLSX.writeFile(wb, 'godovaya_svodka_zakazov_' + year + '.xlsx', { cellStyles: true });
     }
 
+    let lastAiAnalysisText = '';
+
+    const AI_ANALYSIS_TASK_DESCRIPTION =
+      'Проанализируй распределение расходов по заказам. Найди заказы с подозрительно высокой, низкой или отрицательной маржей. Учитывай, что расходы нельзя механически переносить только ради выравнивания маржи. Большая отгрузка может означать большую производственную нагрузку. Предлагай только гипотезы и варианты для проверки, без автоматического изменения данных.';
+
+    const AI_ANALYSIS_INSTRUCTIONS =
+      'Нужно:\n\n' +
+      '1. Найти заказы с аномальной маржей.\n\n' +
+      '2. Не выравнивать маржу механически.\n\n' +
+      '3. Учитывать отгрузку, ЗП, материалы, НЗП, списание и переносы.\n\n' +
+      '4. Если у заказа большая отгрузка, не предлагать уменьшать расходы без основания.\n\n' +
+      '5. Если маржа высокая, проверить, не не хватает ли расходов / НЗП / группировки.\n\n' +
+      '6. Если маржа низкая или отрицательная, проверить, не списано ли слишком много и не должен ли остаток уйти в НЗП.\n\n' +
+      '7. Предложения давать как гипотезы:\n' +
+      '   * что проверить;\n' +
+      '   * возможный источник;\n' +
+      '   * возможный получатель;\n' +
+      '   * примерная сумма;\n' +
+      '   * тип корректировки;\n' +
+      '   * риск;\n' +
+      '   * уверенность.\n\n' +
+      '8. Не предлагать автоматические изменения без подтверждения пользователя.';
+
+    const AI_ANALYSIS_TABLE_COLUMNS = [
+      'Заказ / расчётная группа',
+      'Отгрузка с НДС',
+      'Отгрузка без НДС',
+      'Доля отгрузки без НДС в общей отгрузке, %',
+      'ЗП',
+      'Доля ЗП в общей ЗП, %',
+      'Материалы',
+      'Расходы 20',
+      '25 сч.',
+      '44 сч.',
+      '26 сч.',
+      'Списано всего',
+      'Списано с 20',
+      'Списано с 26',
+      'НЗП нач. 20',
+      'НЗП конец 20',
+      'НЗП конец общий',
+      'Прибыль',
+      'Маржа %',
+      'Есть переносы НЗП',
+      'Комментарии/контроль'
+    ];
+
+    function aiAnalysisFmtMoney(n) {
+      const v = num(n);
+      return Number.isFinite(v) ? v.toFixed(2) : '0.00';
+    }
+
+    function aiAnalysisFmtPct(n) {
+      const v = num(n);
+      return Number.isFinite(v) ? v.toFixed(1) : '0.0';
+    }
+
+    function sumGroupExpenseBreakdownForAi(memberRows, globals, totals) {
+      const r = {
+        materials: 0,
+        processing: 0,
+        otherDirect: 0,
+        salary: 0,
+        insurance: 0,
+        sick: 0,
+        acc25: 0,
+        acc26: 0,
+        acc44: 0
+      };
+      memberRows.forEach(row => {
+        const m = computeRowExpenseMetricsForChain(row, globals, totals);
+        r.materials += m.materials;
+        r.processing += m.processing;
+        r.otherDirect += m.otherDirect;
+        r.salary += m.salary;
+        r.insurance += m.insurance;
+        r.sick += m.sick;
+        r.acc25 += m.acc25;
+        r.acc26 += m.acc26;
+        r.acc44 += m.acc44;
+      });
+      return r;
+    }
+
+    function groupHasTransfersInPeriodData(data, groupName) {
+      const gn = String(groupName || '').trim();
+      if (!gn || !data || !Array.isArray(data.transfers)) return false;
+      return data.transfers.some(t => {
+        const amount = num(t.amount);
+        if (amount <= 0) return false;
+        return String(t.from || '').trim() === gn || String(t.to || '').trim() === gn;
+      });
+    }
+
+    function buildGroupAiControlComments(data, group, sums, calc26, metrics26, metrics20) {
+      const comments = [];
+      if (metrics20.validation && metrics20.validation.writeoff20OverAvailable) {
+        comments.push('Списание 20 больше доступного НЗП/расходов');
+      } else if (metrics20.rawWipEnd20 < -RECONCILE_EPS) {
+        comments.push('Отрицательное НЗП конец 20');
+      }
+      if (metrics26.validation && metrics26.validation.writeoff26CappedByTotal) {
+        comments.push('26 ограничен суммой списания');
+      }
+      if (metrics26.validation && metrics26.validation.writeoff26OverExpenses) {
+        comments.push('Списание 26 больше расходов 26');
+      }
+      if (metrics26.writeOffTotal > sums.totalWithWip26 + RECONCILE_EPS) {
+        comments.push('Списано всего больше итого с НЗП');
+      }
+      if (metrics26.wipEnd26 < -RECONCILE_EPS) {
+        comments.push('Отрицательное НЗП конец');
+      }
+      const orderGrouping =
+        data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
+      (group.orderNames || []).forEach(orderName => {
+        const note = resolveGroupingSettingsFromData(orderName, orderGrouping).note;
+        if (note) comments.push('Заметка (' + orderName + '): ' + note);
+      });
+      if (group.memberRows && group.memberRows.length > 1) {
+        comments.push('Расчётная группа: ' + group.memberRows.length + ' строк');
+      }
+      return comments.length ? comments.join('; ') : '—';
+    }
+
+    function collectAiAnalysisRowForPeriod(data, group, periodShipmentNoVat, periodSalary) {
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
+      const legacy = data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+
+      const sums = sumGroupMetricsFromPeriodData(
+        group.memberRows,
+        globals,
+        totals,
+        group.groupName,
+        transfers
+      );
+      const breakdown = sumGroupExpenseBreakdownForAi(group.memberRows, globals, totals);
+      const calc26 = getGroupCalc26SettingsFromPeriodData(
+        group.groupName,
+        group.memberRows,
+        gc26,
+        legacy
+      );
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
+      const marginPct =
+        sums.shipmentNoVat > 0 ? (metrics26.profit26Sum / sums.shipmentNoVat) * 100 : 0;
+
+      return {
+        groupName: group.groupName,
+        isMultiMember: group.memberRows.length > 1,
+        memberCount: group.memberRows.length,
+        shipmentVat: sums.shipmentVat,
+        shipmentNoVat: sums.shipmentNoVat,
+        shipmentSharePct:
+          periodShipmentNoVat > 0 ? (sums.shipmentNoVat / periodShipmentNoVat) * 100 : 0,
+        salary: breakdown.salary,
+        salarySharePct: periodSalary > 0 ? (breakdown.salary / periodSalary) * 100 : 0,
+        materials: breakdown.materials,
+        periodExp20: sums.periodExp20,
+        acc25: breakdown.acc25,
+        acc44: breakdown.acc44,
+        acc26: breakdown.acc26,
+        writeoffTotal: metrics26.writeOffTotal,
+        writeoff20: metrics20.writeOff20,
+        writeoff26: metrics26.writeOff26Part,
+        wipStart20: sums.wipStart,
+        wipEnd20: metrics20.wipEnd20,
+        wipEnd26: metrics26.wipEnd26,
+        profit: metrics26.profit26Sum,
+        marginPct,
+        hasTransfers: groupHasTransfersInPeriodData(data, group.groupName),
+        controlComments: buildGroupAiControlComments(
+          data,
+          group,
+          sums,
+          calc26,
+          metrics26,
+          metrics20
+        )
+      };
+    }
+
+    function aggregateAiAnalysisYearRows(groupMonths) {
+      groupMonths.sort((a, b) => a.period.localeCompare(b.period));
+      const first = groupMonths[0];
+      const agg = {
+        groupName: first.groupName,
+        isMultiMember: first.isMultiMember,
+        memberCount: first.memberCount,
+        shipmentVat: 0,
+        shipmentNoVat: 0,
+        salary: 0,
+        materials: 0,
+        periodExp20: 0,
+        acc25: 0,
+        acc44: 0,
+        acc26: 0,
+        writeoffTotal: 0,
+        writeoff20: 0,
+        writeoff26: 0,
+        profit: 0,
+        wipStart20: first.wipStart20,
+        wipEnd20: pickOrderCardEndBalance(groupMonths, 'wipEnd20'),
+        wipEnd26: pickOrderCardEndBalance(groupMonths, 'wipEnd26'),
+        hasTransfers: false,
+        controlCommentsSet: new Set()
+      };
+      groupMonths.forEach(m => {
+        agg.shipmentVat += m.shipmentVat;
+        agg.shipmentNoVat += m.shipmentNoVat;
+        agg.salary += m.salary;
+        agg.materials += m.materials;
+        agg.periodExp20 += m.periodExp20;
+        agg.acc25 += m.acc25;
+        agg.acc44 += m.acc44;
+        agg.acc26 += m.acc26;
+        agg.writeoffTotal += m.writeoffTotal;
+        agg.writeoff20 += m.writeoff20;
+        agg.writeoff26 += m.writeoff26;
+        agg.profit += m.profit;
+        if (m.hasTransfers) agg.hasTransfers = true;
+        if (m.controlComments && m.controlComments !== '—') {
+          agg.controlCommentsSet.add(m.controlComments);
+        }
+      });
+      agg.marginPct =
+        agg.shipmentNoVat > 0 ? (agg.profit / agg.shipmentNoVat) * 100 : 0;
+      const lastComments = groupMonths[groupMonths.length - 1].controlComments;
+      if (lastComments && lastComments !== '—') agg.controlCommentsSet.add(lastComments);
+      agg.controlComments = agg.controlCommentsSet.size
+        ? Array.from(agg.controlCommentsSet).join(' | ')
+        : '—';
+      delete agg.controlCommentsSet;
+      return agg;
+    }
+
+    function finalizeAiAnalysisRows(rows, totalShipmentNoVat, totalSalary) {
+      return rows
+        .map(r => ({
+          ...r,
+          shipmentSharePct:
+            totalShipmentNoVat > 0 ? (r.shipmentNoVat / totalShipmentNoVat) * 100 : 0,
+          salarySharePct: totalSalary > 0 ? (r.salary / totalSalary) * 100 : 0,
+          marginPct: r.shipmentNoVat > 0 ? (r.profit / r.shipmentNoVat) * 100 : 0
+        }))
+        .sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+    }
+
+    function computeAiAnalysisTotals(rows) {
+      const totals = {
+        shipmentNoVat: 0,
+        salary: 0,
+        periodExp20: 0,
+        acc25: 0,
+        acc44: 0,
+        acc26: 0,
+        writeoffTotal: 0,
+        profit: 0,
+        wipEnd20: 0
+      };
+      rows.forEach(r => {
+        totals.shipmentNoVat += r.shipmentNoVat;
+        totals.salary += r.salary;
+        totals.periodExp20 += r.periodExp20;
+        totals.acc25 += r.acc25;
+        totals.acc44 += r.acc44;
+        totals.acc26 += r.acc26;
+        totals.writeoffTotal += r.writeoffTotal;
+        totals.profit += r.profit;
+        totals.wipEnd20 += r.wipEnd20;
+      });
+      totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipmentNoVat);
+      return totals;
+    }
+
+    function collectAiAnalysisData(scope, periodOrYear) {
+      const mode = scope === 'year' ? 'year' : 'month';
+      if (mode === 'month') {
+        const period = normalizePeriodStr(periodOrYear || getCurrentPeriod());
+        if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+          return { error: 'Укажите период в формате YYYY-MM (поле «Период» вверху страницы).' };
+        }
+        const sources = listPeriodDataSourcesForOrderReport();
+        const data = sources.get(period);
+        if (!data || !Array.isArray(data.rows) || !data.rows.length) {
+          return { error: 'Нет данных за ' + period + ' в localStorage.' };
+        }
+        const periodTotals = computePeriodTotals(data);
+        const groups = buildCalculationGroupsFromPeriodData(data);
+        if (!groups.length) {
+          return { error: 'Нет расчётных групп/заказов за ' + period + '.' };
+        }
+        const rows = finalizeAiAnalysisRows(
+          groups.map(group =>
+            collectAiAnalysisRowForPeriod(
+              data,
+              group,
+              periodTotals.totalShipmentNoVat,
+              periodTotals.totalSalary
+            )
+          ),
+          periodTotals.totalShipmentNoVat,
+          periodTotals.totalSalary
+        );
+        return {
+          scope: 'month',
+          periodLabel: period,
+          periods: [period],
+          rows,
+          totals: computeAiAnalysisTotals(rows)
+        };
+      }
+
+      const year = String(periodOrYear || '').trim();
+      if (!/^\d{4}$/.test(year)) {
+        return { error: 'Укажите год в формате YYYY.' };
+      }
+      const sources = listPeriodDataSourcesForYear(year);
+      const periods = Array.from(sources.keys()).sort();
+      if (!periods.length) {
+        return { error: 'Нет данных за ' + year + ' год в localStorage.' };
+      }
+
+      const groupMonths = new Map();
+      let totalShipmentNoVat = 0;
+      let totalSalary = 0;
+
+      periods.forEach(period => {
+        const data = sources.get(period);
+        const periodTotals = computePeriodTotals(data);
+        totalShipmentNoVat += periodTotals.totalShipmentNoVat;
+        totalSalary += periodTotals.totalSalary;
+        buildCalculationGroupsFromPeriodData(data).forEach(group => {
+          const row = collectAiAnalysisRowForPeriod(
+            data,
+            group,
+            periodTotals.totalShipmentNoVat,
+            periodTotals.totalSalary
+          );
+          row.period = period;
+          if (!groupMonths.has(row.groupName)) groupMonths.set(row.groupName, []);
+          groupMonths.get(row.groupName).push(row);
+        });
+      });
+
+      const rows = finalizeAiAnalysisRows(
+        Array.from(groupMonths.values()).map(aggregateAiAnalysisYearRows),
+        totalShipmentNoVat,
+        totalSalary
+      );
+
+      if (!rows.length) {
+        return { error: 'Нет расчётных групп/заказов за ' + year + ' год.' };
+      }
+
+      return {
+        scope: 'year',
+        periodLabel: year,
+        periods,
+        rows,
+        totals: computeAiAnalysisTotals(rows)
+      };
+    }
+
+    function formatAiAnalysisGroupLabel(row) {
+      let label = String(row.groupName || '').trim() || '—';
+      if (row.isMultiMember) label += ' (' + row.memberCount + ' строк)';
+      return label;
+    }
+
+    function formatAiAnalysisTableRow(row) {
+      return [
+        formatAiAnalysisGroupLabel(row),
+        aiAnalysisFmtMoney(row.shipmentVat),
+        aiAnalysisFmtMoney(row.shipmentNoVat),
+        aiAnalysisFmtPct(row.shipmentSharePct),
+        aiAnalysisFmtMoney(row.salary),
+        aiAnalysisFmtPct(row.salarySharePct),
+        aiAnalysisFmtMoney(row.materials),
+        aiAnalysisFmtMoney(row.periodExp20),
+        aiAnalysisFmtMoney(row.acc25),
+        aiAnalysisFmtMoney(row.acc44),
+        aiAnalysisFmtMoney(row.acc26),
+        aiAnalysisFmtMoney(row.writeoffTotal),
+        aiAnalysisFmtMoney(row.writeoff20),
+        aiAnalysisFmtMoney(row.writeoff26),
+        aiAnalysisFmtMoney(row.wipStart20),
+        aiAnalysisFmtMoney(row.wipEnd20),
+        aiAnalysisFmtMoney(row.wipEnd26),
+        aiAnalysisFmtMoney(row.profit),
+        aiAnalysisFmtPct(row.marginPct),
+        row.hasTransfers ? 'да' : 'нет',
+        row.controlComments || '—'
+      ];
+    }
+
+    function buildAiAnalysisText(report) {
+      const lines = [];
+      lines.push('Данные для ИИ-анализа распределения расходов');
+      lines.push('');
+      lines.push(
+        'Период: ' +
+          (report.scope === 'month' ? report.periodLabel : report.periodLabel + ' (год)')
+      );
+      if (report.scope === 'year' && report.periods && report.periods.length) {
+        lines.push('Месяцы в данных: ' + report.periods[0] + ' — ' + report.periods[report.periods.length - 1]);
+      }
+      lines.push('');
+      lines.push(AI_ANALYSIS_TASK_DESCRIPTION);
+      lines.push('');
+      lines.push('Таблица заказов (разделитель — табуляция):');
+      lines.push(AI_ANALYSIS_TABLE_COLUMNS.join('\t'));
+      report.rows.forEach(row => {
+        lines.push(formatAiAnalysisTableRow(row).join('\t'));
+      });
+      lines.push('');
+      lines.push('Итоги по периоду:');
+      lines.push('Общая отгрузка без НДС: ' + aiAnalysisFmtMoney(report.totals.shipmentNoVat));
+      lines.push('Общая ЗП: ' + aiAnalysisFmtMoney(report.totals.salary));
+      lines.push('Общие расходы 20: ' + aiAnalysisFmtMoney(report.totals.periodExp20));
+      lines.push('Общий 25: ' + aiAnalysisFmtMoney(report.totals.acc25));
+      lines.push('Общий 44: ' + aiAnalysisFmtMoney(report.totals.acc44));
+      lines.push('Общий 26: ' + aiAnalysisFmtMoney(report.totals.acc26));
+      lines.push('Списано всего: ' + aiAnalysisFmtMoney(report.totals.writeoffTotal));
+      lines.push('Прибыль: ' + aiAnalysisFmtMoney(report.totals.profit));
+      lines.push('Средняя маржа: ' + aiAnalysisFmtPct(report.totals.marginPct) + '%');
+      lines.push('НЗП конец 20 (сумма по группам): ' + aiAnalysisFmtMoney(report.totals.wipEnd20));
+      lines.push('');
+      lines.push('Инструкция для ИИ:');
+      lines.push(AI_ANALYSIS_INSTRUCTIONS);
+      return lines.join('\n');
+    }
+
+    function populateAiAnalysisYearSelect() {
+      const el = document.getElementById('aiAnalysisYear');
+      if (!el || el.tagName !== 'SELECT') return;
+
+      const minYear = parseInt(WORKING_PERIOD_MIN.slice(0, 4), 10);
+      const maxYear = parseInt(WORKING_PERIOD_MAX.slice(0, 4), 10);
+      const prev = String(el.value || '').trim();
+      el.innerHTML = '';
+
+      for (let y = maxYear; y >= minYear; y--) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        el.appendChild(opt);
+      }
+
+      const defaultYear = getDefaultAnnualSummaryYear();
+      const pick =
+        prev && /^\d{4}$/.test(prev) && Number(prev) >= minYear && Number(prev) <= maxYear
+          ? prev
+          : defaultYear;
+      el.value = pick;
+    }
+
+    function updateAiAnalysisScopeUi() {
+      const scopeEl = document.getElementById('aiAnalysisScope');
+      const yearField = document.getElementById('aiAnalysisYearField');
+      if (!scopeEl || !yearField) return;
+      yearField.hidden = scopeEl.value !== 'year';
+      if (scopeEl.value === 'year') populateAiAnalysisYearSelect();
+    }
+
+    function prepareAiAnalysisData() {
+      const scopeEl = document.getElementById('aiAnalysisScope');
+      const statusEl = document.getElementById('aiAnalysisStatus');
+      const outputPanel = document.getElementById('aiAnalysisOutputPanel');
+      const outputEl = document.getElementById('aiAnalysisOutput');
+      const copyBtn = document.getElementById('copyAiAnalysisBtn');
+
+      const scope = scopeEl ? scopeEl.value : 'month';
+      let periodOrYear = '';
+      if (scope === 'year') {
+        const yearEl = document.getElementById('aiAnalysisYear');
+        periodOrYear = yearEl ? String(yearEl.value || '').trim() : '';
+      } else {
+        periodOrYear = normalizePeriodStr(getCurrentPeriod());
+      }
+
+      const report = collectAiAnalysisData(scope, periodOrYear);
+      if (report.error) {
+        lastAiAnalysisText = '';
+        if (outputPanel) outputPanel.hidden = true;
+        if (outputEl) outputEl.value = '';
+        if (copyBtn) copyBtn.disabled = true;
+        if (statusEl) statusEl.textContent = report.error;
+        return null;
+      }
+
+      const text = buildAiAnalysisText(report);
+      lastAiAnalysisText = text;
+      if (outputEl) outputEl.value = text;
+      if (outputPanel) outputPanel.hidden = false;
+      if (copyBtn) copyBtn.disabled = false;
+      if (statusEl) {
+        statusEl.textContent =
+          'Подготовлено: ' +
+          report.rows.length +
+          ' групп/заказов' +
+          (report.scope === 'year' && report.periods.length
+            ? ', месяцев: ' + report.periods.length
+            : '') +
+          '. Скопируйте текст в ChatGPT.';
+      }
+      return report;
+    }
+
+    async function copyAiAnalysisDataToClipboard() {
+      const text = lastAiAnalysisText || document.getElementById('aiAnalysisOutput')?.value || '';
+      if (!String(text).trim()) {
+        alert('Сначала подготовьте данные для ИИ.');
+        return;
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const outputEl = document.getElementById('aiAnalysisOutput');
+          if (!outputEl) throw new Error('clipboard unavailable');
+          outputEl.removeAttribute('readonly');
+          outputEl.focus();
+          outputEl.select();
+          document.execCommand('copy');
+          outputEl.setAttribute('readonly', 'readonly');
+        }
+        const statusEl = document.getElementById('aiAnalysisStatus');
+        if (statusEl) statusEl.textContent = 'Текст скопирован в буфер обмена.';
+      } catch (e) {
+        alert(
+          'Не удалось скопировать автоматически. Выделите текст в поле и нажмите Ctrl+C.'
+        );
+      }
+    }
+
     function collectOrderCardReportData(orderName) {
       const target = String(orderName || '').trim();
       if (!target) return null;
@@ -10275,6 +10867,22 @@
       exportAnnualSummaryBtn.addEventListener('click', () => exportAnnualSummaryToExcel());
     }
     ensureAnnualSummaryControlsEditable();
+
+    const aiAnalysisScopeEl = document.getElementById('aiAnalysisScope');
+    if (aiAnalysisScopeEl) {
+      aiAnalysisScopeEl.addEventListener('change', () => updateAiAnalysisScopeUi());
+      updateAiAnalysisScopeUi();
+    } else {
+      populateAiAnalysisYearSelect();
+    }
+    const prepareAiAnalysisBtn = document.getElementById('prepareAiAnalysisBtn');
+    if (prepareAiAnalysisBtn) {
+      prepareAiAnalysisBtn.addEventListener('click', () => prepareAiAnalysisData());
+    }
+    const copyAiAnalysisBtn = document.getElementById('copyAiAnalysisBtn');
+    if (copyAiAnalysisBtn) {
+      copyAiAnalysisBtn.addEventListener('click', () => copyAiAnalysisDataToClipboard());
+    }
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());
 

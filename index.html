@@ -3837,6 +3837,10 @@
         .trim();
     }
 
+    function canonicalOrderKey(order) {
+      return normalizeOrderKey(order).toLowerCase();
+    }
+
     function ordersMatchForImport(a, b) {
       const ka = normalizeOrderKey(a).toLowerCase();
       const kb = normalizeOrderKey(b).toLowerCase();
@@ -7560,36 +7564,63 @@
       const prevClone = clonePeriodData(prevData);
       prevClone._chainPeriod = prevPeriod;
       recalculatePeriodDataInMemory(prevClone);
-      const prevWipEnd = buildOrderWipEndMap(prevClone);
-      const currentOrders = getCurrentTableOrderMap();
+      const prevWipEnd = buildCanonicalOrderWipEndMap(prevClone);
+      const currentOrders = getCurrentTableCanonicalOrderMap();
       const items = [];
       const skippedUnreliable = [];
       const diagnosticTraces = [];
 
-      prevWipEnd.forEach((wipEnd, order) => {
+      currentOrders.forEach((current, key) => {
+        const prevEntry = prevWipEnd.get(key);
+        const prevEnd = prevEntry ? prevEntry.wipEnd20 : 0;
+        if (current.wipStart <= WIP_CHAIN_EPS || prevEnd > WIP_CHAIN_EPS) return;
+
+        const traceOrder = prevEntry ? prevEntry.displayOrder : current.order;
+        const trace = traceOrderWipEnd20ForPeriod(prevClone, traceOrder);
+        trace.transferAmount = 0;
+        diagnosticTraces.push(trace);
+
+        items.push({
+          order: current.order,
+          canonicalKey: key,
+          prevWipEnd: prevEnd,
+          currentWipStart: current.wipStart,
+          trace,
+          action: 'zero_out',
+          actionLabel: 'обнулить'
+        });
+      });
+
+      prevWipEnd.forEach((entry, key) => {
+        const wipEnd = entry.wipEnd20;
+        const order = entry.displayOrder;
         const trace = traceOrderWipEnd20ForPeriod(prevClone, order);
         trace.transferAmount = wipEnd;
         diagnosticTraces.push(trace);
 
         if (trace.unreliable) {
-          skippedUnreliable.push({
-            order,
-            prevWipEnd: wipEnd,
-            trace,
-            reason:
-              'Нет сохранённых настроек списания в периоде ' +
-              prevPeriod +
-              ' — перенос пропущен. Сохраните период после настройки вкладки «Списание с 26».'
-          });
+          if (wipEnd > WIP_CHAIN_EPS) {
+            skippedUnreliable.push({
+              order,
+              canonicalKey: key,
+              prevWipEnd: wipEnd,
+              trace,
+              reason:
+                'Нет сохранённых настроек списания в периоде ' +
+                prevPeriod +
+                ' — перенос пропущен. Сохраните период после настройки вкладки «Списание с 26».'
+            });
+          }
           return;
         }
 
         if (wipEnd <= WIP_CHAIN_EPS) return;
 
-        const existing = currentOrders.get(order);
+        const existing = currentOrders.get(key);
         if (!existing) {
           items.push({
             order,
+            canonicalKey: key,
             prevWipEnd: wipEnd,
             trace,
             action: 'add',
@@ -7597,7 +7628,8 @@
           });
         } else if (Math.abs(existing.wipStart - wipEnd) > WIP_CHAIN_EPS) {
           items.push({
-            order,
+            order: existing.order,
+            canonicalKey: key,
             prevWipEnd: wipEnd,
             currentWipStart: existing.wipStart,
             trace,
@@ -7606,7 +7638,8 @@
           });
         } else {
           items.push({
-            order,
+            order: existing.order,
+            canonicalKey: key,
             prevWipEnd: wipEnd,
             currentWipStart: existing.wipStart,
             trace,
@@ -7618,7 +7651,12 @@
 
       logWipChainTransferDiagnostics(
         'Подтянуть НЗП из ' + prevPeriod + ' → ' + cur,
-        diagnosticTraces.filter(t => t.orderShareWipEnd20 > WIP_CHAIN_EPS || t.unreliable)
+        diagnosticTraces.filter(
+          t =>
+            t.unreliable ||
+            t.orderShareWipEnd20 > WIP_CHAIN_EPS ||
+            (t.transferAmount != null && t.transferAmount <= WIP_CHAIN_EPS)
+        )
       );
 
       items.sort((a, b) => a.order.localeCompare(b.order, 'ru'));
@@ -7631,6 +7669,7 @@
         items,
         toAdd: items.filter(i => i.action === 'add'),
         toUpdate: items.filter(i => i.action === 'update'),
+        toZero: items.filter(i => i.action === 'zero_out'),
         alreadyOk: items.filter(i => i.action === 'exists'),
         skippedUnreliable,
         diagnosticTraces
@@ -7639,11 +7678,12 @@
 
     function buildPullWipFromPrevPreviewHtml(result) {
       const hasSkipped = result.skippedUnreliable && result.skippedUnreliable.length;
-      if (!result.items.length && !hasSkipped) {
+      const hasZero = result.toZero && result.toZero.length;
+      if (!result.items.length && !hasSkipped && !hasZero) {
         return (
           '<p>В предыдущем периоде <strong>' +
           escapeHtmlForReport(result.prevPeriod) +
-          '</strong> нет заказов с переходящим НЗП (НЗП конец 20 &gt; 0,01).</p>'
+          '</strong> нет заказов с переходящим НЗП (НЗП конец 20 &gt; 0,01), и в текущем периоде нет лишнего НЗП нач.</p>'
         );
       }
 
@@ -7691,6 +7731,9 @@
         if (item.action === 'update') {
           actionCell =
             'обновить (сейчас ' + fmt(item.currentWipStart) + ')';
+        } else if (item.action === 'zero_out') {
+          actionCell =
+            'обнулить (сейчас ' + fmt(item.currentWipStart) + ', пред. НЗП конец 20 = 0)';
         }
         html +=
           '<tr><td>' +
@@ -7712,11 +7755,15 @@
 
       const addCount = result.toAdd.length;
       const updCount = result.toUpdate.length;
-      if (addCount || updCount) {
+      const zeroCount = result.toZero ? result.toZero.length : 0;
+      if (addCount || updCount || zeroCount) {
         html += '<p class="hint">';
         if (addCount) html += 'Будет добавлено строк: ' + addCount + '. ';
         if (updCount) {
-          html += 'Будет обновлено НЗП нач.: ' + updCount + ' заказ(ов).';
+          html += 'Будет обновлено НЗП нач.: ' + updCount + '. ';
+        }
+        if (zeroCount) {
+          html += 'Будет обнулено НЗП нач.: ' + zeroCount + ' заказ(ов).';
         }
         html += '</p>';
       } else {
@@ -7730,10 +7777,13 @@
     function applyPullWipFromPreviousPeriod(preview) {
       let addedCount = 0;
       let updatedCount = 0;
+      let zeroedCount = 0;
+      const emptyRowWarnings = [];
 
       const applyTraces = []
         .concat(preview.toAdd || [])
         .concat(preview.toUpdate || [])
+        .concat(preview.toZero || [])
         .map(i => i.trace)
         .filter(Boolean);
       logWipChainTransferDiagnostics(
@@ -7766,12 +7816,38 @@
       preview.toUpdate.forEach(item => {
         getRows().forEach(tr => {
           const order = String(tr.querySelector('.order-name')?.value ?? '').trim();
-          if (order !== item.order) return;
+          if (canonicalOrderKey(order) !== item.canonicalKey) return;
           const wipEl = tr.querySelector('.wip-start');
           if (!wipEl) return;
           wipEl.value = formatWipStartStorage(item.prevWipEnd);
           sanitizeTableNumInput(wipEl);
           updatedCount++;
+        });
+      });
+
+      preview.toZero.forEach(item => {
+        getRows().forEach(tr => {
+          const order = String(tr.querySelector('.order-name')?.value ?? '').trim();
+          if (canonicalOrderKey(order) !== item.canonicalKey) return;
+          const wipEl = tr.querySelector('.wip-start');
+          if (!wipEl) return;
+          wipEl.value = formatWipStartStorage(0);
+          sanitizeTableNumInput(wipEl);
+          zeroedCount++;
+          const shipment = num(tr.querySelector('.shipment-vat')?.value);
+          const materials = num(tr.querySelector('.materials')?.value);
+          const processing = num(tr.querySelector('.processing')?.value);
+          const other = num(tr.querySelector('.other-direct')?.value);
+          const salary = num(tr.querySelector('.salary')?.value);
+          if (
+            shipment <= WIP_CHAIN_EPS &&
+            materials <= WIP_CHAIN_EPS &&
+            processing <= WIP_CHAIN_EPS &&
+            other <= WIP_CHAIN_EPS &&
+            salary <= WIP_CHAIN_EPS
+          ) {
+            emptyRowWarnings.push(order);
+          }
         });
       });
 
@@ -7783,6 +7859,13 @@
       let msg = 'Добавлено строк из переходящего НЗП: ' + addedCount;
       if (updatedCount) {
         msg += '\nОбновлено НЗП нач.: ' + updatedCount;
+      }
+      if (zeroedCount) {
+        msg += '\nОбнулено НЗП нач.: ' + zeroedCount;
+      }
+      if (emptyRowWarnings.length) {
+        msg +=
+          '\n\nСтрока осталась без сумм: ' + emptyRowWarnings.join(', ');
       }
       if (preview.skippedUnreliable && preview.skippedUnreliable.length) {
         msg +=
@@ -7799,7 +7882,8 @@
         statusEl.textContent =
           'Подтягивание НЗП: добавлено ' +
           addedCount +
-          (updatedCount ? ', обновлено НЗП нач. ' + updatedCount : '');
+          (updatedCount ? ', обновлено НЗП нач. ' + updatedCount : '') +
+          (zeroedCount ? ', обнулено ' + zeroedCount : '');
       }
 
       if (confirm('Сохранить период локально?')) {
@@ -7818,7 +7902,8 @@
       }
 
       content.innerHTML = buildPullWipFromPrevPreviewHtml(preview);
-      const canApply = preview.toAdd.length + preview.toUpdate.length > 0;
+      const canApply =
+        preview.toAdd.length + preview.toUpdate.length + (preview.toZero?.length || 0) > 0;
       confirmBtn.disabled = !canApply;
       confirmBtn.textContent = canApply ? 'Применить' : 'Нечего применять';
 
@@ -8311,6 +8396,126 @@
       return map;
     }
 
+    function buildCanonicalOrderWipEndMap(data) {
+      const map = new Map();
+      buildOrderWipEndMap(data).forEach((wipEnd20, order) => {
+        const key = canonicalOrderKey(order);
+        if (!key) return;
+        if (!map.has(key)) {
+          map.set(key, { wipEnd20: 0, displayOrder: order, orders: [] });
+        }
+        const entry = map.get(key);
+        entry.wipEnd20 += wipEnd20;
+        if (!entry.orders.includes(order)) entry.orders.push(order);
+        if (String(order).length > String(entry.displayOrder).length) {
+          entry.displayOrder = order;
+        }
+      });
+      return map;
+    }
+
+    function buildCanonicalOrderWipStartMap(data) {
+      const map = new Map();
+      (data.rows || []).forEach(row => {
+        const order = String(row.order != null ? row.order : '').trim();
+        if (!order) return;
+        const key = canonicalOrderKey(order);
+        if (!key) return;
+        const wipStart = num(row.wipStart);
+        if (!map.has(key)) {
+          map.set(key, {
+            wipStart: 0,
+            displayOrder: order,
+            orders: [],
+            sources: []
+          });
+        }
+        const entry = map.get(key);
+        entry.wipStart += wipStart;
+        if (!entry.orders.includes(order)) entry.orders.push(order);
+        entry.sources.push({
+          order,
+          wipStart,
+          source: 'row.wipStart (localStorage/период)'
+        });
+        if (String(order).length > String(entry.displayOrder).length) {
+          entry.displayOrder = order;
+        }
+      });
+      return map;
+    }
+
+    function findRowByCanonicalOrderInData(data, canonicalKey) {
+      const key = String(canonicalKey || '').toLowerCase();
+      if (!key) return null;
+      return (
+        (data.rows || []).find(
+          r => canonicalOrderKey(String(r.order != null ? r.order : '').trim()) === key
+        ) || null
+      );
+    }
+
+    function isOrderRowAllZeros(row) {
+      if (!row) return false;
+      return (
+        num(row.wipStart) <= WIP_CHAIN_EPS &&
+        num(row.shipmentVat) <= WIP_CHAIN_EPS &&
+        num(row.materials) <= WIP_CHAIN_EPS &&
+        num(row.processing) <= WIP_CHAIN_EPS &&
+        num(row.other) <= WIP_CHAIN_EPS &&
+        num(row.salary) <= WIP_CHAIN_EPS
+      );
+    }
+
+    function getCurrentTableCanonicalOrderMap() {
+      const map = new Map();
+      getRows().forEach(tr => {
+        const order = String(tr.querySelector('.order-name')?.value ?? '').trim();
+        if (!order) return;
+        const key = canonicalOrderKey(order);
+        if (!key) return;
+        const wipStart = num(tr.querySelector('.wip-start')?.value);
+        if (!map.has(key)) {
+          map.set(key, { order, tr, wipStart: 0, orders: [] });
+        }
+        const entry = map.get(key);
+        entry.wipStart += wipStart;
+        if (!entry.orders.includes(order)) entry.orders.push(order);
+        entry.order = order;
+        if (!entry.tr) entry.tr = tr;
+      });
+      return map;
+    }
+
+    function logWipChainCompareDiagnostics(link, prevData, nextData) {
+      if (!link || !link.diagnostics || !link.diagnostics.length) return;
+      const problem = link.diagnostics.filter(d => d.result !== 'ok');
+      if (!problem.length) return;
+
+      console.group(
+        '[НЗП цепочка] сравнение ' + link.prevPeriod + ' → ' + link.period
+      );
+      problem.forEach(d => {
+        console.log('Заказ:', d.orderName);
+        console.log('  canonicalKey:', d.canonicalKey);
+        console.log('  Предыдущий период:', d.prevPeriod);
+        console.log('  Следующий период:', d.nextPeriod);
+        console.log('  НЗП конец 20 пред.:', d.prevWipEnd20);
+        console.log('  НЗП нач. след.:', d.nextWipStart);
+        if (d.nextSource && d.nextSource.length) {
+          console.log('  Источник НЗП нач.:', d.nextSource);
+        }
+        if (d.prevOrders && d.prevOrders.length > 1) {
+          console.log('  Имена в пред. периоде:', d.prevOrders);
+        }
+        if (d.nextOrders && d.nextOrders.length > 1) {
+          console.log('  Имена в след. периоде:', d.nextOrders);
+        }
+        console.log('  Результат:', d.result);
+      });
+      console.groupEnd();
+    }
+
     function findRowByOrderInData(data, order) {
       const target = String(order).trim();
       return (data.rows || []).find(r => String(r.order != null ? r.order : '').trim() === target) || null;
@@ -8321,51 +8526,94 @@
         prevData && prevData._chainPeriod
           ? prevData._chainPeriod
           : '';
-      const prevWipEnd = buildOrderWipEndMap(prevData);
-      const nextWipStart = buildOrderWipStartMap(nextData);
+      const prevWipEnd = buildCanonicalOrderWipEndMap(prevData);
+      const nextWipStart = buildCanonicalOrderWipStartMap(nextData);
       const discrepancies = [];
       const warnings = [];
-      const allOrders = new Set([...prevWipEnd.keys(), ...nextWipStart.keys()]);
+      const diagnostics = [];
+      const allKeys = new Set([...prevWipEnd.keys(), ...nextWipStart.keys()]);
 
-      allOrders.forEach(order => {
-        const expected = prevWipEnd.has(order) ? prevWipEnd.get(order) : 0;
-        const actual = nextWipStart.has(order) ? nextWipStart.get(order) : 0;
-        const inPrev = prevWipEnd.has(order);
-        const inNext = nextWipStart.has(order);
+      allKeys.forEach(key => {
+        const prevEntry = prevWipEnd.get(key);
+        const nextEntry = nextWipStart.get(key);
+        const expected = prevEntry ? prevEntry.wipEnd20 : 0;
+        const actual = nextEntry ? nextEntry.wipStart : 0;
+        const displayOrder =
+          (nextEntry && nextEntry.displayOrder) ||
+          (prevEntry && prevEntry.displayOrder) ||
+          key;
+        const inPrev = !!prevEntry;
+        const inNext = !!nextEntry;
+
+        const diag = {
+          prevPeriod,
+          nextPeriod,
+          canonicalKey: key,
+          orderName: displayOrder,
+          prevWipEnd20: expected,
+          nextWipStart: actual,
+          nextSource: nextEntry ? nextEntry.sources : [],
+          prevOrders: prevEntry ? prevEntry.orders : [],
+          nextOrders: nextEntry ? nextEntry.orders : [],
+          result: 'ok'
+        };
 
         if (inPrev && expected > WIP_CHAIN_EPS && !inNext) {
           warnings.push({
             type: 'missing_in_next',
-            order,
+            order: displayOrder,
+            canonicalKey: key,
             message: 'Заказ отсутствует в следующем периоде, хотя НЗП конец 20 > 0'
           });
+          diag.result = 'missing_in_next';
         }
-        if (inNext && actual > WIP_CHAIN_EPS && (!inPrev || expected <= WIP_CHAIN_EPS)) {
-          warnings.push({
-            type: 'unexpected_start',
-            order,
-            message: 'В текущем периоде есть НЗП нач., но в предыдущем НЗП конец 20 = 0 или заказ отсутствует'
-          });
-        }
-        if (inPrev && inNext && Math.abs(expected - actual) > WIP_CHAIN_EPS) {
+
+        if (Math.abs(expected - actual) > WIP_CHAIN_EPS) {
+          let status = 'будет пересчитан';
+          let fixType = 'update';
+          if (expected <= WIP_CHAIN_EPS && actual > WIP_CHAIN_EPS) {
+            status = 'Нужно обнулить НЗП нач.';
+            fixType = 'zero_out';
+          } else if (expected > WIP_CHAIN_EPS && actual <= WIP_CHAIN_EPS) {
+            status = 'Нужно установить НЗП нач.';
+            fixType = 'set_start';
+          }
+
           discrepancies.push({
-            order,
+            order: displayOrder,
+            canonicalKey: key,
             expected,
             oldStart: actual,
-            diff: expected - actual
+            newStart: expected,
+            diff: expected - actual,
+            status,
+            fixType,
+            note:
+              fixType === 'zero_out' && inNext
+                ? 'Старое НЗП нач. будет обнулено'
+                : ''
           });
+          diag.result = fixType;
+        }
+
+        if (diag.result !== 'ok' || actual > WIP_CHAIN_EPS || expected > WIP_CHAIN_EPS) {
+          diagnostics.push(diag);
         }
       });
 
-      return {
+      const link = {
         period: nextPeriod,
         prevPeriod,
         periodStatus: nextData.periodStatus || 'draft',
         isFinal: (nextData.periodStatus || 'draft') === 'final',
         discrepancies,
         warnings,
+        diagnostics,
         hasChanges: discrepancies.length > 0
       };
+
+      logWipChainCompareDiagnostics(link, prevData, nextData);
+      return link;
     }
 
     function checkWipChainFromPeriod(startPeriod) {
@@ -8508,6 +8756,11 @@
         }
         if (link.discrepancies.length) {
           link.discrepancies.forEach(d => {
+            const note =
+              d.note ||
+              (d.fixType === 'zero_out'
+                ? 'Строка останется без сумм, если отгрузка и расходы = 0'
+                : 'будет пересчитан');
             html +=
               '<tr><td>' +
               escapeHtmlForReport(link.period) +
@@ -8518,12 +8771,14 @@
               '</td><td>' +
               fmt(d.oldStart) +
               '</td><td>' +
-              fmt(d.expected) +
+              fmt(d.newStart != null ? d.newStart : d.expected) +
               '</td><td>' +
               fmt(d.diff) +
               '</td><td>' +
-              escapeHtmlForReport(link.periodStatus) +
-              '</td><td>будет пересчитан</td></tr>';
+              escapeHtmlForReport(d.status || link.periodStatus) +
+              '</td><td>' +
+              escapeHtmlForReport(note || 'будет пересчитан') +
+              '</td></tr>';
           });
         }
         if (link.warnings && link.warnings.length) {
@@ -8796,13 +9051,14 @@
           applyReport.reopenedFromFinal.push(nextPeriod);
         }
 
-        const prevWipEnd = buildOrderWipEndMap(prevData);
         const chainTraces = [];
         link.discrepancies.forEach(d => {
-          const trace = traceOrderWipEnd20ForPeriod(prevData, d.order);
+          const traceOrder =
+            (d.prevOrders && d.prevOrders[0]) || d.order;
+          const trace = traceOrderWipEnd20ForPeriod(prevData, traceOrder);
           trace.transferAmount = d.expected;
           chainTraces.push(trace);
-          if (trace.unreliable) {
+          if (trace.unreliable && d.expected > WIP_CHAIN_EPS) {
             applyReport.warnings.push(
               'Заказ «' +
                 d.order +
@@ -8812,10 +9068,17 @@
             );
             return;
           }
-          const row = findRowByOrderInData(nextData, d.order);
+          const row =
+            findRowByCanonicalOrderInData(nextData, d.canonicalKey) ||
+            findRowByOrderInData(nextData, d.order);
           if (row) {
             row.wipStart = formatWipStartStorage(d.expected);
             applyReport.ordersUpdated++;
+            if (d.fixType === 'zero_out' && isOrderRowAllZeros(row)) {
+              applyReport.warnings.push(
+                'Строка осталась без сумм: ' + String(row.order || d.order).trim()
+              );
+            }
           }
         });
         logWipChainTransferDiagnostics(

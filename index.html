@@ -2701,10 +2701,19 @@
     }
 
     function computeGroupWriteoff20Metrics(sums, writeOff20) {
-      const wipEnd20 = sums.totalWithWip20 - writeOff20;
+      const rawWipEnd20 = sums.totalWithWip20 - writeOff20;
+      const writeoff20OverAvailable = writeOff20 > sums.totalWithWip20 + RECONCILE_EPS;
+      const wipEnd20 = rawWipEnd20 < -RECONCILE_EPS ? 0 : Math.max(0, rawWipEnd20);
       const profit20 = sums.shipmentNoVat - writeOff20;
       const margin20Pct = sums.shipmentNoVat > 0 ? (profit20 / sums.shipmentNoVat) * 100 : 0;
-      return { writeOff20, wipEnd20, profit20, margin20Pct };
+      return {
+        writeOff20,
+        wipEnd20,
+        rawWipEnd20,
+        profit20,
+        margin20Pct,
+        validation: { writeoff20OverAvailable }
+      };
     }
 
     function computeGroupWriteoff26Metrics(sums, calc26) {
@@ -2961,14 +2970,13 @@
         const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
         const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
 
-        if (metrics20.writeOff20 > sums.totalWithWip20 + RECONCILE_EPS) {
+        if (metrics20.validation && metrics20.validation.writeoff20OverAvailable) {
           writeoff20.push(
             `Группа «${label}»: списание 20 (${fmt(metrics20.writeOff20)}) больше, чем всего с НЗП (${fmt(sums.totalWithWip20)}).`
           );
-        }
-        if (metrics20.wipEnd20 < -RECONCILE_EPS) {
+        } else if (metrics20.rawWipEnd20 < -RECONCILE_EPS) {
           writeoff20.push(
-            `Группа «${label}»: отрицательное НЗП конец 20 (${fmt(metrics20.wipEnd20)}).`
+            `Группа «${label}»: отрицательное НЗП конец 20 (${fmt(metrics20.rawWipEnd20)}).`
           );
         }
 
@@ -4508,21 +4516,16 @@
 
       let status = 'ОК';
       if (writeOff20 > totalWithWip20 + RECONCILE_EPS) {
-        status = 'Списание больше затрат';
+        status = 'Списание 20 больше доступного НЗП/расходов';
         row.classList.add('row-w20-writeoff-over');
         if (writeOffCell) {
           writeOffCell.classList.add('cell-validate-negative');
           writeOffCell.title = status;
         }
-        if (statusEl) statusEl.classList.add('w20-status-error');
-      } else if (wipEnd20 < -RECONCILE_EPS) {
-        status = 'Отрицательное НЗП';
-        row.classList.add('row-w20-negative-wip');
-        if (wipEndCell) {
-          wipEndCell.classList.add('cell-validate-negative');
-          wipEndCell.title = status;
+        if (statusEl) {
+          statusEl.classList.add('w20-status-error');
+          statusEl.title = status;
         }
-        if (statusEl) statusEl.classList.add('w20-status-error');
       } else if (statusEl) {
         statusEl.classList.add('w20-status-ok');
       }
@@ -6945,6 +6948,263 @@
       return { shipmentNoVat, shipmentVat, writeOff, profitRub, wipEnd, totalCost };
     }
 
+    function traceOrderCardMonthDiagnostics(data, orderName) {
+      const target = String(orderName || '').trim();
+      const period =
+        data && data._chainPeriod
+          ? String(data._chainPeriod)
+          : normalizePeriodStr(getCurrentPeriod()) || '';
+      const result = {
+        found: false,
+        period,
+        order: target,
+        groupName: '',
+        memberCount: 0,
+        orderNames: [],
+        wipStart20: 0,
+        wipStartBeforeTransfers: 0,
+        wipStartTransferDelta: 0,
+        periodExp20: 0,
+        periodExp20TransferDelta: 0,
+        totalWithWip20: 0,
+        writeOffTotal: 0,
+        writeOff26: 0,
+        writeOff20: 0,
+        wipEnd20Raw: 0,
+        wipEnd20: 0,
+        transfersIn: [],
+        transfersOut: [],
+        calc26Source: '',
+        profitPercent26: '0',
+        manualTotalWriteoff26: '',
+        source:
+          'localStorage/collectData → расчёт вкладки «Списание 20 сч.» (не Google Sheets, не snapshot)',
+        snapshotWipEnd: null,
+        snapshotWipNo26: null,
+        rowWipStart: null,
+        negativeWipStartOrders: [],
+        similarGroups: [],
+        warnings: []
+      };
+
+      if (!target || !data || !Array.isArray(data.rows)) {
+        result.warnings.push('Нет данных периода');
+        return result;
+      }
+
+      const orderGrouping =
+        data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
+      const settings = resolveGroupingSettingsFromData(target, orderGrouping);
+      if (settings.enabled === false) {
+        result.warnings.push('Заказ исключён из расчётов (группировка отключена)');
+        return result;
+      }
+
+      const groups = buildCalculationGroupsFromPeriodData(data);
+      const groupName = settings.groupName || target;
+      const group = groups.find(g => g.groupName === groupName);
+      if (!group) {
+        result.warnings.push('Расчётная группа не найдена');
+        return result;
+      }
+
+      const row = group.memberRows.find(r => String(r.order || '').trim() === target);
+      if (!row) {
+        result.warnings.push('Заказ не найден в составе группы');
+        return result;
+      }
+
+      result.found = true;
+      result.groupName = groupName;
+      result.memberCount = group.memberRows.length;
+      result.orderNames = group.orderNames.slice();
+      result.rowWipStart = num(row.wipStart);
+
+      group.memberRows.forEach(r => {
+        const ws = num(r.wipStart);
+        const on = String(r.order || '').trim();
+        if (ws < -RECONCILE_EPS) {
+          result.negativeWipStartOrders.push({ order: on, wipStart: ws });
+        }
+      });
+
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
+      const legacy =
+        data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+
+      let wipStartBefore = 0;
+      let periodExpBefore = 0;
+      group.memberRows.forEach(r => {
+        const m = computeRowExpenseMetricsForChain(r, globals, totals);
+        wipStartBefore += m.wipStart;
+        periodExpBefore +=
+          m.materials +
+          m.processing +
+          m.otherDirect +
+          m.salary +
+          m.insurance +
+          m.sick +
+          m.acc25 +
+          m.acc44;
+      });
+      result.wipStartBeforeTransfers = wipStartBefore;
+      result.periodExp20BeforeTransfers = periodExpBefore;
+
+      const adjMap = computeTransferAdjustmentsByGroup(transfers);
+      const adj = adjMap.get(groupName) || { wipStartDelta: 0, periodExp20Delta: 0 };
+      result.wipStartTransferDelta = adj.wipStartDelta || 0;
+      result.periodExp20TransferDelta = adj.periodExp20Delta || 0;
+
+      transfers.forEach(t => {
+        const from = String(t.from || '').trim();
+        const to = String(t.to || '').trim();
+        const amount = num(t.amount);
+        if (!amount) return;
+        const entry = {
+          from,
+          to,
+          amount,
+          type: t.type === 'periodExp20' ? 'periodExp20' : 'wipStart20',
+          comment: String(t.comment || '')
+        };
+        if (to === groupName) result.transfersIn.push(entry);
+        if (from === groupName) result.transfersOut.push(entry);
+      });
+
+      const gc = gc26[groupName];
+      const leg = legacy[groupName];
+      if (gc) result.calc26Source = 'groupCalc26';
+      else if (leg) result.calc26Source = 'groupCalc (legacy)';
+      else if (group.memberRows.length === 1) result.calc26Source = 'profitPercent/manualWriteoff строки';
+      else result.calc26Source = 'нет (0%)';
+
+      const sums = sumGroupMetricsFromPeriodData(
+        group.memberRows,
+        globals,
+        totals,
+        groupName,
+        transfers
+      );
+      const calc26 = getGroupCalc26SettingsFromPeriodData(
+        groupName,
+        group.memberRows,
+        gc26,
+        legacy
+      );
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const metrics20 = computeGroupWriteoff20Metrics(sums, metrics26.writeOff20);
+
+      result.wipStart20 = sums.wipStart;
+      result.periodExp20 = sums.periodExp20;
+      result.totalWithWip20 = sums.totalWithWip20;
+      result.writeOffTotal = metrics26.writeOffTotal;
+      result.writeOff26 = metrics26.writeOff26Part;
+      result.writeOff20 = metrics20.writeOff20;
+      result.wipEnd20Raw = metrics20.rawWipEnd20;
+      result.wipEnd20 = metrics20.wipEnd20;
+      result.profitPercent26 = calc26.profitPercent26;
+      result.manualTotalWriteoff26 = calc26.manualTotalWriteoff26;
+
+      if (row.snapshot && row.snapshot.wipEnd != null) {
+        result.snapshotWipEnd = num(row.snapshot.wipEnd);
+      }
+      if (row.snapshot && row.snapshot.wipNo26 != null) {
+        result.snapshotWipNo26 = num(row.snapshot.wipNo26);
+      }
+
+      const targetNorm = target.toLowerCase();
+      result.similarGroups = groups
+        .filter(g => g.groupName !== groupName)
+        .filter(
+          g =>
+            g.groupName.toLowerCase().includes(targetNorm.slice(0, 12)) ||
+            g.orderNames.some(on => on.toLowerCase().includes(targetNorm.slice(0, 12)))
+        )
+        .map(g => g.groupName);
+
+      if (metrics20.validation && metrics20.validation.writeoff20OverAvailable) {
+        result.warnings.push(
+          'Списание 20 (' +
+            fmt(metrics20.writeOff20) +
+            ') больше «Всего с НЗП» (' +
+            fmt(sums.totalWithWip20) +
+            ') → технический raw=' +
+            fmt(metrics20.rawWipEnd20) +
+            ', в карточке показано ' +
+            fmt(metrics20.wipEnd20)
+        );
+      }
+      if (result.negativeWipStartOrders.length) {
+        result.warnings.push('Отрицательный НЗП нач. в строках группы');
+      }
+      if (
+        result.snapshotWipNo26 != null &&
+        Math.abs(result.snapshotWipNo26 - result.wipEnd20) > RECONCILE_EPS
+      ) {
+        result.warnings.push(
+          'snapshot.wipNo26=' +
+            fmt(result.snapshotWipNo26) +
+            ' (старая логика, в карточке не используется)'
+        );
+      }
+
+      return result;
+    }
+
+    function logOrderCardWipEnd20Diagnostics(orderName) {
+      const target = String(orderName || '').trim();
+      if (!target) return [];
+
+      const periodSources = listPeriodDataSourcesForOrderReport();
+      const traces = [];
+
+      Array.from(periodSources.keys())
+        .sort()
+        .forEach(period => {
+          const data = clonePeriodData(periodSources.get(period));
+          data._chainPeriod = period;
+          traces.push(traceOrderCardMonthDiagnostics(data, target));
+        });
+
+      console.group('[Карточка заказа] диагностика НЗП конец 20 — ' + target);
+      console.table(
+        traces
+          .filter(t => t.found)
+          .map(t => ({
+            period: t.period,
+            groupName: t.groupName,
+            'НЗП нач.20': t.wipStart20,
+            'расходы 20': t.periodExp20,
+            'всего с НЗП': t.totalWithWip20,
+            'списано всего': t.writeOffTotal,
+            'списано 26': t.writeOff26,
+            'списано 20': t.writeOff20,
+            'НЗП конец 20 raw': t.wipEnd20Raw,
+            'НЗП конец 20': t.wipEnd20,
+            transfersIn: t.transfersIn.length,
+            transfersOut: t.transfersOut.length,
+            source: t.calc26Source
+          }))
+      );
+      traces.forEach(t => {
+        if (!t.found) return;
+        if (t.transfersIn.length || t.transfersOut.length) {
+          console.log(t.period, 'переносы:', { in: t.transfersIn, out: t.transfersOut });
+        }
+        if (t.similarGroups.length) {
+          console.warn(t.period, 'похожие группы:', t.similarGroups);
+        }
+        if (t.warnings.length) console.warn(t.period, t.warnings);
+      });
+      console.groupEnd();
+
+      return traces;
+    }
+
     function deriveGroupWriteoffMetricsForOrderFromPeriodData(data, orderName) {
       const target = String(orderName || '').trim();
       if (!target || !data || !Array.isArray(data.rows)) return null;
@@ -6992,13 +7252,18 @@
         orderNames: group.orderNames.slice(),
         shipmentVat: sums.shipmentVat,
         shipmentNoVat: sums.shipmentNoVat,
+        wipStart20: sums.wipStart,
+        periodExp20: sums.periodExp20,
+        totalWithWip20: sums.totalWithWip20,
         writeoffTotal: metrics26.writeOffTotal,
         writeoff26: metrics26.writeOff26Part,
-        writeoff20: metrics26.writeOff20,
+        writeoff20: metrics20.writeOff20,
         wipEnd20: metrics20.wipEnd20,
+        wipEnd20Raw: metrics20.rawWipEnd20,
         wipEnd26: metrics26.wipEnd26,
         profit: metrics26.profit26Sum,
-        isMultiMember: group.memberRows.length > 1
+        isMultiMember: group.memberRows.length > 1,
+        writeoff20OverAvailable: !!(metrics20.validation && metrics20.validation.writeoff20OverAvailable)
       };
     }
 
@@ -8008,6 +8273,7 @@
         } else {
           share = group.wipEnd20 / group.memberRows.length;
         }
+        if (share < 0) share = 0;
         shares.set(order, share);
       });
 
@@ -8019,7 +8285,7 @@
       const map = new Map();
       computeWriteoff20GroupsWithWipEnd(data).forEach(group => {
         distributeGroupWipEnd20ToOrders(group).forEach((wipEnd20, order) => {
-          map.set(order, wipEnd20);
+          map.set(order, wipEnd20 < 0 ? 0 : wipEnd20);
         });
       });
       return map;
@@ -9001,6 +9267,7 @@
       const target = String(orderName).trim();
       const report = collectOrderCardReportData(target);
       lastOrderCardReport = report;
+      logOrderCardWipEnd20Diagnostics(target);
       const rows = report.rows;
       const totals = report.totals;
       const groupHint = report.groupHint;

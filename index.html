@@ -1266,6 +1266,27 @@
       min-width: 0;
     }
 
+    #annualSummaryCard .annual-summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    #annualSummaryCard .annual-summary-table th,
+    #annualSummaryCard .annual-summary-table td {
+      border-bottom: 1px solid #d1f0db;
+      padding: 8px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    #annualSummaryCard .annual-summary-table th:first-child,
+    #annualSummaryCard .annual-summary-table td:first-child {
+      text-align: left;
+      white-space: normal;
+      min-width: 200px;
+    }
+
     #periodReportTableWrap table {
       width: max-content;
       min-width: 100%;
@@ -1862,6 +1883,25 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="card" id="annualSummaryCard" style="margin-top:20px;">
+      <div class="period-summary-head">
+        <h2>Годовая сводка по заказам</h2>
+      </div>
+      <p class="hint" style="margin-top:8px;">
+        Источник: localStorage (расчётные группы, списание 20/26, переносы НЗП). Обороты суммируются за год; НЗП конец — остаток на последний месяц года по каждой группе.
+      </p>
+      <div class="period-report-controls">
+        <div class="field" style="width: 120px;">
+          <label for="annualSummaryYear">Год</label>
+          <input id="annualSummaryYear" type="text" inputmode="numeric" placeholder="2025" autocomplete="off">
+        </div>
+        <button type="button" id="buildAnnualSummaryBtn" class="secondary">Сформировать годовую сводку</button>
+        <button type="button" id="exportAnnualSummaryBtn" class="secondary">Выгрузить годовую сводку в Excel</button>
+      </div>
+      <div class="hint" id="annualSummaryStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+      <div id="annualSummaryContent" hidden></div>
     </div>
 
     <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
@@ -7209,23 +7249,8 @@
       return traces;
     }
 
-    function deriveGroupWriteoffMetricsForOrderFromPeriodData(data, orderName) {
-      const target = String(orderName || '').trim();
-      if (!target || !data || !Array.isArray(data.rows)) return null;
-
-      const orderGrouping = data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
-      const settings = resolveGroupingSettingsFromData(target, orderGrouping);
-      if (settings.enabled === false) return null;
-
-      const groups = buildCalculationGroupsFromPeriodData(data);
-      const groupName = settings.groupName || target;
-      const group = groups.find(g => g.groupName === groupName);
-      if (!group) return null;
-
-      const orderInGroup = group.memberRows.some(
-        r => String(r.order != null ? r.order : '').trim() === target
-      );
-      if (!orderInGroup) return null;
+    function deriveGroupWriteoffMetricsFromGroup(data, group) {
+      if (!group || !data) return null;
 
       const globals = data.globals || {};
       const totals = computePeriodTotals(data);
@@ -7269,6 +7294,27 @@
         isMultiMember: group.memberRows.length > 1,
         writeoff20OverAvailable: !!(metrics20.validation && metrics20.validation.writeoff20OverAvailable)
       };
+    }
+
+    function deriveGroupWriteoffMetricsForOrderFromPeriodData(data, orderName) {
+      const target = String(orderName || '').trim();
+      if (!target || !data || !Array.isArray(data.rows)) return null;
+
+      const orderGrouping = data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
+      const settings = resolveGroupingSettingsFromData(target, orderGrouping);
+      if (settings.enabled === false) return null;
+
+      const groups = buildCalculationGroupsFromPeriodData(data);
+      const groupName = settings.groupName || target;
+      const group = groups.find(g => g.groupName === groupName);
+      if (!group) return null;
+
+      const orderInGroup = group.memberRows.some(
+        r => String(r.order != null ? r.order : '').trim() === target
+      );
+      if (!orderInGroup) return null;
+
+      return deriveGroupWriteoffMetricsFromGroup(data, group);
     }
 
     function listPeriodDataSourcesForOrderReport() {
@@ -9324,6 +9370,337 @@
       return 0;
     }
 
+    function computeAnnualMarginPct(profit, shipment) {
+      const p = num(profit);
+      const s = num(shipment);
+      return s > 0 ? (p / s) * 100 : 0;
+    }
+
+    function listPeriodDataSourcesForYear(year) {
+      const y = String(year || '').trim();
+      if (!/^\d{4}$/.test(y)) return new Map();
+      const sources = listPeriodDataSourcesForOrderReport();
+      const filtered = new Map();
+      sources.forEach((data, period) => {
+        if (period.startsWith(y + '-')) filtered.set(period, data);
+      });
+      return filtered;
+    }
+
+    let lastAnnualSummaryReport = null;
+
+    function collectAnnualSummaryData(year) {
+      const y = String(year || '').trim();
+      const sources = listPeriodDataSourcesForYear(y);
+      const periods = Array.from(sources.keys()).sort();
+      const groupMonths = new Map();
+
+      periods.forEach(period => {
+        const data = sources.get(period);
+        const groups = buildCalculationGroupsFromPeriodData(data);
+        groups.forEach(group => {
+          const m = deriveGroupWriteoffMetricsFromGroup(data, group);
+          if (!m) return;
+          const gn = m.groupName;
+          if (!groupMonths.has(gn)) groupMonths.set(gn, []);
+          groupMonths.get(gn).push({
+            period,
+            shipment: m.shipmentVat,
+            writeoffTotal: m.writeoffTotal,
+            writeoff26: m.writeoff26,
+            writeoff20: m.writeoff20,
+            wipEnd20: m.wipEnd20,
+            wipEnd26: m.wipEnd26,
+            profit: m.profit,
+            isMultiMember: m.isMultiMember,
+            memberCount: m.memberCount
+          });
+        });
+      });
+
+      const rows = [];
+      groupMonths.forEach((months, gn) => {
+        months.sort((a, b) => a.period.localeCompare(b.period));
+        let shipment = 0;
+        let writeoffTotal = 0;
+        let writeoff26 = 0;
+        let writeoff20 = 0;
+        let profit = 0;
+        months.forEach(m => {
+          shipment += m.shipment;
+          writeoffTotal += m.writeoffTotal;
+          writeoff26 += m.writeoff26;
+          writeoff20 += m.writeoff20;
+          profit += m.profit;
+        });
+        const last = months[months.length - 1];
+        rows.push({
+          groupName: gn,
+          label: gn,
+          isMultiMember: last.isMultiMember,
+          memberCount: last.memberCount,
+          monthCount: months.length,
+          endBalancePeriod: last.period,
+          shipment,
+          writeoffTotal,
+          writeoff26,
+          writeoff20,
+          wipEnd20: pickOrderCardEndBalance(months, 'wipEnd20'),
+          wipEnd26: pickOrderCardEndBalance(months, 'wipEnd26'),
+          profit,
+          marginPct: computeAnnualMarginPct(profit, shipment)
+        });
+      });
+
+      rows.sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+
+      const totals = {
+        shipment: 0,
+        writeoffTotal: 0,
+        writeoff26: 0,
+        writeoff20: 0,
+        wipEnd20: 0,
+        wipEnd26: 0,
+        profit: 0,
+        marginPct: 0
+      };
+      rows.forEach(r => {
+        totals.shipment += r.shipment;
+        totals.writeoffTotal += r.writeoffTotal;
+        totals.writeoff26 += r.writeoff26;
+        totals.writeoff20 += r.writeoff20;
+        totals.wipEnd20 += r.wipEnd20;
+        totals.wipEnd26 += r.wipEnd26;
+        totals.profit += r.profit;
+      });
+      totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipment);
+
+      return {
+        year: y,
+        periods,
+        rows,
+        totals,
+        periodFrom: periods.length ? periods[0] : '',
+        periodTo: periods.length ? periods[periods.length - 1] : ''
+      };
+    }
+
+    function annualSummaryMarginCell(pct) {
+      const n = Number.isFinite(pct) ? pct : 0;
+      return (
+        '<td data-export-value="' +
+        n +
+        '">' +
+        n.toFixed(1) +
+        '%</td>'
+      );
+    }
+
+    function renderAnnualSummaryHtml(report) {
+      if (!report.rows.length) {
+        return (
+          '<p>Нет сохранённых периодов за ' +
+          escapeHtmlForReport(report.year) +
+          ' год в localStorage.</p>'
+        );
+      }
+
+      let html =
+        '<p>Месяцы: <strong>' +
+        escapeHtmlForReport(report.periodFrom) +
+        '</strong> — <strong>' +
+        escapeHtmlForReport(report.periodTo) +
+        '</strong> · групп/заказов: ' +
+        report.rows.length +
+        '</p>';
+      html += '<div class="period-report-scroll-wrap"><table class="annual-summary-table" id="annualSummaryTable">';
+      html +=
+        '<thead><tr><th>Заказ / расчётная группа</th><th>Отгрузка за год</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>НЗП конец</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
+
+      report.rows.forEach(r => {
+        let nameCell = escapeHtmlForReport(r.label);
+        if (r.isMultiMember) {
+          nameCell +=
+            ' <span class="hint" title="Расчётная группа">(' +
+            r.memberCount +
+            ' строк)</span>';
+        }
+        html +=
+          '<tr><td>' +
+          nameCell +
+          '</td>' +
+          orderCardExportNumCell(r.shipment) +
+          orderCardExportNumCell(r.writeoffTotal) +
+          orderCardExportNumCell(r.writeoff26) +
+          orderCardExportNumCell(r.writeoff20) +
+          orderCardExportNumCell(r.wipEnd20) +
+          orderCardExportNumCell(r.wipEnd26) +
+          orderCardExportNumCell(r.profit) +
+          annualSummaryMarginCell(r.marginPct) +
+          '</tr>';
+      });
+
+      const t = report.totals;
+      html +=
+        '<tr class="annual-summary-totals-row" style="font-weight:bold;"><td>Итого</td>' +
+        orderCardExportNumCell(t.shipment) +
+        orderCardExportNumCell(t.writeoffTotal) +
+        orderCardExportNumCell(t.writeoff26) +
+        orderCardExportNumCell(t.writeoff20) +
+        orderCardExportNumCell(t.wipEnd20) +
+        orderCardExportNumCell(t.wipEnd26) +
+        orderCardExportNumCell(t.profit) +
+        annualSummaryMarginCell(t.marginPct) +
+        '</tr>';
+      html += '</tbody></table></div>';
+      html +=
+        '<p class="hint">НЗП конец 20 и НЗП конец — сумма остатков на конец года по каждой группе (последний месяц присутствия в данных), не сумма по месяцам.</p>';
+      return html;
+    }
+
+    function getAnnualSummaryYearInput() {
+      const el = document.getElementById('annualSummaryYear');
+      const raw = el ? String(el.value || '').trim() : '';
+      if (raw && /^\d{4}$/.test(raw)) return raw;
+      const cur = normalizePeriodStr(getCurrentPeriod());
+      if (cur && /^\d{4}-\d{2}$/.test(cur)) return cur.slice(0, 4);
+      return String(new Date().getFullYear());
+    }
+
+    function buildAnnualSummaryReport() {
+      const year = getAnnualSummaryYearInput();
+      const yearEl = document.getElementById('annualSummaryYear');
+      if (yearEl && !String(yearEl.value || '').trim()) yearEl.value = year;
+
+      const statusEl = document.getElementById('annualSummaryStatus');
+      const contentEl = document.getElementById('annualSummaryContent');
+
+      if (!/^\d{4}$/.test(year)) {
+        if (statusEl) statusEl.textContent = 'Укажите год в формате YYYY';
+        return null;
+      }
+
+      const report = collectAnnualSummaryData(year);
+      lastAnnualSummaryReport = report;
+
+      if (contentEl) {
+        contentEl.hidden = false;
+        contentEl.innerHTML = renderAnnualSummaryHtml(report);
+      }
+      if (statusEl) {
+        statusEl.textContent = report.rows.length
+          ? 'Сводка за ' +
+            year +
+            ' год: ' +
+            report.periods.length +
+            ' мес., ' +
+            report.rows.length +
+            ' групп/заказов'
+          : 'Нет данных за ' + year + ' год в localStorage';
+      }
+      return report;
+    }
+
+    function readAnnualSummaryTableForExport() {
+      const table = document.getElementById('annualSummaryTable');
+      if (!table) return null;
+      const headerRow = table.querySelector('thead tr');
+      if (!headerRow) return null;
+      const headers = Array.from(headerRow.querySelectorAll('th')).map(th =>
+        String(th.textContent ?? '').trim()
+      );
+      const colCount = headers.length;
+      const dataRows = [];
+      table.querySelectorAll('tbody tr').forEach(tr => {
+        const tds = Array.from(tr.querySelectorAll('td'));
+        if (!tds.length) return;
+        const row = [];
+        for (let c = 0; c < colCount; c++) {
+          row.push(tds[c] ? exportOrderCardCellValue(tds[c], c) : c === 0 ? '' : 0);
+        }
+        dataRows.push(row);
+      });
+      return { headers, dataRows, colCount };
+    }
+
+    function buildAnnualSummaryExcelColumnWidths(headers, dataRows) {
+      return headers.map((header, colIndex) => {
+        let maxLen = String(header || '').length;
+        dataRows.forEach(row => {
+          const val = row[colIndex];
+          const len =
+            typeof val === 'number'
+              ? colIndex === headers.length - 1
+                ? val.toFixed(1).length + 1
+                : formatMoney(val).length
+              : String(val ?? '').length;
+          if (len > maxLen) maxLen = len;
+        });
+        const minWidth = colIndex === 0 ? 28 : 14;
+        return { wch: Math.min(Math.max(maxLen + 2, minWidth), 36) };
+      });
+    }
+
+    function exportAnnualSummaryToExcel() {
+      const year = getAnnualSummaryYearInput();
+      if (!/^\d{4}$/.test(year)) {
+        alert('Укажите год в формате YYYY');
+        return;
+      }
+
+      if (!lastAnnualSummaryReport || lastAnnualSummaryReport.year !== year) {
+        const report = buildAnnualSummaryReport();
+        if (!report || !report.rows.length) {
+          alert('Нет данных для выгрузки за ' + year + ' год. Сформируйте сводку.');
+          return;
+        }
+      }
+
+      if (typeof XLSX === 'undefined') {
+        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
+        return;
+      }
+
+      const tableData = readAnnualSummaryTableForExport();
+      if (!tableData || !tableData.dataRows.length) {
+        alert('Сначала сформируйте годовую сводку.');
+        return;
+      }
+
+      const report = lastAnnualSummaryReport;
+      const aoa = [];
+      aoa.push(['Годовая сводка по заказам за ' + year + ' год']);
+      if (report.periodFrom && report.periodTo) {
+        aoa.push(['Периоды: ' + report.periodFrom + ' — ' + report.periodTo]);
+      }
+      aoa.push([]);
+      const headerRowIndex = aoa.length;
+      aoa.push(tableData.headers.slice());
+      const dataStartRow = aoa.length;
+      tableData.dataRows.forEach(row => aoa.push(row.slice()));
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const colCount = tableData.colCount;
+      const lastRowIndex = aoa.length - 1;
+
+      for (let r = dataStartRow; r <= lastRowIndex; r++) {
+        for (let c = 1; c < colCount; c++) {
+          setExcelCellNumber(ws, XLSX.utils.encode_cell({ r, c }));
+        }
+      }
+
+      setExcelRowBold(ws, 0, 1);
+      if (headerRowIndex > 1) setExcelRowBold(ws, 1, 1);
+      setExcelRowBold(ws, headerRowIndex, colCount);
+      setExcelRowBold(ws, lastRowIndex, colCount);
+
+      ws['!cols'] = buildAnnualSummaryExcelColumnWidths(tableData.headers, tableData.dataRows);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Годовая сводка');
+      XLSX.writeFile(wb, 'godovaya_svodka_zakazov_' + year + '.xlsx', { cellStyles: true });
+    }
+
     function collectOrderCardReportData(orderName) {
       const target = String(orderName || '').trim();
       if (!target) return null;
@@ -9716,6 +10093,19 @@
     const exportOrderCardBtn = document.getElementById('exportOrderCardBtn');
     if (exportOrderCardBtn) {
       exportOrderCardBtn.addEventListener('click', () => exportOrderCardToExcel());
+    }
+
+    const buildAnnualSummaryBtn = document.getElementById('buildAnnualSummaryBtn');
+    if (buildAnnualSummaryBtn) {
+      buildAnnualSummaryBtn.addEventListener('click', () => buildAnnualSummaryReport());
+    }
+    const exportAnnualSummaryBtn = document.getElementById('exportAnnualSummaryBtn');
+    if (exportAnnualSummaryBtn) {
+      exportAnnualSummaryBtn.addEventListener('click', () => exportAnnualSummaryToExcel());
+    }
+    const annualSummaryYearEl = document.getElementById('annualSummaryYear');
+    if (annualSummaryYearEl && !String(annualSummaryYearEl.value || '').trim()) {
+      annualSummaryYearEl.value = getAnnualSummaryYearInput();
     }
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());

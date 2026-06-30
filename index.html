@@ -2232,11 +2232,13 @@
           <button type="button" id="saveSalaryScenarioBtn" class="secondary">Сохранить сценарий</button>
           <button type="button" id="loadSavedSalaryScenarioBtn" class="secondary">Загрузить сценарий</button>
           <button type="button" id="deleteSavedSalaryScenarioBtn" class="secondary">Удалить сценарий</button>
+          <button type="button" id="checkSalaryScenariosStorageBtn" class="secondary">Проверить хранилище сценариев</button>
         </div>
         <div class="field" style="margin-top: 10px; max-width: 640px;">
           <label for="savedSalaryScenariosList">Сохранённые сценарии</label>
           <select id="savedSalaryScenariosList" size="4" autocomplete="off"></select>
         </div>
+        <div class="hint" id="salaryScenarioStorageDiag" style="margin-top: 8px; font-size: 12px;"></div>
       </div>
       <div class="hint" id="salaryScenarioStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div id="salaryScenarioBalancePanel" class="salary-scenario-balance-panel" hidden></div>
@@ -10744,23 +10746,174 @@
 
     const SALARY_SCENARIOS_STORAGE_KEY = 'salary_scenarios_v1';
     const SALARY_SCENARIOS_MAX = 20;
+    let salaryScenariosMemoryCache = null;
+    let salaryScenariosLastStorageError = null;
 
-    function loadSalaryScenariosFromStorage() {
+    function logSalaryScenariosStorageDiag(action, count, extra) {
+      const msg =
+        '[salary_scenarios_v1] ' +
+        action +
+        ': сценариев=' +
+        count +
+        ', ключ=' +
+        SALARY_SCENARIOS_STORAGE_KEY +
+        (extra != null ? ', ' + extra : '');
+      console.log(msg);
+      return msg;
+    }
+
+    function readSalaryScenariosRawFromLocalStorage() {
+      salaryScenariosLastStorageError = null;
       try {
-        const raw = localStorage.getItem(SALARY_SCENARIOS_STORAGE_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        if (typeof localStorage === 'undefined') {
+          salaryScenariosLastStorageError = 'localStorage недоступен в этом окружении.';
+          return null;
+        }
+        return localStorage.getItem(SALARY_SCENARIOS_STORAGE_KEY);
       } catch (e) {
+        salaryScenariosLastStorageError =
+          'Не удалось прочитать localStorage: ' + (e && e.message ? e.message : e);
+        return null;
+      }
+    }
+
+    function loadSalaryScenariosFromStorage(forceReload) {
+      if (!forceReload && Array.isArray(salaryScenariosMemoryCache)) {
+        return salaryScenariosMemoryCache.slice();
+      }
+
+      const raw = readSalaryScenariosRawFromLocalStorage();
+      if (raw === null && salaryScenariosLastStorageError) {
+        if (Array.isArray(salaryScenariosMemoryCache)) {
+          return salaryScenariosMemoryCache.slice();
+        }
+        return [];
+      }
+      if (!raw) {
+        salaryScenariosMemoryCache = [];
+        logSalaryScenariosStorageDiag('read', 0, 'пусто');
+        return [];
+      }
+
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          salaryScenariosLastStorageError =
+            'Данные salary_scenarios_v1 повреждены: ожидается массив.';
+          console.warn(salaryScenariosLastStorageError);
+          if (Array.isArray(salaryScenariosMemoryCache)) {
+            return salaryScenariosMemoryCache.slice();
+          }
+          return [];
+        }
+        salaryScenariosMemoryCache = parsed;
+        logSalaryScenariosStorageDiag('read', parsed.length, 'символов=' + raw.length);
+        return parsed.slice();
+      } catch (e) {
+        salaryScenariosLastStorageError =
+          'Повреждён JSON в salary_scenarios_v1: ' + (e && e.message ? e.message : e);
+        console.error(salaryScenariosLastStorageError);
+        if (Array.isArray(salaryScenariosMemoryCache)) {
+          return salaryScenariosMemoryCache.slice();
+        }
         return [];
       }
     }
 
     function saveSalaryScenariosToStorage(scenarios) {
-      localStorage.setItem(
-        SALARY_SCENARIOS_STORAGE_KEY,
-        JSON.stringify((scenarios || []).slice(0, SALARY_SCENARIOS_MAX))
-      );
+      const list = Array.isArray(scenarios) ? scenarios.slice(0, SALARY_SCENARIOS_MAX) : [];
+      try {
+        if (typeof localStorage === 'undefined') {
+          throw new Error('localStorage недоступен в этом окружении.');
+        }
+        const json = JSON.stringify(list);
+        localStorage.setItem(SALARY_SCENARIOS_STORAGE_KEY, json);
+        const check = localStorage.getItem(SALARY_SCENARIOS_STORAGE_KEY);
+        if (check !== json) {
+          throw new Error('Запись в localStorage не подтверждена после сохранения.');
+        }
+        salaryScenariosMemoryCache = list.slice();
+        salaryScenariosLastStorageError = null;
+        logSalaryScenariosStorageDiag('saved', list.length, 'символов=' + json.length);
+        return { ok: true, count: list.length, size: json.length };
+      } catch (e) {
+        salaryScenariosLastStorageError = e && e.message ? e.message : String(e);
+        console.error('[salary_scenarios_v1] save failed:', salaryScenariosLastStorageError);
+        salaryScenariosMemoryCache = list.slice();
+        return { ok: false, error: salaryScenariosLastStorageError, count: list.length };
+      }
+    }
+
+    function getSalaryScenariosStorageInfo() {
+      const raw = readSalaryScenariosRawFromLocalStorage();
+      let scenarios = [];
+      let parseError = salaryScenariosLastStorageError;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          scenarios = Array.isArray(parsed) ? parsed : [];
+          if (!Array.isArray(parsed)) {
+            parseError = 'Данные повреждены: ожидается массив.';
+          }
+        } catch (e) {
+          parseError = 'Повреждён JSON: ' + (e && e.message ? e.message : e);
+        }
+      }
+      return {
+        key: SALARY_SCENARIOS_STORAGE_KEY,
+        count: scenarios.length,
+        size: raw ? raw.length : 0,
+        names: scenarios.map(s => s.name || 'Без названия'),
+        error: parseError,
+        available: typeof localStorage !== 'undefined' && !salaryScenariosLastStorageError
+      };
+    }
+
+    function updateSalaryScenariosStorageDiag() {
+      const el = document.getElementById('salaryScenarioStorageDiag');
+      if (!el) return;
+      const info = getSalaryScenariosStorageInfo();
+      if (info.error) {
+        el.textContent =
+          'Хранилище сценариев: ошибка — ' +
+          info.error +
+          ' (ключ ' +
+          SALARY_SCENARIOS_STORAGE_KEY +
+          ').';
+        return;
+      }
+      el.textContent =
+        'Хранилище сценариев: ' +
+        info.count +
+        ' шт., ключ ' +
+        SALARY_SCENARIOS_STORAGE_KEY +
+        (info.size ? ', ~' + info.size + ' симв.' : '');
+    }
+
+    function checkSalaryScenariosStorage() {
+      const info = getSalaryScenariosStorageInfo();
+      const lines = [
+        'Ключ: ' + info.key,
+        'Найдено сценариев: ' + info.count,
+        'Размер данных: ~' + info.size + ' символов'
+      ];
+      if (info.error) {
+        lines.push('Ошибка: ' + info.error);
+      } else if (!info.names.length) {
+        lines.push('Названия: —');
+      } else {
+        lines.push('Названия:');
+        info.names.forEach((n, i) => lines.push('  ' + (i + 1) + '. ' + n));
+      }
+      logSalaryScenariosStorageDiag('check', info.count, 'символов=' + info.size);
+      alert(lines.join('\n'));
+      updateSalaryScenariosStorageDiag();
+    }
+
+    function initSalaryScenariosStorage() {
+      loadSalaryScenariosFromStorage(true);
+      renderSavedSalaryScenariosList();
+      updateSalaryScenariosStorageDiag();
     }
 
     function formatSavedSalaryScenarioDate(iso) {
@@ -10905,7 +11058,7 @@
     function renderSavedSalaryScenariosList(selectId) {
       const select = document.getElementById('savedSalaryScenariosList');
       if (!select) return;
-      const scenarios = loadSalaryScenariosFromStorage().slice().sort((a, b) => {
+      const scenarios = loadSalaryScenariosFromStorage(true).slice().sort((a, b) => {
         return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
       });
       select.innerHTML = '';
@@ -10915,16 +11068,21 @@
         opt.textContent = '— нет сохранённых сценариев —';
         select.appendChild(opt);
         select.disabled = true;
+        updateSalaryScenariosStorageDiag();
         return;
       }
       select.disabled = false;
       scenarios.forEach(s => {
         const opt = document.createElement('option');
-        opt.value = s.id;
+        opt.value = s.id || '';
         opt.textContent = formatSavedSalaryScenarioListLabel(s);
         select.appendChild(opt);
       });
-      if (selectId) select.value = selectId;
+      if (selectId) {
+        const hasId = Array.from(select.options).some(o => o.value === selectId);
+        if (hasId) select.value = selectId;
+      }
+      updateSalaryScenariosStorageDiag();
     }
 
     function buildSalaryScenarioStorageRecord(name, existingId) {
@@ -10996,7 +11154,7 @@
         return;
       }
 
-      let scenarios = loadSalaryScenariosFromStorage();
+      let scenarios = loadSalaryScenariosFromStorage(true);
       const existingIdx = scenarios.findIndex(s => s.name === name);
       if (existingIdx < 0 && scenarios.length >= SALARY_SCENARIOS_MAX) {
         alert(
@@ -11014,13 +11172,23 @@
       } else {
         scenarios.push(snapshot);
       }
-      saveSalaryScenariosToStorage(scenarios);
+      const saveResult = saveSalaryScenariosToStorage(scenarios);
+      if (!saveResult.ok) {
+        alert(
+          'Не удалось сохранить сценарий в localStorage: ' +
+            (saveResult.error || 'неизвестная ошибка')
+        );
+        updateSalaryScenariosStorageDiag();
+        return;
+      }
+      loadSalaryScenariosFromStorage(true);
       renderSavedSalaryScenariosList(snapshot.id);
 
       if (statusEl) {
-        statusEl.textContent =
-          'Сценарий сохранён локально. Он не меняет данные учёта и не отправляется в Google Sheets.';
+        statusEl.textContent = 'Сценарий сохранён локально.';
+        statusEl.style.whiteSpace = '';
       }
+      updateSalaryScenariosStorageDiag();
     }
 
     function syncSalaryScenarioScopeUi(scope, periodOrYear) {
@@ -11054,7 +11222,7 @@
         return;
       }
 
-      const saved = loadSalaryScenariosFromStorage().find(s => s.id === id);
+      const saved = loadSalaryScenariosFromStorage(true).find(s => s.id === id);
       if (!saved) {
         alert('Сценарий не найден.');
         renderSavedSalaryScenariosList();
@@ -11066,34 +11234,22 @@
         scope === 'year' ? String(saved.year || '') : normalizePeriodStr(saved.period || '');
 
       syncSalaryScenarioScopeUi(scope, periodOrYear);
-      const fact = loadSalaryScenarioFact(false, { scope, periodOrYear });
+      const fact = loadSalaryScenarioFact(false, { scope, periodOrYear }, { skipRender: true });
       if (!fact) return;
 
-      const salaryMap = new Map(
-        (saved.salaryRows || []).map(r => [r.groupName, num(r.salaryScenario)])
-      );
-      salaryScenarioSandbox.rows.forEach(r => {
-        if (salaryMap.has(r.groupName)) {
-          r.scenarioSalary = salaryMap.get(r.groupName);
-          r.scenario = null;
-        }
-      });
-
-      const missingGroups = (saved.salaryRows || [])
-        .filter(sr => !salaryScenarioSandbox.rows.some(r => r.groupName === sr.groupName))
-        .map(sr => sr.groupName);
-
+      const { applied, notFound } = applySavedSalaryRowsToSandbox(saved.salaryRows || []);
+      renderSalaryScenarioPanel();
       calculateSalaryScenario();
 
       const nameEl = document.getElementById('salaryScenarioName');
       if (nameEl) nameEl.value = saved.name || '';
 
       const statusEl = document.getElementById('salaryScenarioStatus');
-      let msg = 'Сценарий «' + (saved.name || '') + '» загружен и пересчитан.';
-      if (missingGroups.length) {
-        msg += ' Некоторые группы из сценария не найдены в текущих данных.';
+      const msg = formatLoadSalaryScenarioStatusMessage(saved.name, applied, notFound);
+      if (statusEl) {
+        statusEl.textContent = msg;
+        statusEl.style.whiteSpace = 'pre-line';
       }
-      if (statusEl) statusEl.textContent = msg;
     }
 
     function deleteSavedSalaryScenarioFromStorage() {
@@ -11109,14 +11265,24 @@
         return;
       }
 
-      const scenarios = loadSalaryScenariosFromStorage().filter(s => s.id !== id);
-      saveSalaryScenariosToStorage(scenarios);
+      const scenarios = loadSalaryScenariosFromStorage(true).filter(s => s.id !== id);
+      const saveResult = saveSalaryScenariosToStorage(scenarios);
+      if (!saveResult.ok) {
+        alert(
+          'Не удалось обновить localStorage: ' + (saveResult.error || 'неизвестная ошибка')
+        );
+        updateSalaryScenariosStorageDiag();
+        return;
+      }
+      loadSalaryScenariosFromStorage(true);
       renderSavedSalaryScenariosList();
 
       const statusEl = document.getElementById('salaryScenarioStatus');
       if (statusEl) {
         statusEl.textContent = 'Сценарий удалён из локального хранилища.';
+        statusEl.style.whiteSpace = '';
       }
+      updateSalaryScenariosStorageDiag();
     }
 
     function scenarioFmtMoney(n) {
@@ -11608,7 +11774,8 @@
       return salaryScenarioSandbox;
     }
 
-    function loadSalaryScenarioFact(preserveScenario, loadParams) {
+    function loadSalaryScenarioFact(preserveScenario, loadParams, options) {
+      options = options || {};
       const statusEl = document.getElementById('salaryScenarioStatus');
       let scope;
       let periodOrYear;
@@ -11632,15 +11799,18 @@
       }
       initSalaryScenarioSandboxFromFact(factData, preserveScenario);
       salaryScenarioSandbox.calculated = false;
-      renderSalaryScenarioPanel();
-      if (statusEl) {
-        statusEl.textContent =
-          'Загружен факт: ' +
-          salaryScenarioSandbox.rows.length +
-          ' групп/заказов за ' +
-          factData.periodLabel +
-          (factData.scope === 'year' ? ' (год)' : '') +
-          '.';
+      if (!options.skipRender) {
+        renderSalaryScenarioPanel();
+        if (statusEl) {
+          statusEl.textContent =
+            'Загружен факт: ' +
+            salaryScenarioSandbox.rows.length +
+            ' групп/заказов за ' +
+            factData.periodLabel +
+            (factData.scope === 'year' ? ' (год)' : '') +
+            '.';
+          statusEl.style.whiteSpace = '';
+        }
       }
       return salaryScenarioSandbox;
     }
@@ -12674,7 +12844,11 @@
         deleteSavedSalaryScenarioFromStorage()
       );
     }
-    renderSavedSalaryScenariosList();
+    const checkSalaryScenariosStorageBtn = document.getElementById('checkSalaryScenariosStorageBtn');
+    if (checkSalaryScenariosStorageBtn) {
+      checkSalaryScenariosStorageBtn.addEventListener('click', () => checkSalaryScenariosStorage());
+    }
+    initSalaryScenariosStorage();
 
     document.getElementById('import1cBtn').addEventListener('click', () => document.getElementById('fileInput').click());
 

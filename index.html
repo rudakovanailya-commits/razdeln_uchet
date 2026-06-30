@@ -1300,6 +1300,11 @@
       min-width: 0;
     }
 
+    #annualSummaryCard #annualSummaryContent {
+      min-width: 0;
+      max-width: 100%;
+    }
+
     #annualSummaryCard .year-summary-table-wrap {
       overflow: auto;
       max-height: min(70vh, 680px);
@@ -1308,9 +1313,12 @@
       border: 1px solid #c5e4cf;
       border-radius: 8px;
       background: #f5fbf7;
+      position: relative;
+      isolation: isolate;
     }
 
-    #annualSummaryCard .year-summary-table {
+    #annualSummaryCard .year-summary-table,
+    #annualSummaryCard .annual-summary-table {
       width: max-content;
       min-width: 100%;
       border-collapse: separate;
@@ -1320,7 +1328,9 @@
     }
 
     #annualSummaryCard .year-summary-table th,
-    #annualSummaryCard .year-summary-table td {
+    #annualSummaryCard .year-summary-table td,
+    #annualSummaryCard .annual-summary-table th,
+    #annualSummaryCard .annual-summary-table td {
       border-bottom: 1px solid #d1f0db;
       padding: 8px 10px;
       text-align: right;
@@ -1329,9 +1339,12 @@
       background: #f5fbf7;
     }
 
+    #annualSummaryCard .year-summary-table .year-summary-col-order,
+    #annualSummaryCard .annual-summary-table .year-summary-col-order,
     #annualSummaryCard .year-summary-table th:first-child,
     #annualSummaryCard .year-summary-table td:first-child,
-    #annualSummaryCard .year-summary-table .year-summary-col-order {
+    #annualSummaryCard .annual-summary-table th:first-child,
+    #annualSummaryCard .annual-summary-table td:first-child {
       position: sticky;
       left: 0;
       z-index: 2;
@@ -1345,42 +1358,48 @@
       border-right: 1px solid #c5e4cf;
       box-shadow: 2px 0 4px rgba(15, 23, 42, 0.06);
       background: #f5fbf7 !important;
+      background-clip: padding-box;
     }
 
-    #annualSummaryCard .year-summary-table thead th {
+    #annualSummaryCard .year-summary-table thead th,
+    #annualSummaryCard .annual-summary-table thead th {
       position: sticky;
       top: 0;
       z-index: 3;
       color: #14532d;
       font-weight: 600;
       background: #e0f2e8 !important;
+      background-clip: padding-box;
     }
 
+    #annualSummaryCard .year-summary-table thead th.year-summary-col-order,
+    #annualSummaryCard .annual-summary-table thead th.year-summary-col-order,
     #annualSummaryCard .year-summary-table thead th:first-child,
-    #annualSummaryCard .year-summary-table thead th.year-summary-col-order {
+    #annualSummaryCard .annual-summary-table thead th:first-child {
+      left: 0;
+      top: 0;
       z-index: 5;
       background: #e0f2e8 !important;
     }
 
-    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td {
+    #annualSummaryCard .year-summary-table tbody td.year-summary-col-order,
+    #annualSummaryCard .annual-summary-table tbody td.year-summary-col-order {
+      background: #f5fbf7 !important;
+    }
+
+    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td,
+    #annualSummaryCard .annual-summary-table tr.annual-summary-totals-row td {
       font-weight: 600;
       background: #ecf8f0 !important;
       border-top: 2px solid #9ec9ae;
     }
 
+    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td.year-summary-col-order,
+    #annualSummaryCard .annual-summary-table tr.annual-summary-totals-row td.year-summary-col-order,
     #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td:first-child,
-    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td.year-summary-col-order {
+    #annualSummaryCard .annual-summary-table tr.annual-summary-totals-row td:first-child {
       z-index: 4;
       background: #d8efe0 !important;
-    }
-
-    /* Совместимость: annual-summary-table = year-summary-table */
-    #annualSummaryCard .annual-summary-table {
-      width: max-content;
-      min-width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      margin-top: 0;
     }
 
     #aiAnalysisCard .ai-analysis-output-panel {
@@ -11051,42 +11070,161 @@
       }));
     }
 
+    function buildSavedSalaryScenarioMap(savedRows) {
+      const map = new Map();
+      (savedRows || []).forEach(sr => {
+        const key = normalizeSalaryScenarioGroupName(sr.groupName);
+        if (!key) return;
+        map.set(key, {
+          groupName: sr.groupName,
+          salaryScenario: num(sr.salaryScenario),
+          salaryFact: num(sr.salaryFact),
+          salaryDelta:
+            sr.salaryDelta != null
+              ? num(sr.salaryDelta)
+              : num(sr.salaryScenario) - num(sr.salaryFact)
+        });
+      });
+      return map;
+    }
+
+    function lookupSavedSalaryScenario(savedSalaryMap, groupName) {
+      if (!savedSalaryMap || !groupName) return null;
+      const key = normalizeSalaryScenarioGroupName(groupName);
+      if (savedSalaryMap.has(key)) return savedSalaryMap.get(key);
+      for (const entry of savedSalaryMap.values()) {
+        if (normalizeSalaryScenarioGroupName(entry.groupName) === key) return entry;
+      }
+      return null;
+    }
+
     function applySavedSalaryRowsToSandbox(savedRows) {
-      const index = buildSalaryScenarioGroupIndex(salaryScenarioSandbox.rows);
+      const savedMap = buildSavedSalaryScenarioMap(savedRows);
+      const before = (salaryScenarioSandbox.rows || []).map(r => ({
+        groupName: r.groupName,
+        salary: num(r.salary),
+        scenarioSalary: num(r.scenarioSalary)
+      }));
+      console.log('[salary_scenarios_v1] load savedRows:', savedRows);
+      console.log('[salary_scenarios_v1] load savedMap:', Array.from(savedMap.entries()));
+      console.log('[salary_scenarios_v1] rows before apply:', before);
+
       const applied = [];
       const notFound = [];
 
-      (savedRows || []).forEach(sr => {
-        const row = findSalaryScenarioRowByGroupName(index, sr.groupName);
+      savedMap.forEach(savedRow => {
+        const row = findSalaryScenarioRowByGroupName(
+          buildSalaryScenarioGroupIndex(salaryScenarioSandbox.rows),
+          savedRow.groupName
+        );
         if (!row) {
-          notFound.push(sr.groupName);
+          notFound.push(savedRow.groupName);
           return;
         }
-        const salaryScenario = num(sr.salaryScenario);
-        row.scenarioSalary = salaryScenario;
+        row.scenarioSalary = savedRow.salaryScenario;
         row.scenario = null;
-        const delta =
-          sr.salaryDelta != null ? num(sr.salaryDelta) : salaryScenario - num(row.salary);
+        const delta = savedRow.salaryScenario - num(row.salary);
         if (Math.abs(delta) >= RECONCILE_EPS) {
-          applied.push({ groupName: row.groupName, delta });
+          applied.push({
+            groupName: row.groupName,
+            salaryFact: num(row.salary),
+            salaryScenario: savedRow.salaryScenario,
+            delta
+          });
         }
       });
 
-      return { applied, notFound };
+      const after = (salaryScenarioSandbox.rows || []).map(r => ({
+        groupName: r.groupName,
+        salary: num(r.salary),
+        scenarioSalary: num(r.scenarioSalary)
+      }));
+      console.log('[salary_scenarios_v1] rows after apply:', after);
+      console.log('[salary_scenarios_v1] applied:', applied, 'notFound:', notFound);
+
+      return { applied, notFound, savedMap };
     }
 
-    function formatLoadSalaryScenarioStatusMessage(scenarioName, applied, notFound) {
+    function verifySalaryScenarioInputsAfterRender(applied) {
+      const mismatches = [];
+      (applied || []).forEach(ch => {
+        const idx = salaryScenarioSandbox.rows.findIndex(r => r.groupName === ch.groupName);
+        if (idx < 0) return;
+        const inp = document.querySelector(
+          '#salaryScenarioTableWrap input.salary-scenario-input[data-row-index="' + idx + '"]'
+        );
+        const domVal = inp ? num(inp.value) : null;
+        const rowVal = num(salaryScenarioSandbox.rows[idx].scenarioSalary);
+        if (
+          Math.abs(domVal - ch.salaryScenario) > RECONCILE_EPS ||
+          Math.abs(rowVal - ch.salaryScenario) > RECONCILE_EPS
+        ) {
+          mismatches.push({
+            groupName: ch.groupName,
+            rowIndex: idx,
+            expected: ch.salaryScenario,
+            domVal,
+            rowVal
+          });
+        }
+      });
+      return mismatches;
+    }
+
+    function syncSalaryScenarioInputsFromRows(applied) {
+      (applied || []).forEach(ch => {
+        const idx = salaryScenarioSandbox.rows.findIndex(r => r.groupName === ch.groupName);
+        if (idx < 0) return;
+        salaryScenarioSandbox.rows[idx].scenarioSalary = ch.salaryScenario;
+        const inp = document.querySelector(
+          '#salaryScenarioTableWrap input.salary-scenario-input[data-row-index="' + idx + '"]'
+        );
+        if (inp) inp.value = scenarioFmtMoney(ch.salaryScenario);
+      });
+    }
+
+    function countSalaryScenarioChangedRows(rows) {
+      return (rows || []).filter(
+        r => Math.abs(num(r.scenarioSalary) - num(r.salary)) >= RECONCILE_EPS
+      ).length;
+    }
+
+    function formatLoadSalaryScenarioStatusMessage(scenarioName, applied, notFound, options) {
+      options = options || {};
       const parts = [];
-      if (!applied.length) {
+      const savedChangeCount = options.savedChangeCount || 0;
+      const tableChangeCount = options.tableChangeCount || 0;
+
+      if (options.applyFailed) {
+        parts.push(
+          'Изменения сценария найдены, но не применены к таблице.'
+        );
+      } else if (!applied.length) {
         parts.push(
           'Сценарий загружен, но изменений ЗП не найдено. Возможно, сценарий был сохранён без изменений или названия групп изменились.'
         );
       } else {
         parts.push('Сценарий «' + (scenarioName || '') + '» загружен и пересчитан.');
-        parts.push('Загружено изменений: ' + applied.length);
+        parts.push('Применено изменений: ' + applied.length);
         applied.forEach(ch => {
-          parts.push('- ' + ch.groupName + ': ' + scenarioFmtMoney(ch.delta));
+          parts.push(
+            '- ' +
+              ch.groupName +
+              ': ' +
+              scenarioFmtMoney(ch.salaryFact) +
+              ' → ' +
+              scenarioFmtMoney(ch.salaryScenario) +
+              ' (' +
+              scenarioFmtMoney(ch.delta) +
+              ')'
+          );
         });
+      }
+
+      if (savedChangeCount > 0 && tableChangeCount === 0 && !options.applyFailed) {
+        parts.push(
+          'Изменения сценария найдены, но не применены к таблице.'
+        );
       }
       if (notFound.length) {
         parts.push('Некоторые группы из сценария не найдены в текущих данных.');
@@ -11298,18 +11436,52 @@
         scope === 'year' ? String(saved.year || '') : normalizePeriodStr(saved.period || '');
 
       syncSalaryScenarioScopeUi(scope, periodOrYear);
-      const fact = loadSalaryScenarioFact(false, { scope, periodOrYear }, { skipRender: true });
+      const savedMap = buildSavedSalaryScenarioMap(saved.salaryRows || []);
+      const savedChangeCount = getSalaryScenarioChangeStats(saved.salaryRows || []).changedCount;
+
+      const fact = loadSalaryScenarioFact(
+        false,
+        { scope, periodOrYear },
+        { skipRender: true, savedSalaryMap: savedMap }
+      );
       if (!fact) return;
 
       const { applied, notFound } = applySavedSalaryRowsToSandbox(saved.salaryRows || []);
       renderSalaryScenarioPanel();
-      calculateSalaryScenario();
+
+      let mismatches = verifySalaryScenarioInputsAfterRender(applied);
+      if (mismatches.length) {
+        console.warn('[salary_scenarios_v1] input mismatches after render:', mismatches);
+        syncSalaryScenarioInputsFromRows(applied);
+        mismatches = verifySalaryScenarioInputsAfterRender(applied);
+      }
+
+      calculateSalaryScenario({ skipReadFromDom: true, keepStatus: true });
+
+      const tableChangeCount = countSalaryScenarioChangedRows(salaryScenarioSandbox.rows);
+      console.log(
+        '[salary_scenarios_v1] changedRows after calculate:',
+        salaryScenarioSandbox.rows
+          .filter(r => Math.abs(num(r.scenarioSalary) - num(r.salary)) >= RECONCILE_EPS)
+          .map(r => ({
+            groupName: r.groupName,
+            salary: num(r.salary),
+            scenarioSalary: num(r.scenarioSalary)
+          }))
+      );
 
       const nameEl = document.getElementById('salaryScenarioName');
       if (nameEl) nameEl.value = saved.name || '';
 
       const statusEl = document.getElementById('salaryScenarioStatus');
-      const msg = formatLoadSalaryScenarioStatusMessage(saved.name, applied, notFound);
+      const applyFailed =
+        savedChangeCount > 0 &&
+        (applied.length === 0 || tableChangeCount === 0 || mismatches.length > 0);
+      const msg = formatLoadSalaryScenarioStatusMessage(saved.name, applied, notFound, {
+        savedChangeCount,
+        tableChangeCount,
+        applyFailed
+      });
       if (statusEl) {
         statusEl.textContent = msg;
         statusEl.style.whiteSpace = 'pre-line';
@@ -11806,7 +11978,7 @@
       return { scope, periodOrYear };
     }
 
-    function initSalaryScenarioSandboxFromFact(factData, preserveScenario) {
+    function initSalaryScenarioSandboxFromFact(factData, preserveScenario, savedSalaryMap) {
       const key = getSalaryScenarioPeriodKey(factData.scope, factData.periodLabel);
       const prevMap = new Map();
       if (
@@ -11828,12 +12000,20 @@
         totalSalary: factData.totalSalary,
         totalShipmentNoVat: factData.totalShipmentNoVat,
         calculated: false,
-        rows: factData.rows.map(r => ({
-          ...r,
-          scenarioSalary:
-            prevMap.has(r.groupName) ? num(prevMap.get(r.groupName)) : num(r.salary),
-          scenario: null
-        }))
+        rows: factData.rows.map(r => {
+          const saved = lookupSavedSalaryScenario(savedSalaryMap, r.groupName);
+          let scenarioSalary = num(r.salary);
+          if (saved) {
+            scenarioSalary = saved.salaryScenario;
+          } else if (prevMap.has(r.groupName)) {
+            scenarioSalary = num(prevMap.get(r.groupName));
+          }
+          return {
+            ...r,
+            scenarioSalary,
+            scenario: null
+          };
+        })
       };
       return salaryScenarioSandbox;
     }
@@ -11861,7 +12041,11 @@
         salaryScenarioSandbox = null;
         return null;
       }
-      initSalaryScenarioSandboxFromFact(factData, preserveScenario);
+      initSalaryScenarioSandboxFromFact(
+        factData,
+        preserveScenario,
+        options.savedSalaryMap || null
+      );
       salaryScenarioSandbox.calculated = false;
       if (!options.skipRender) {
         renderSalaryScenarioPanel();
@@ -11908,8 +12092,11 @@
       return parts.join(' ');
     }
 
-    function calculateSalaryScenario() {
-      readSalaryScenarioInputsFromDom();
+    function calculateSalaryScenario(options) {
+      options = options || {};
+      if (!options.skipReadFromDom) {
+        readSalaryScenarioInputsFromDom();
+      }
       if (!salaryScenarioSandbox) {
         const loaded = loadSalaryScenarioFact(false);
         if (!loaded) return null;
@@ -11935,13 +12122,14 @@
 
       renderSalaryScenarioPanel();
 
-      const hasChanges = salaryScenarioHasSalaryChanges(salaryScenarioSandbox.rows);
-      if (statusEl) {
+      if (!options.keepStatus && statusEl) {
+        const hasChanges = salaryScenarioHasSalaryChanges(salaryScenarioSandbox.rows);
         statusEl.textContent = buildSalaryScenarioStatusMessage(
           unbalanced,
           hasChanges,
           salaryScenarioSandbox.rows.length
         );
+        statusEl.style.whiteSpace = '';
         if (unbalanced) statusEl.classList.add('salary-scenario-unbalanced');
         else statusEl.classList.remove('salary-scenario-unbalanced');
       }
@@ -12187,7 +12375,7 @@
           '<td><input type="text" inputmode="decimal" class="salary-scenario-input" data-row-index="' +
           rowIndex +
           '" value="' +
-          scenarioFmtMoney(r.scenarioSalary) +
+          escapeHtmlForReport(scenarioFmtMoney(num(r.scenarioSalary))) +
           '"></td>';
         const deltaClass =
           calculated && sc ? salaryScenarioDeltaCellClass(sc.salaryDelta) : '';

@@ -1300,25 +1300,87 @@
       min-width: 0;
     }
 
-    #annualSummaryCard .annual-summary-table {
-      width: 100%;
-      border-collapse: collapse;
+    #annualSummaryCard .year-summary-table-wrap {
+      overflow: auto;
+      max-height: min(70vh, 680px);
+      max-width: 100%;
       margin-top: 10px;
+      border: 1px solid #c5e4cf;
+      border-radius: 8px;
+      background: #f5fbf7;
     }
 
-    #annualSummaryCard .annual-summary-table th,
-    #annualSummaryCard .annual-summary-table td {
+    #annualSummaryCard .year-summary-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+      margin-top: 0;
+    }
+
+    #annualSummaryCard .year-summary-table th,
+    #annualSummaryCard .year-summary-table td {
       border-bottom: 1px solid #d1f0db;
-      padding: 8px;
+      padding: 8px 10px;
       text-align: right;
       white-space: nowrap;
+      vertical-align: middle;
+      background: #f5fbf7;
     }
 
-    #annualSummaryCard .annual-summary-table th:first-child,
-    #annualSummaryCard .annual-summary-table td:first-child {
+    #annualSummaryCard .year-summary-table th:first-child,
+    #annualSummaryCard .year-summary-table td:first-child,
+    #annualSummaryCard .year-summary-table .year-summary-col-order {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      min-width: 360px;
+      max-width: 420px;
+      width: 390px;
       text-align: left;
       white-space: normal;
-      min-width: 200px;
+      word-break: break-word;
+      line-height: 1.35;
+      border-right: 1px solid #c5e4cf;
+      box-shadow: 2px 0 4px rgba(15, 23, 42, 0.06);
+      background: #f5fbf7 !important;
+    }
+
+    #annualSummaryCard .year-summary-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      color: #14532d;
+      font-weight: 600;
+      background: #e0f2e8 !important;
+    }
+
+    #annualSummaryCard .year-summary-table thead th:first-child,
+    #annualSummaryCard .year-summary-table thead th.year-summary-col-order {
+      z-index: 5;
+      background: #e0f2e8 !important;
+    }
+
+    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td {
+      font-weight: 600;
+      background: #ecf8f0 !important;
+      border-top: 2px solid #9ec9ae;
+    }
+
+    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td:first-child,
+    #annualSummaryCard .year-summary-table tr.annual-summary-totals-row td.year-summary-col-order {
+      z-index: 4;
+      background: #d8efe0 !important;
+    }
+
+    /* Совместимость: annual-summary-table = year-summary-table */
+    #annualSummaryCard .annual-summary-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-top: 0;
     }
 
     #aiAnalysisCard .ai-analysis-output-panel {
@@ -9975,9 +10037,9 @@
         '</strong> · групп/заказов: ' +
         report.rows.length +
         '</p>';
-      html += '<div class="period-report-scroll-wrap"><table class="annual-summary-table" id="annualSummaryTable">';
+      html += '<div class="year-summary-table-wrap"><table class="year-summary-table annual-summary-table" id="annualSummaryTable">';
       html +=
-        '<thead><tr><th>Заказ / расчётная группа</th><th>Отгрузка с НДС</th><th>Отгрузка без НДС</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>НЗП конец</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
+        '<thead><tr><th class="year-summary-col-order">Заказ / расчётная группа</th><th>Отгрузка с НДС</th><th>Отгрузка без НДС</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>НЗП конец</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
 
       report.rows.forEach(r => {
         let nameCell = escapeHtmlForReport(r.label);
@@ -9988,7 +10050,9 @@
             ' строк)</span>';
         }
         html +=
-          '<tr><td>' +
+          '<tr><td class="year-summary-col-order" title="' +
+          escapeHtmlForReport(r.label || '') +
+          '">' +
           nameCell +
           '</td>' +
           orderCardExportNumCell(r.shipmentVat) +
@@ -10005,7 +10069,7 @@
 
       const t = report.totals;
       html +=
-        '<tr class="annual-summary-totals-row" style="font-weight:bold;"><td>Итого</td>' +
+        '<tr class="annual-summary-totals-row" style="font-weight:bold;"><td class="year-summary-col-order">Итого</td>' +
         orderCardExportNumCell(t.shipmentVat) +
         orderCardExportNumCell(t.shipmentNoVat) +
         orderCardExportNumCell(t.writeoffTotal) +

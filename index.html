@@ -87,6 +87,13 @@
       color: #f0fdf4;
     }
 
+    button.secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+      filter: grayscale(0.15);
+    }
+
     .table-wrap {
       overflow-x: auto;
     }
@@ -1524,6 +1531,14 @@
       box-sizing: border-box;
     }
 
+    #salaryScenarioCard #applySalaryScenarioBtn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+      background: #94a3b8;
+      color: #f8fafc;
+    }
+
     #salaryScenarioYearField[hidden] {
       display: none;
     }
@@ -2199,7 +2214,7 @@
         </div>
         <button type="button" id="loadSalaryScenarioBtn" class="secondary">Загрузить факт</button>
         <button type="button" id="calcSalaryScenarioBtn" class="secondary">Рассчитать сценарий</button>
-        <button type="button" id="applySalaryScenarioBtn" class="secondary" disabled title="На первом этапе недоступно">Применить сценарий</button>
+        <button type="button" id="applySalaryScenarioBtn" class="secondary" disabled title="Функция будет доступна позже">Применить сценарий (позже)</button>
       </div>
       <div class="period-report-controls" style="margin-top: 4px;">
         <button type="button" id="salaryScenarioCopyFactBtn" class="secondary">Скопировать факт в сценарий</button>
@@ -10761,6 +10776,132 @@
       });
     }
 
+    function normalizeSalaryScenarioGroupName(name) {
+      return String(name || '')
+        .replace(/[\r\n]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+    }
+
+    function buildSalaryScenarioGroupIndex(rows) {
+      const exact = new Map();
+      const normalized = new Map();
+      (rows || []).forEach(r => {
+        if (!r || !r.groupName) return;
+        exact.set(r.groupName, r);
+        const key = normalizeSalaryScenarioGroupName(r.groupName);
+        if (!normalized.has(key)) normalized.set(key, r);
+      });
+      return { exact, normalized };
+    }
+
+    function findSalaryScenarioRowByGroupName(index, groupName) {
+      if (!index || !groupName) return null;
+      if (index.exact.has(groupName)) return index.exact.get(groupName);
+      const key = normalizeSalaryScenarioGroupName(groupName);
+      return index.normalized.get(key) || null;
+    }
+
+    function getSalaryScenarioRowDelta(row) {
+      return num(row.salaryScenario) - num(row.salary);
+    }
+
+    function getSalaryScenarioChangeStats(salaryRows) {
+      let changedCount = 0;
+      let totalIncreases = 0;
+      let totalDecreases = 0;
+      (salaryRows || []).forEach(r => {
+        const delta =
+          r.salaryDelta != null
+            ? num(r.salaryDelta)
+            : num(r.salaryScenario) - num(r.salaryFact);
+        if (Math.abs(delta) < RECONCILE_EPS) return;
+        changedCount += 1;
+        if (delta > 0) totalIncreases += delta;
+        else totalDecreases += Math.abs(delta);
+      });
+      return { changedCount, totalIncreases, totalDecreases };
+    }
+
+    function collectSalaryScenarioRowsFromSandbox() {
+      readSalaryScenarioInputsFromDom();
+      return (salaryScenarioSandbox.rows || []).map(r => ({
+        groupName: r.groupName,
+        salaryFact: num(r.salary),
+        salaryScenario: num(r.scenarioSalary),
+        salaryDelta: num(r.scenarioSalary) - num(r.salary)
+      }));
+    }
+
+    function applySavedSalaryRowsToSandbox(savedRows) {
+      const index = buildSalaryScenarioGroupIndex(salaryScenarioSandbox.rows);
+      const applied = [];
+      const notFound = [];
+
+      (savedRows || []).forEach(sr => {
+        const row = findSalaryScenarioRowByGroupName(index, sr.groupName);
+        if (!row) {
+          notFound.push(sr.groupName);
+          return;
+        }
+        const salaryScenario = num(sr.salaryScenario);
+        row.scenarioSalary = salaryScenario;
+        row.scenario = null;
+        const delta =
+          sr.salaryDelta != null ? num(sr.salaryDelta) : salaryScenario - num(row.salary);
+        if (Math.abs(delta) >= RECONCILE_EPS) {
+          applied.push({ groupName: row.groupName, delta });
+        }
+      });
+
+      return { applied, notFound };
+    }
+
+    function formatLoadSalaryScenarioStatusMessage(scenarioName, applied, notFound) {
+      const parts = [];
+      if (!applied.length) {
+        parts.push(
+          'Сценарий загружен, но изменений ЗП не найдено. Возможно, сценарий был сохранён без изменений или названия групп изменились.'
+        );
+      } else {
+        parts.push('Сценарий «' + (scenarioName || '') + '» загружен и пересчитан.');
+        parts.push('Загружено изменений: ' + applied.length);
+        applied.forEach(ch => {
+          parts.push('- ' + ch.groupName + ': ' + scenarioFmtMoney(ch.delta));
+        });
+      }
+      if (notFound.length) {
+        parts.push('Некоторые группы из сценария не найдены в текущих данных.');
+      }
+      return parts.join('\n');
+    }
+
+    function formatSavedSalaryScenarioListLabel(s) {
+      const periodLabel =
+        s.mode === 'year' ? String(s.year || '—') : String(s.period || '—');
+      const stats = getSalaryScenarioChangeStats(s.salaryRows || []);
+      const changedCount =
+        s.changedRowsCount != null ? Number(s.changedRowsCount) : stats.changedCount;
+      const totalIncreases =
+        s.totalIncreases != null ? num(s.totalIncreases) : stats.totalIncreases;
+      const totalDecreases =
+        s.totalDecreases != null ? num(s.totalDecreases) : stats.totalDecreases;
+      const parts = [
+        s.name || 'Без названия',
+        periodLabel,
+        changedCount + ' изм.'
+      ];
+      if (totalIncreases > RECONCILE_EPS) {
+        parts.push('+' + scenarioFmtMoney(totalIncreases));
+      }
+      if (totalDecreases > RECONCILE_EPS) {
+        parts.push('−' + scenarioFmtMoney(totalDecreases));
+      }
+      parts.push(formatSavedSalaryScenarioDate(s.createdAt));
+      return parts.join(' · ');
+    }
+
     function renderSavedSalaryScenariosList(selectId) {
       const select = document.getElementById('savedSalaryScenariosList');
       if (!select) return;
@@ -10780,14 +10921,7 @@
       scenarios.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s.id;
-        const periodLabel =
-          s.mode === 'year' ? String(s.year || '—') : String(s.period || '—');
-        opt.textContent =
-          (s.name || 'Без названия') +
-          ' · ' +
-          periodLabel +
-          ' · ' +
-          formatSavedSalaryScenarioDate(s.createdAt);
+        opt.textContent = formatSavedSalaryScenarioListLabel(s);
         select.appendChild(opt);
       });
       if (selectId) select.value = selectId;
@@ -10795,24 +10929,23 @@
 
     function buildSalaryScenarioStorageRecord(name, existingId) {
       const sandbox = salaryScenarioSandbox;
+      const allRows = collectSalaryScenarioRowsFromSandbox();
+      const changedRows = allRows.filter(r => Math.abs(r.salaryDelta) >= RECONCILE_EPS);
+      const changeStats = getSalaryScenarioChangeStats(changedRows);
+
       let profitFact = 0;
       let profitScenario = 0;
       let wipEndFact = 0;
       let wipEndScenario = 0;
       let shipmentNoVat = 0;
 
-      const salaryRows = sandbox.rows.map(r => {
+      sandbox.rows.forEach(r => {
         const sc = r.scenario;
         profitFact += num(r.profit);
         profitScenario += sc ? num(sc.profitScenario) : 0;
         wipEndFact += num(r.wipEndTotal);
         wipEndScenario += sc ? num(sc.wipEndTotalScenario) : 0;
         shipmentNoVat += num(r.shipmentNoVat);
-        return {
-          groupName: r.groupName,
-          salaryFact: num(r.salary),
-          salaryScenario: num(r.scenarioSalary)
-        };
       });
 
       const totalSalaryScenario = sandbox.rows.reduce((s, r) => s + num(r.scenarioSalary), 0);
@@ -10823,7 +10956,10 @@
         name,
         createdAt: new Date().toISOString(),
         mode: sandbox.scope === 'year' ? 'year' : 'month',
-        salaryRows,
+        salaryRows: changedRows,
+        changedRowsCount: changeStats.changedCount,
+        totalIncreases: changeStats.totalIncreases,
+        totalDecreases: changeStats.totalDecreases,
         totals: {
           totalSalaryFact: num(sandbox.totalSalary),
           totalSalaryScenario,

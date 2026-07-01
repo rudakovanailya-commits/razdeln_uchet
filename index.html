@@ -11217,37 +11217,35 @@
       return name;
     }
 
-    function mgmtPdfShortControlLabels(controlComments) {
-      const parts = mgmtExtractControlWarnings(controlComments);
-      if (!parts.length) return [];
-      let hasWriteoff = false;
-      let hasNegativeWip = false;
-      parts.forEach(part => {
-        if (/Списание|ограничен|больше итого|больше расходов|расхожден/i.test(part)) {
-          hasWriteoff = true;
-        }
-        if (/Отрицательное НЗП/i.test(part)) {
-          hasNegativeWip = true;
-        }
-      });
-      const labels = [];
-      if (hasWriteoff) labels.push('Контроль списания');
-      if (hasNegativeWip) labels.push('отрицательное НЗП');
-      if (!labels.length) labels.push('Контроль');
-      return labels;
-    }
-
     function buildMgmtPdfProblemReasons(row) {
       const reasons = [];
+      const controlWarnings = mgmtExtractControlWarnings(row.controlComments);
+
       if (row.profit < -RECONCILE_EPS) reasons.push('Убыток');
-      mgmtPdfShortControlLabels(row.controlComments).forEach(label => reasons.push(label));
+
+      if (controlWarnings.length) {
+        let hasWriteoffControl = false;
+        let hasNegativeWipControl = false;
+        controlWarnings.forEach(part => {
+          if (/Отрицательное НЗП/i.test(part)) {
+            hasNegativeWipControl = true;
+          } else if (/Списание|ограничен|больше итого|больше расходов|расхожден/i.test(part)) {
+            hasWriteoffControl = true;
+          }
+        });
+        if (hasWriteoffControl) reasons.push('Контроль');
+        if (hasNegativeWipControl) reasons.push('Отрицательное НЗП');
+        if (!hasWriteoffControl && !hasNegativeWipControl) reasons.push('Контроль');
+      }
+
       if (row.wipEnd20 > RECONCILE_EPS && row.shipmentNoVat <= RECONCILE_EPS) {
         reasons.push('НЗП без отгрузки');
       }
       if (row.wipEnd20 > 300000) reasons.push('Большой НЗП');
       if (row.marginPct < 2 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Низкая маржа');
       if (row.marginPct > 30 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Высокая маржа');
-      return reasons;
+
+      return reasons.filter((reason, index) => reasons.indexOf(reason) === index);
     }
 
     function mgmtPdfProblemScore(row) {

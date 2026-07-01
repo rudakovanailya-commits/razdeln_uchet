@@ -1753,11 +1753,17 @@
       gap: 6px;
     }
 
+    #mgmtReportsCard .mgmt-reports-kpi-card.mgmt-reports-kpi-card-main {
+      border: 1px solid #99f6e4;
+      background: linear-gradient(180deg, #f0fdfa 0%, #ffffff 100%);
+      box-shadow: 0 2px 8px rgba(13, 148, 136, 0.08);
+    }
+
     #mgmtReportsCard .mgmt-reports-kpi-label {
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #94a3b8;
+      color: #64748b;
       font-weight: 600;
     }
 
@@ -1765,6 +1771,20 @@
       font-size: 13px;
       color: #cbd5e1;
       font-style: italic;
+    }
+
+    #mgmtReportsCard .mgmt-reports-kpi-value-filled {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f766e;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+    }
+
+    #mgmtReportsCard .mgmt-reports-kpi-card:not(.mgmt-reports-kpi-card-main) .mgmt-reports-kpi-value-filled {
+      font-size: 17px;
+      font-weight: 600;
+      color: #115e59;
     }
 
     #mgmtReportsCard .mgmt-reports-section {
@@ -1803,6 +1823,123 @@
       align-items: center;
       justify-content: center;
       padding: 16px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table-wrap {
+      overflow: auto;
+      max-height: min(52vh, 420px);
+      max-width: 100%;
+      border: 1px solid #d1e7df;
+      border-radius: 10px;
+      background: #f8fdfb;
+    }
+
+    #mgmtReportsCard .mgmt-reports-two-col .mgmt-reports-data-table-wrap {
+      max-height: min(38vh, 300px);
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table th,
+    #mgmtReportsCard .mgmt-reports-data-table td {
+      border-bottom: 1px solid #dcefe6;
+      padding: 8px 10px;
+      text-align: right;
+      white-space: nowrap;
+      vertical-align: middle;
+      background: #f8fdfb;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table .mgmt-reports-col-order {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      min-width: 280px;
+      max-width: 380px;
+      width: 320px;
+      text-align: left;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.35;
+      border-right: 1px solid #c5e4cf;
+      box-shadow: 2px 0 4px rgba(15, 23, 42, 0.05);
+      background: #f8fdfb !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      color: #14532d;
+      font-weight: 600;
+      background: #e8f5ef !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table thead th.mgmt-reports-col-order {
+      left: 0;
+      top: 0;
+      z-index: 5;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tbody td.mgmt-reports-col-order {
+      background: #f8fdfb !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-loss td {
+      background: #fef2f2 !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-loss td.mgmt-reports-col-order {
+      background: #fef2f2 !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-low-margin td {
+      background: #fff7ed !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-low-margin td.mgmt-reports-col-order {
+      background: #fff7ed !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-high-margin td {
+      background: #eff6ff !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-high-margin td.mgmt-reports-col-order {
+      background: #eff6ff !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-wip td {
+      background: #fffbeb !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-data-table tr.mgmt-problem-wip td.mgmt-reports-col-order {
+      background: #fffbeb !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-empty-note {
+      padding: 16px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      color: #64748b;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    #mgmtReportsCard .mgmt-reports-comment-cell {
+      text-align: left;
+      white-space: normal;
+      min-width: 160px;
+      max-width: 280px;
+      font-size: 12px;
+      color: #475569;
     }
 
     #mgmtReportsCard .mgmt-reports-two-col {
@@ -2590,35 +2727,28 @@
         </div>
         <p class="mgmt-reports-status" id="mgmtReportsYearStatus"></p>
         <div id="mgmtReportsYearContent" hidden>
-          <div class="mgmt-reports-kpi-grid" id="mgmtReportsYearKpi">
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Выручка за год</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Прибыль за год</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Маржа</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">НЗП конец года</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-          </div>
+          <div class="mgmt-reports-kpi-grid" id="mgmtReportsYearKpi"></div>
           <div class="mgmt-reports-two-col">
             <div class="mgmt-reports-section">
               <h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>
-              <div class="mgmt-reports-placeholder">Годовой рейтинг по выручке — в следующей версии</div>
+              <div id="mgmtReportsYearTopRevenue"></div>
             </div>
             <div class="mgmt-reports-section">
               <h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>
-              <div class="mgmt-reports-placeholder">Годовой рейтинг по прибыли — в следующей версии</div>
+              <div id="mgmtReportsYearTopProfit"></div>
             </div>
           </div>
           <div class="mgmt-reports-section">
             <h3 class="mgmt-reports-section-title">Проблемные заказы</h3>
-            <div class="mgmt-reports-placeholder">Сводка проблемных заказов за год — в следующей версии</div>
+            <div id="mgmtReportsYearProblems"></div>
           </div>
           <div class="mgmt-reports-section">
             <h3 class="mgmt-reports-section-title">Помесячная динамика</h3>
-            <div class="mgmt-reports-placeholder">График выручки, прибыли и маржи по месяцам — в следующей версии</div>
+            <div id="mgmtReportsYearMonthly"></div>
           </div>
           <div class="mgmt-reports-section">
             <h3 class="mgmt-reports-section-title">Полная таблица заказов за год</h3>
-            <div class="mgmt-reports-table-wrap">
-              <span class="mgmt-reports-placeholder" style="border:none;background:transparent;">Годовая таблица с прокруткой — в следующей версии</span>
-            </div>
+            <div id="mgmtReportsYearFullTable"></div>
           </div>
         </div>
       </div>
@@ -10494,22 +10624,484 @@
       }
     }
 
-    function showMgmtReportYearPlaceholder() {
+    function formatMgmtPeriodMonthLabel(period) {
+      const p = normalizePeriodStr(period);
+      if (!/^\d{4}-\d{2}$/.test(p)) return String(period || '—');
+      const [y, m] = p.split('-');
+      const months = [
+        'янв',
+        'фев',
+        'мар',
+        'апр',
+        'май',
+        'июн',
+        'июл',
+        'авг',
+        'сен',
+        'окт',
+        'ноя',
+        'дек'
+      ];
+      const mi = Number(m);
+      return (months[mi - 1] || m) + ' ' + y;
+    }
+
+    function collectMgmtYearMonthlyRows(periods, sources) {
+      return periods.map(period => {
+        const data = sources.get(period);
+        if (!data) return null;
+        const periodTotals = computePeriodTotals(data);
+        const groups = buildCalculationGroupsFromPeriodData(data);
+        let shipmentVat = 0;
+        let shipmentNoVat = 0;
+        let writeoffTotal = 0;
+        let writeoff20 = 0;
+        let writeoff26 = 0;
+        let wipEnd20 = 0;
+        groups.forEach(group => {
+          const row = collectAiAnalysisRowForPeriod(
+            data,
+            group,
+            periodTotals.totalShipmentNoVat,
+            periodTotals.totalSalary
+          );
+          shipmentVat += row.shipmentVat;
+          shipmentNoVat += row.shipmentNoVat;
+          writeoffTotal += row.writeoffTotal;
+          writeoff20 += row.writeoff20;
+          writeoff26 += row.writeoff26;
+          wipEnd20 += row.wipEnd20;
+        });
+        const profit = shipmentNoVat - writeoffTotal;
+        return {
+          period,
+          monthLabel: formatMgmtPeriodMonthLabel(period),
+          shipmentVat,
+          shipmentNoVat,
+          writeoffTotal,
+          writeoff20,
+          writeoff26,
+          profit,
+          marginPct: computeAnnualMarginPct(profit, shipmentNoVat),
+          wipEnd20
+        };
+      }).filter(Boolean);
+    }
+
+    function collectMgmtYearReportData(year) {
+      const y = String(year || '').trim();
+      const base = collectAiAnalysisData('year', y);
+      if (base.error) {
+        return {
+          error: base.error,
+          year: y,
+          periods: [],
+          rows: [],
+          totals: null,
+          monthlyRows: []
+        };
+      }
+      const totals = {
+        shipmentVat: 0,
+        shipmentNoVat: 0,
+        writeoffTotal: 0,
+        writeoff20: 0,
+        writeoff26: 0,
+        profit: 0,
+        wipEnd20: 0,
+        wipEnd26: 0,
+        marginPct: 0
+      };
+      base.rows.forEach(r => {
+        totals.shipmentVat += r.shipmentVat;
+        totals.shipmentNoVat += r.shipmentNoVat;
+        totals.writeoffTotal += r.writeoffTotal;
+        totals.writeoff20 += r.writeoff20;
+        totals.writeoff26 += r.writeoff26;
+        totals.wipEnd20 += r.wipEnd20;
+        totals.wipEnd26 += r.wipEnd26;
+      });
+      totals.profit = totals.shipmentNoVat - totals.writeoffTotal;
+      totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipmentNoVat);
+
+      const sources = listPeriodDataSourcesForYear(y);
+      const monthlyRows = collectMgmtYearMonthlyRows(base.periods, sources);
+
+      return {
+        year: y,
+        periods: base.periods,
+        rows: base.rows,
+        totals,
+        monthlyRows
+      };
+    }
+
+    function mgmtRenderEmptyNote(text) {
+      return '<div class="mgmt-reports-empty-note">' + escapeHtmlForReport(text) + '</div>';
+    }
+
+    function mgmtFmtPctCell(val) {
+      const n = Number.isFinite(num(val)) ? num(val) : 0;
+      return '<td>' + n.toFixed(1).replace('.', ',') + '%</td>';
+    }
+
+    function mgmtRenderOrderCell(row) {
+      let html = escapeHtmlForReport(row.groupName || '—');
+      if (row.isMultiMember && row.memberCount > 1) {
+        html += ' <span class="hint">(' + row.memberCount + ')</span>';
+      }
+      return (
+        '<td class="mgmt-reports-col-order" title="' +
+        escapeHtmlForReport(row.groupName || '') +
+        '">' +
+        html +
+        '</td>'
+      );
+    }
+
+    function mgmtRenderDataTable(headers, rowsHtml, extraClass) {
+      let html = '<div class="mgmt-reports-data-table-wrap"><table class="mgmt-reports-data-table';
+      if (extraClass) html += ' ' + extraClass;
+      html += '"><thead><tr>';
+      headers.forEach((title, i) => {
+        html +=
+          '<th' + (i === 0 ? ' class="mgmt-reports-col-order"' : '') + '>' + escapeHtmlForReport(title) + '</th>';
+      });
+      html += '</tr></thead><tbody>' + (rowsHtml || '') + '</tbody></table></div>';
+      return html;
+    }
+
+    function mgmtExtractControlWarnings(controlComments) {
+      const cc = String(controlComments || '');
+      if (!cc || cc === '—') return [];
+      const warnings = [];
+      const parts = cc
+        .split(/\s*\|\s*/)
+        .flatMap(p => p.split(';'))
+        .map(s => s.trim())
+        .filter(Boolean);
+      const warningPatterns = [
+        /Отрицательное НЗП/i,
+        /Списание 20 больше/i,
+        /ограничен/i,
+        /Списание 26 больше/i,
+        /больше итого/i,
+        /расхожден/i
+      ];
+      parts.forEach(part => {
+        if (warningPatterns.some(re => re.test(part)) && !warnings.includes(part)) {
+          warnings.push(part);
+        }
+      });
+      return warnings;
+    }
+
+    function buildMgmtProblemReasons(row) {
+      const reasons = [];
+      if (row.profit < -RECONCILE_EPS) reasons.push('Убыток');
+      if (row.marginPct < 2 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Низкая маржа');
+      if (row.marginPct > 30 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Высокая маржа');
+      if (row.wipEnd20 > RECONCILE_EPS && row.shipmentNoVat <= RECONCILE_EPS) {
+        reasons.push('НЗП без отгрузки');
+      }
+      if (row.wipEnd20 > 300000) reasons.push('Большой НЗП');
+      const controlWarnings = mgmtExtractControlWarnings(row.controlComments);
+      if (controlWarnings.length) {
+        reasons.push('Контроль: ' + controlWarnings.join('; '));
+      }
+      return reasons;
+    }
+
+    function mgmtProblemRowClass(row) {
+      const reasons = buildMgmtProblemReasons(row);
+      if (!reasons.length) return '';
+      if (reasons.some(r => r === 'Убыток' || r.startsWith('Контроль:'))) return 'mgmt-problem-loss';
+      if (reasons.includes('Большой НЗП') || reasons.includes('НЗП без отгрузки')) return 'mgmt-problem-wip';
+      if (reasons.includes('Высокая маржа')) return 'mgmt-problem-high-margin';
+      if (reasons.includes('Низкая маржа')) return 'mgmt-problem-low-margin';
+      return 'mgmt-problem-warn';
+    }
+
+    function renderMgmtYearKpiHtml(totals) {
+      const cards = [
+        {
+          label: 'Выручка за год / отгрузка без НДС',
+          value: formatMoney(totals.shipmentNoVat),
+          main: true
+        },
+        { label: 'Прибыль за год', value: formatMoney(totals.profit), main: true },
+        {
+          label: 'Маржа',
+          value: totals.marginPct.toFixed(1).replace('.', ',') + '%',
+          main: true
+        },
+        { label: 'НЗП конец года', value: formatMoney(totals.wipEnd20), main: true },
+        { label: 'Отгрузка с НДС', value: formatMoney(totals.shipmentVat) },
+        { label: 'Списано всего', value: formatMoney(totals.writeoffTotal) },
+        { label: 'Списано с 20', value: formatMoney(totals.writeoff20) },
+        { label: 'Списано с 26', value: formatMoney(totals.writeoff26) }
+      ];
+      return cards
+        .map(
+          c =>
+            '<div class="mgmt-reports-kpi-card' +
+            (c.main ? ' mgmt-reports-kpi-card-main' : '') +
+            '"><span class="mgmt-reports-kpi-label">' +
+            escapeHtmlForReport(c.label) +
+            '</span><span class="mgmt-reports-kpi-value-filled">' +
+            escapeHtmlForReport(c.value) +
+            '</span></div>'
+        )
+        .join('');
+    }
+
+    function renderMgmtYearTopRevenue(rows) {
+      const top = [...rows].sort((a, b) => b.shipmentNoVat - a.shipmentNoVat).slice(0, 5);
+      if (!top.length) return mgmtRenderEmptyNote('Нет данных.');
+      const body = top
+        .map(
+          r =>
+            '<tr>' +
+            mgmtRenderOrderCell(r) +
+            orderCardExportNumCell(r.shipmentNoVat) +
+            orderCardExportNumCell(r.writeoffTotal) +
+            orderCardExportNumCell(r.profit) +
+            mgmtFmtPctCell(r.marginPct) +
+            orderCardExportNumCell(r.wipEnd20) +
+            '</tr>'
+        )
+        .join('');
+      return mgmtRenderDataTable(
+        [
+          'Заказ / расчётная группа',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец'
+        ],
+        body
+      );
+    }
+
+    function renderMgmtYearTopProfit(rows) {
+      const top = [...rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
+      if (!top.length) return mgmtRenderEmptyNote('Нет данных.');
+      const body = top
+        .map(
+          r =>
+            '<tr>' +
+            mgmtRenderOrderCell(r) +
+            orderCardExportNumCell(r.profit) +
+            mgmtFmtPctCell(r.marginPct) +
+            orderCardExportNumCell(r.shipmentNoVat) +
+            orderCardExportNumCell(r.writeoffTotal) +
+            orderCardExportNumCell(r.wipEnd20) +
+            '</tr>'
+        )
+        .join('');
+      return mgmtRenderDataTable(
+        [
+          'Заказ / расчётная группа',
+          'Прибыль',
+          'Маржа %',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'НЗП конец'
+        ],
+        body
+      );
+    }
+
+    function renderMgmtYearProblems(rows) {
+      const problems = rows
+        .map(r => ({ ...r, reasons: buildMgmtProblemReasons(r) }))
+        .filter(r => r.reasons.length > 0)
+        .sort((a, b) => {
+          const aLoss = a.profit < -RECONCILE_EPS ? 1 : 0;
+          const bLoss = b.profit < -RECONCILE_EPS ? 1 : 0;
+          if (bLoss !== aLoss) return bLoss - aLoss;
+          return a.groupName.localeCompare(b.groupName, 'ru');
+        });
+      if (!problems.length) return mgmtRenderEmptyNote('Проблемных заказов не найдено.');
+      const body = problems
+        .map(r => {
+          const cls = mgmtProblemRowClass(r);
+          return (
+            '<tr class="' +
+            cls +
+            '">' +
+            mgmtRenderOrderCell(r) +
+            orderCardExportNumCell(r.shipmentNoVat) +
+            orderCardExportNumCell(r.profit) +
+            mgmtFmtPctCell(r.marginPct) +
+            orderCardExportNumCell(r.wipEnd20) +
+            '<td class="mgmt-reports-comment-cell">' +
+            escapeHtmlForReport(r.reasons.join('; ')) +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      return mgmtRenderDataTable(
+        [
+          'Заказ / расчётная группа',
+          'Отгрузка без НДС',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец',
+          'Причина / статус'
+        ],
+        body
+      );
+    }
+
+    function renderMgmtYearMonthly(monthlyRows) {
+      if (!monthlyRows.length) return mgmtRenderEmptyNote('Нет данных.');
+      const body = monthlyRows
+        .map(
+          m =>
+            '<tr>' +
+            '<td class="mgmt-reports-col-order">' +
+            escapeHtmlForReport(m.monthLabel) +
+            '</td>' +
+            orderCardExportNumCell(m.shipmentVat) +
+            orderCardExportNumCell(m.shipmentNoVat) +
+            orderCardExportNumCell(m.writeoffTotal) +
+            orderCardExportNumCell(m.writeoff20) +
+            orderCardExportNumCell(m.writeoff26) +
+            orderCardExportNumCell(m.profit) +
+            mgmtFmtPctCell(m.marginPct) +
+            orderCardExportNumCell(m.wipEnd20) +
+            '</tr>'
+        )
+        .join('');
+      return mgmtRenderDataTable(
+        [
+          'Месяц',
+          'Отгрузка с НДС',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'Списано с 20',
+          'Списано с 26',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец'
+        ],
+        body,
+        'mgmt-reports-monthly-table'
+      );
+    }
+
+    function renderMgmtYearFullTable(rows) {
+      if (!rows.length) return mgmtRenderEmptyNote('Нет данных.');
+      const sorted = [...rows].sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+      const body = sorted
+        .map(r => {
+          const comment = r.controlComments && r.controlComments !== '—' ? r.controlComments : '';
+          return (
+            '<tr>' +
+            mgmtRenderOrderCell(r) +
+            orderCardExportNumCell(r.shipmentVat) +
+            orderCardExportNumCell(r.shipmentNoVat) +
+            orderCardExportNumCell(r.writeoffTotal) +
+            orderCardExportNumCell(r.writeoff26) +
+            orderCardExportNumCell(r.writeoff20) +
+            orderCardExportNumCell(r.wipEnd20) +
+            orderCardExportNumCell(r.wipEnd26) +
+            orderCardExportNumCell(r.profit) +
+            mgmtFmtPctCell(r.marginPct) +
+            '<td class="mgmt-reports-comment-cell">' +
+            escapeHtmlForReport(comment) +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      return mgmtRenderDataTable(
+        [
+          'Заказ / расчётная группа',
+          'Отгрузка с НДС',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'Списано с 26',
+          'Списано с 20',
+          'НЗП конец 20',
+          'НЗП конец',
+          'Прибыль',
+          'Маржа %',
+          'Комментарий / контроль'
+        ],
+        body,
+        'mgmt-reports-full-table'
+      );
+    }
+
+    function renderMgmtYearReportSections(report) {
+      const emptyMsg = 'Нет данных за выбранный год в localStorage.';
+      const kpiEl = document.getElementById('mgmtReportsYearKpi');
+      const topRevEl = document.getElementById('mgmtReportsYearTopRevenue');
+      const topProfitEl = document.getElementById('mgmtReportsYearTopProfit');
+      const problemsEl = document.getElementById('mgmtReportsYearProblems');
+      const monthlyEl = document.getElementById('mgmtReportsYearMonthly');
+      const fullEl = document.getElementById('mgmtReportsYearFullTable');
+
+      if (report.error || !report.rows.length) {
+        if (kpiEl) kpiEl.innerHTML = '';
+        if (topRevEl) topRevEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
+        if (topProfitEl) topProfitEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
+        if (problemsEl) problemsEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
+        if (monthlyEl) monthlyEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
+        if (fullEl) fullEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
+        return;
+      }
+
+      if (kpiEl) kpiEl.innerHTML = renderMgmtYearKpiHtml(report.totals);
+      if (topRevEl) topRevEl.innerHTML = renderMgmtYearTopRevenue(report.rows);
+      if (topProfitEl) topProfitEl.innerHTML = renderMgmtYearTopProfit(report.rows);
+      if (problemsEl) problemsEl.innerHTML = renderMgmtYearProblems(report.rows);
+      if (monthlyEl) monthlyEl.innerHTML = renderMgmtYearMonthly(report.monthlyRows);
+      if (fullEl) fullEl.innerHTML = renderMgmtYearFullTable(report.rows);
+    }
+
+    let lastMgmtYearReport = null;
+
+    function buildMgmtYearReport() {
       populateMgmtReportsYearSelect();
       const yearEl = document.getElementById('mgmtReportsYear');
       const year = yearEl ? String(yearEl.value || '').trim() : '';
       const statusEl = document.getElementById('mgmtReportsYearStatus');
       const contentEl = document.getElementById('mgmtReportsYearContent');
+
       if (!year || !/^\d{4}$/.test(year)) {
         if (statusEl) statusEl.textContent = 'Укажите год.';
         if (contentEl) contentEl.hidden = true;
-        return;
+        return null;
       }
+
+      const report = collectMgmtYearReportData(year);
+      lastMgmtYearReport = report;
+
       if (contentEl) contentEl.hidden = false;
+      renderMgmtYearReportSections(report);
+
       if (statusEl) {
-        statusEl.textContent =
-          'Каркас годового отчёта за ' + year + ' готов. Расчёты и данные учёта не изменяются.';
+        if (report.error || !report.rows.length) {
+          statusEl.textContent = 'Нет данных за выбранный год в localStorage.';
+        } else {
+          statusEl.textContent =
+            'Годовой отчёт за ' +
+            year +
+            ': ' +
+            report.periods.length +
+            ' мес., ' +
+            report.rows.length +
+            ' групп/заказов';
+        }
       }
+      return report;
+    }
+
+    function showMgmtReportYearPlaceholder() {
+      buildMgmtYearReport();
     }
 
     function initMgmtReportsUi() {
@@ -13400,7 +13992,7 @@
     }
     const buildMgmtReportYearBtn = document.getElementById('buildMgmtReportYearBtn');
     if (buildMgmtReportYearBtn) {
-      buildMgmtReportYearBtn.addEventListener('click', () => showMgmtReportYearPlaceholder());
+      buildMgmtReportYearBtn.addEventListener('click', () => buildMgmtYearReport());
     }
     initMgmtReportsUi();
 

@@ -1624,6 +1624,194 @@
       display: none;
     }
 
+    #mgmtReportsCard.mgmt-reports-card {
+      margin-top: 24px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+      border: 1px solid #e8ecf1;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, 0.07);
+      padding: 20px 22px 24px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-head h2 {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+
+    #mgmtReportsCard .mgmt-reports-subtitle {
+      margin: 0 0 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #64748b;
+      max-width: 720px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+      padding: 4px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      width: fit-content;
+      max-width: 100%;
+    }
+
+    #mgmtReportsCard .mgmt-reports-tab {
+      margin: 0;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+
+    #mgmtReportsCard .mgmt-reports-tab:hover {
+      color: #0f172a;
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    #mgmtReportsCard .mgmt-reports-tab.active {
+      background: #fff;
+      color: #0f766e;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+      font-weight: 600;
+    }
+
+    #mgmtReportsCard .mgmt-reports-panel[hidden] {
+      display: none !important;
+    }
+
+    #mgmtReportsCard .mgmt-reports-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-period-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #f0fdfa;
+      border: 1px solid #99f6e4;
+      color: #0f766e;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #mgmtReportsCard .mgmt-reports-year-field {
+      width: 120px;
+      flex: 0 0 auto;
+    }
+
+    #mgmtReportsCard .mgmt-reports-build-btn {
+      background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+      color: #fff;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 8px;
+      margin-right: 0;
+    }
+
+    #mgmtReportsCard .mgmt-reports-build-btn:hover {
+      filter: brightness(1.05);
+    }
+
+    #mgmtReportsCard .mgmt-reports-status {
+      margin: 0 0 16px;
+      font-size: 13px;
+      color: #64748b;
+      min-height: 1.2em;
+    }
+
+    #mgmtReportsCard .mgmt-reports-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-kpi-card {
+      padding: 16px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px dashed #cbd5e1;
+      min-height: 88px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-kpi-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    #mgmtReportsCard .mgmt-reports-kpi-value {
+      font-size: 13px;
+      color: #cbd5e1;
+      font-style: italic;
+    }
+
+    #mgmtReportsCard .mgmt-reports-section {
+      margin-bottom: 22px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-section-title {
+      margin: 0 0 10px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e293b;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    #mgmtReportsCard .mgmt-reports-placeholder {
+      padding: 20px 16px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    #mgmtReportsCard .mgmt-reports-table-wrap {
+      margin-top: 8px;
+      border-radius: 10px;
+      border: 1px dashed #cbd5e1;
+      background: #f8fafc;
+      min-height: 120px;
+      max-height: 320px;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
     #periodReportTableWrap table {
       width: max-content;
       min-width: 100%;
@@ -2339,6 +2527,101 @@
         </p>
       </div>
       <div id="salaryScenarioTableWrap" class="salary-scenario-scroll-wrap" hidden></div>
+    </div>
+
+    <div class="card mgmt-reports-card" id="mgmtReportsCard">
+      <div class="mgmt-reports-head">
+        <h2>Красивые управленческие отчёты</h2>
+        <p class="mgmt-reports-subtitle">
+          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Раздел в разработке — ниже показана будущая структура отчётов без изменения учётных данных.
+        </p>
+      </div>
+      <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
+        <button type="button" class="mgmt-reports-tab active" data-mgmt-tab="period" role="tab" aria-selected="true" aria-controls="mgmtReportsPanelPeriod" id="mgmtReportsTabPeriod">Отчёт за период</button>
+        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="year" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelYear" id="mgmtReportsTabYear">Годовой отчёт</button>
+      </div>
+
+      <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
+        <div class="mgmt-reports-controls">
+          <div class="mgmt-reports-period-badge">
+            <span>Период:</span>
+            <span id="mgmtReportsCurrentPeriod">—</span>
+          </div>
+          <button type="button" id="buildMgmtReportPeriodBtn" class="mgmt-reports-build-btn">Сформировать отчёт за период</button>
+        </div>
+        <p class="mgmt-reports-status" id="mgmtReportsPeriodStatus"></p>
+        <div id="mgmtReportsPeriodContent" hidden>
+          <div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi">
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Выручка</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Прибыль</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Маржа</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">НЗП конец</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+          </div>
+          <div class="mgmt-reports-two-col">
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>
+              <div class="mgmt-reports-placeholder">Диаграмма и таблица рейтинга — в следующей версии</div>
+            </div>
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>
+              <div class="mgmt-reports-placeholder">Диаграмма и таблица рейтинга — в следующей версии</div>
+            </div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Проблемные заказы</h3>
+            <div class="mgmt-reports-placeholder">Заказы с отрицательной маржой, перерасходом и прочими сигналами — в следующей версии</div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>
+            <div class="mgmt-reports-table-wrap">
+              <span class="mgmt-reports-placeholder" style="border:none;background:transparent;">Таблица с горизонтальной прокруткой — в следующей версии</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mgmtReportsPanelYear" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabYear" hidden>
+        <div class="mgmt-reports-controls">
+          <div class="field mgmt-reports-year-field">
+            <label for="mgmtReportsYear">Год</label>
+            <select id="mgmtReportsYear" autocomplete="off"></select>
+          </div>
+          <button type="button" id="buildMgmtReportYearBtn" class="mgmt-reports-build-btn">Сформировать годовой отчёт</button>
+        </div>
+        <p class="mgmt-reports-status" id="mgmtReportsYearStatus"></p>
+        <div id="mgmtReportsYearContent" hidden>
+          <div class="mgmt-reports-kpi-grid" id="mgmtReportsYearKpi">
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Выручка за год</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Прибыль за год</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Маржа</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">НЗП конец года</span><span class="mgmt-reports-kpi-value">скоро</span></div>
+          </div>
+          <div class="mgmt-reports-two-col">
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>
+              <div class="mgmt-reports-placeholder">Годовой рейтинг по выручке — в следующей версии</div>
+            </div>
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>
+              <div class="mgmt-reports-placeholder">Годовой рейтинг по прибыли — в следующей версии</div>
+            </div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Проблемные заказы</h3>
+            <div class="mgmt-reports-placeholder">Сводка проблемных заказов за год — в следующей версии</div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Помесячная динамика</h3>
+            <div class="mgmt-reports-placeholder">График выручки, прибыли и маржи по месяцам — в следующей версии</div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Полная таблица заказов за год</h3>
+            <div class="mgmt-reports-table-wrap">
+              <span class="mgmt-reports-placeholder" style="border:none;background:transparent;">Годовая таблица с прокруткой — в следующей версии</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
@@ -5808,6 +6091,7 @@
     function markLoadedPeriodOnScreen(period) {
       loadedPeriodOnScreen = normalizePeriodStr(period) || '';
       hidePeriodDataMismatchHint();
+      updateMgmtReportsCurrentPeriodLabel();
     }
 
     function hidePeriodDataMismatchHint() {
@@ -10151,6 +10435,89 @@
       return getDefaultAnnualSummaryYear();
     }
 
+    function populateMgmtReportsYearSelect() {
+      const el = document.getElementById('mgmtReportsYear');
+      if (!el || el.tagName !== 'SELECT') return;
+      const minYear = parseInt(WORKING_PERIOD_MIN.slice(0, 4), 10);
+      const maxYear = parseInt(WORKING_PERIOD_MAX.slice(0, 4), 10);
+      const prev = String(el.value || '').trim();
+      el.innerHTML = '';
+      for (let y = maxYear; y >= minYear; y--) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        el.appendChild(opt);
+      }
+      const defaultYear = getDefaultAnnualSummaryYear();
+      const pick =
+        prev && /^\d{4}$/.test(prev) && Number(prev) >= minYear && Number(prev) <= maxYear
+          ? prev
+          : defaultYear;
+      el.value = pick;
+    }
+
+    function updateMgmtReportsCurrentPeriodLabel() {
+      const el = document.getElementById('mgmtReportsCurrentPeriod');
+      if (!el) return;
+      const period = normalizePeriodStr(getCurrentPeriod());
+      el.textContent = period || 'не выбран';
+    }
+
+    function switchMgmtReportsTab(tabId) {
+      const periodPanel = document.getElementById('mgmtReportsPanelPeriod');
+      const yearPanel = document.getElementById('mgmtReportsPanelYear');
+      document.querySelectorAll('#mgmtReportsCard .mgmt-reports-tab').forEach(btn => {
+        const active = btn.getAttribute('data-mgmt-tab') === tabId;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      if (periodPanel) periodPanel.hidden = tabId !== 'period';
+      if (yearPanel) yearPanel.hidden = tabId !== 'year';
+    }
+
+    function showMgmtReportPeriodPlaceholder() {
+      updateMgmtReportsCurrentPeriodLabel();
+      const period = normalizePeriodStr(getCurrentPeriod());
+      const statusEl = document.getElementById('mgmtReportsPeriodStatus');
+      const contentEl = document.getElementById('mgmtReportsPeriodContent');
+      if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+        if (statusEl) {
+          statusEl.textContent = 'Выберите период вверху страницы (формат YYYY-MM).';
+        }
+        if (contentEl) contentEl.hidden = true;
+        return;
+      }
+      if (contentEl) contentEl.hidden = false;
+      if (statusEl) {
+        statusEl.textContent =
+          'Каркас отчёта за ' + period + ' готов. Расчёты и данные учёта не изменяются.';
+      }
+    }
+
+    function showMgmtReportYearPlaceholder() {
+      populateMgmtReportsYearSelect();
+      const yearEl = document.getElementById('mgmtReportsYear');
+      const year = yearEl ? String(yearEl.value || '').trim() : '';
+      const statusEl = document.getElementById('mgmtReportsYearStatus');
+      const contentEl = document.getElementById('mgmtReportsYearContent');
+      if (!year || !/^\d{4}$/.test(year)) {
+        if (statusEl) statusEl.textContent = 'Укажите год.';
+        if (contentEl) contentEl.hidden = true;
+        return;
+      }
+      if (contentEl) contentEl.hidden = false;
+      if (statusEl) {
+        statusEl.textContent =
+          'Каркас годового отчёта за ' + year + ' готов. Расчёты и данные учёта не изменяются.';
+      }
+    }
+
+    function initMgmtReportsUi() {
+      populateMgmtReportsYearSelect();
+      updateMgmtReportsCurrentPeriodLabel();
+      switchMgmtReportsTab('period');
+    }
+
     function buildAnnualSummaryReport() {
       ensureAnnualSummaryControlsEditable();
       const year = getAnnualSummaryYearInput();
@@ -13021,6 +13388,21 @@
       exportAnnualSummaryBtn.addEventListener('click', () => exportAnnualSummaryToExcel());
     }
     ensureAnnualSummaryControlsEditable();
+
+    document.querySelectorAll('#mgmtReportsCard .mgmt-reports-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchMgmtReportsTab(btn.getAttribute('data-mgmt-tab') || 'period');
+      });
+    });
+    const buildMgmtReportPeriodBtn = document.getElementById('buildMgmtReportPeriodBtn');
+    if (buildMgmtReportPeriodBtn) {
+      buildMgmtReportPeriodBtn.addEventListener('click', () => showMgmtReportPeriodPlaceholder());
+    }
+    const buildMgmtReportYearBtn = document.getElementById('buildMgmtReportYearBtn');
+    if (buildMgmtReportYearBtn) {
+      buildMgmtReportYearBtn.addEventListener('click', () => showMgmtReportYearPlaceholder());
+    }
+    initMgmtReportsUi();
 
     const aiAnalysisScopeEl = document.getElementById('aiAnalysisScope');
     if (aiAnalysisScopeEl) {

@@ -1727,6 +1727,25 @@
       filter: brightness(1.05);
     }
 
+    #mgmtReportsCard .mgmt-reports-pdf-btn {
+      background: #fff;
+      color: #0f766e;
+      border: 1px solid #99f6e4;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 8px;
+    }
+
+    #mgmtReportsCard .mgmt-reports-pdf-btn:hover:not(:disabled) {
+      background: #f0fdfa;
+      filter: none;
+    }
+
+    #mgmtReportsCard .mgmt-reports-pdf-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
     #mgmtReportsCard .mgmt-reports-status {
       margin: 0 0 16px;
       font-size: 13px;
@@ -2724,6 +2743,7 @@
             <select id="mgmtReportsYear" autocomplete="off"></select>
           </div>
           <button type="button" id="buildMgmtReportYearBtn" class="mgmt-reports-build-btn">Сформировать годовой отчёт</button>
+          <button type="button" id="exportMgmtYearPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF-отчёт</button>
         </div>
         <p class="mgmt-reports-status" id="mgmtReportsYearStatus"></p>
         <div id="mgmtReportsYearContent" hidden>
@@ -11159,6 +11179,530 @@
     }
     window.buildMgmtYearReport = buildMgmtYearReport;
 
+    function getMgmtYearReportForExport(year) {
+      const y = String(year || '').trim();
+      if (
+        lastMgmtYearReport &&
+        lastMgmtYearReport.year === y &&
+        !lastMgmtYearReport.error &&
+        lastMgmtYearReport.rows &&
+        lastMgmtYearReport.rows.length
+      ) {
+        return lastMgmtYearReport;
+      }
+      return collectMgmtYearReportData(y);
+    }
+
+    function formatMgmtPdfDateTime(date) {
+      const d = date instanceof Date ? date : new Date();
+      return d.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function mgmtFmtPdfPct(val) {
+      const n = Number.isFinite(num(val)) ? num(val) : 0;
+      return n.toFixed(1).replace('.', ',') + '%';
+    }
+
+    function mgmtPdfGroupLabel(row) {
+      let name = String(row.groupName || '—');
+      if (row.isMultiMember && row.memberCount > 1) {
+        name += ' (' + row.memberCount + ')';
+      }
+      return name;
+    }
+
+    function mgmtPdfProblemScore(row) {
+      const reasons = buildMgmtProblemReasons(row);
+      let score = 0;
+      if (reasons.includes('Убыток')) score += 1000;
+      if (reasons.some(r => r.startsWith('Контроль:'))) score += 800;
+      if (reasons.includes('Большой НЗП')) score += 600 + num(row.wipEnd20) / 1000;
+      if (reasons.includes('НЗП без отгрузки')) score += 500;
+      if (reasons.includes('Высокая маржа')) score += 300;
+      if (reasons.includes('Низкая маржа')) score += 200;
+      return score;
+    }
+
+    function pickMgmtPdfProblemRows(rows, limit) {
+      const maxRows = limit || 15;
+      return rows
+        .map(r => ({
+          ...r,
+          reasons: buildMgmtProblemReasons(r),
+          _score: mgmtPdfProblemScore(r)
+        }))
+        .filter(r => r.reasons.length > 0)
+        .sort((a, b) => {
+          if (b._score !== a._score) return b._score - a._score;
+          return a.groupName.localeCompare(b.groupName, 'ru');
+        })
+        .slice(0, maxRows);
+    }
+
+    function mgmtPdfProblemFillColor(row) {
+      const cls = mgmtProblemRowClass(row);
+      if (cls === 'mgmt-problem-loss') return [254, 242, 242];
+      if (cls === 'mgmt-problem-wip') return [255, 251, 235];
+      if (cls === 'mgmt-problem-high-margin') return [239, 246, 255];
+      if (cls === 'mgmt-problem-low-margin') return [255, 247, 237];
+      return [248, 253, 251];
+    }
+
+    function mgmtPdfArrayBufferToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    let mgmtPdfLibsPromise = null;
+    let mgmtPdfFontBase64 = null;
+
+    function getMgmtPdfJsPDF() {
+      if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+      if (window.jsPDF) return window.jsPDF;
+      return null;
+    }
+
+    function mgmtPdfAutoTableReady() {
+      const JsPDF = getMgmtPdfJsPDF();
+      if (!JsPDF) return false;
+      try {
+        const probe = new JsPDF();
+        return typeof probe.autoTable === 'function';
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function loadMgmtPdfLibraries() {
+      const JsPDF = getMgmtPdfJsPDF();
+      if (JsPDF && mgmtPdfAutoTableReady()) {
+        return Promise.resolve(JsPDF);
+      }
+      if (mgmtPdfLibsPromise) return mgmtPdfLibsPromise;
+
+      mgmtPdfLibsPromise = new Promise((resolve, reject) => {
+        const fail = message => {
+          const err = new Error(message);
+          err.mgmtPdfMessage = message;
+          reject(err);
+        };
+
+        const loadAutoTable = () => {
+          if (mgmtPdfAutoTableReady()) {
+            resolve(getMgmtPdfJsPDF());
+            return;
+          }
+          if (document.getElementById('mgmtPdfAutoTableScript')) {
+            fail(
+              'Не удалось инициализировать jspdf-autotable. Проверьте подключение к интернету.'
+            );
+            return;
+          }
+          const s2 = document.createElement('script');
+          s2.id = 'mgmtPdfAutoTableScript';
+          s2.src =
+            'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js';
+          s2.onload = () => {
+            if (mgmtPdfAutoTableReady()) {
+              resolve(getMgmtPdfJsPDF());
+            } else {
+              fail(
+                'Не удалось инициализировать jspdf-autotable. Проверьте подключение к интернету.'
+              );
+            }
+          };
+          s2.onerror = () =>
+            fail(
+              'Не удалось загрузить jspdf-autotable с CDN. Для PDF-отчёта нужен доступ в интернет.'
+            );
+          document.head.appendChild(s2);
+        };
+
+        if (getMgmtPdfJsPDF()) {
+          loadAutoTable();
+          return;
+        }
+
+        if (document.getElementById('mgmtPdfJsScript')) {
+          loadAutoTable();
+          return;
+        }
+
+        const s1 = document.createElement('script');
+        s1.id = 'mgmtPdfJsScript';
+        s1.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
+        s1.onload = loadAutoTable;
+        s1.onerror = () =>
+          fail('Не удалось загрузить jsPDF с CDN. Для PDF-отчёта нужен доступ в интернет.');
+        document.head.appendChild(s1);
+      });
+
+      return mgmtPdfLibsPromise;
+    }
+
+    async function ensureMgmtPdfFont(doc) {
+      if (!mgmtPdfFontBase64) {
+        const response = await fetch(
+          'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37/ttf/DejaVuSans.ttf'
+        );
+        if (!response.ok) {
+          const err = new Error('font load failed');
+          err.mgmtPdfMessage =
+            'Не удалось загрузить шрифт для PDF. Проверьте подключение к интернету.';
+          throw err;
+        }
+        mgmtPdfFontBase64 = mgmtPdfArrayBufferToBase64(await response.arrayBuffer());
+      }
+      doc.addFileToVFS('DejaVuSans.ttf', mgmtPdfFontBase64);
+      doc.addFont('DejaVuSans.ttf', 'DejaVuSans', 'normal');
+      doc.setFont('DejaVuSans', 'normal');
+    }
+
+    function mgmtPdfBaseTableOptions() {
+      return {
+        theme: 'grid',
+        styles: {
+          font: 'DejaVuSans',
+          fontSize: 8,
+          cellPadding: 2.2,
+          lineColor: [209, 231, 223],
+          lineWidth: 0.1,
+          textColor: [30, 41, 59]
+        },
+        headStyles: {
+          fillColor: [232, 245, 239],
+          textColor: [20, 83, 45],
+          fontStyle: 'normal',
+          halign: 'center'
+        },
+        alternateRowStyles: { fillColor: [248, 253, 251] },
+        margin: { left: 12, right: 12 }
+      };
+    }
+
+    function mgmtPdfAddSectionTable(doc, startY, title, head, body, extraOptions) {
+      const pageH = doc.internal.pageSize.getHeight();
+      if (startY > pageH - 24) {
+        doc.addPage();
+        startY = 16;
+      }
+      doc.setFont('DejaVuSans', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(20, 83, 45);
+      doc.text(title, 12, startY);
+      startY += 5;
+      doc.autoTable({
+        startY,
+        head: [head],
+        body,
+        ...mgmtPdfBaseTableOptions(),
+        ...(extraOptions || {})
+      });
+      return doc.lastAutoTable.finalY + 7;
+    }
+
+    async function buildMgmtYearPdfDocument(report) {
+      const JsPDF = await loadMgmtPdfLibraries();
+      const generatedAt = new Date();
+      const doc = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      await ensureMgmtPdfFont(doc);
+
+      const totals = report.totals;
+      let y = 16;
+
+      doc.setFont('DejaVuSans', 'normal');
+      doc.setFontSize(20);
+      doc.setTextColor(15, 118, 110);
+      doc.text('Управленческий годовой отчёт', 12, y);
+      y += 9;
+
+      doc.setFontSize(12);
+      doc.setTextColor(51, 65, 85);
+      doc.text('Год: ' + report.year, 12, y);
+      y += 6;
+      doc.text('Дата формирования: ' + formatMgmtPdfDateTime(generatedAt), 12, y);
+      y += 6;
+
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Данные из локального расчёта, без изменения учётных данных', 12, y);
+      y += 8;
+
+      const kpiBody = [
+        [
+          'Отгрузка с НДС',
+          formatMoney(totals.shipmentVat),
+          'Отгрузка без НДС',
+          formatMoney(totals.shipmentNoVat)
+        ],
+        [
+          'Списано всего',
+          formatMoney(totals.writeoffTotal),
+          'Списано с 20',
+          formatMoney(totals.writeoff20)
+        ],
+        [
+          'Списано с 26',
+          formatMoney(totals.writeoff26),
+          'Прибыль',
+          formatMoney(totals.profit)
+        ],
+        [
+          'Маржа',
+          mgmtFmtPdfPct(totals.marginPct),
+          'НЗП на конец года',
+          formatMoney(totals.wipEnd20)
+        ]
+      ];
+
+      doc.autoTable({
+        startY: y,
+        head: [['Показатель', 'Значение', 'Показатель', 'Значение']],
+        body: kpiBody,
+        ...mgmtPdfBaseTableOptions(),
+        styles: {
+          ...mgmtPdfBaseTableOptions().styles,
+          fontSize: 9
+        },
+        columnStyles: {
+          0: { fontStyle: 'normal', textColor: [100, 116, 139], cellWidth: 52 },
+          1: { fontStyle: 'normal', fontSize: 11, textColor: [15, 118, 110], halign: 'right' },
+          2: { fontStyle: 'normal', textColor: [100, 116, 139], cellWidth: 52 },
+          3: { fontStyle: 'normal', fontSize: 11, textColor: [15, 118, 110], halign: 'right' }
+        },
+        headStyles: {
+          fillColor: [204, 251, 241],
+          textColor: [17, 94, 89],
+          fontStyle: 'normal'
+        }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      const topRevenue = [...report.rows]
+        .sort((a, b) => b.shipmentNoVat - a.shipmentNoVat)
+        .slice(0, 5);
+      y = mgmtPdfAddSectionTable(
+        doc,
+        y,
+        'Топ-5 заказов по выручке',
+        [
+          'Заказ',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец'
+        ],
+        topRevenue.map(r => [
+          mgmtPdfGroupLabel(r),
+          formatMoney(r.shipmentNoVat),
+          formatMoney(r.writeoffTotal),
+          formatMoney(r.profit),
+          mgmtFmtPdfPct(r.marginPct),
+          formatMoney(r.wipEnd20)
+        ]),
+        {
+          columnStyles: {
+            0: { cellWidth: 78, overflow: 'linebreak' },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+          }
+        }
+      );
+
+      const topProfit = [...report.rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
+      y = mgmtPdfAddSectionTable(
+        doc,
+        y,
+        'Топ-5 заказов по прибыли',
+        [
+          'Заказ',
+          'Прибыль',
+          'Маржа %',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'НЗП конец'
+        ],
+        topProfit.map(r => [
+          mgmtPdfGroupLabel(r),
+          formatMoney(r.profit),
+          mgmtFmtPdfPct(r.marginPct),
+          formatMoney(r.shipmentNoVat),
+          formatMoney(r.writeoffTotal),
+          formatMoney(r.wipEnd20)
+        ]),
+        {
+          columnStyles: {
+            0: { cellWidth: 78, overflow: 'linebreak' },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+          }
+        }
+      );
+
+      const problemRows = pickMgmtPdfProblemRows(report.rows, 15);
+      const problemFillByIndex = problemRows.map(r => mgmtPdfProblemFillColor(r));
+      const problemTitle =
+        problemRows.length >= 15
+          ? 'Проблемные заказы (топ-15 по важности)'
+          : 'Проблемные заказы';
+      y = mgmtPdfAddSectionTable(
+        doc,
+        y,
+        problemTitle,
+        [
+          'Заказ',
+          'Отгрузка без НДС',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец',
+          'Причины / статусы'
+        ],
+        problemRows.length
+          ? problemRows.map(r => [
+              mgmtPdfGroupLabel(r),
+              formatMoney(r.shipmentNoVat),
+              formatMoney(r.profit),
+              mgmtFmtPdfPct(r.marginPct),
+              formatMoney(r.wipEnd20),
+              r.reasons.join('; ')
+            ])
+          : [['—', '—', '—', '—', '—', 'Проблемных заказов не найдено']],
+        {
+          columnStyles: {
+            0: { cellWidth: 52, overflow: 'linebreak' },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { cellWidth: 72, overflow: 'linebreak', fontSize: 7.5 }
+          },
+          didParseCell: data => {
+            if (data.section === 'body' && problemRows.length) {
+              const fill = problemFillByIndex[data.row.index];
+              if (fill) data.cell.styles.fillColor = fill;
+            }
+          }
+        }
+      );
+
+      y = mgmtPdfAddSectionTable(
+        doc,
+        y,
+        'Помесячная динамика',
+        ['Месяц', 'Отгрузка без НДС', 'Списано всего', 'Прибыль', 'Маржа %', 'НЗП конец'],
+        (report.monthlyRows || []).map(m => [
+          m.monthLabel,
+          formatMoney(m.shipmentNoVat),
+          formatMoney(m.writeoffTotal),
+          formatMoney(m.profit),
+          mgmtFmtPdfPct(m.marginPct),
+          formatMoney(m.wipEnd20)
+        ]),
+        {
+          columnStyles: {
+            0: { cellWidth: 34 },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+          }
+        }
+      );
+
+      const pageH = doc.internal.pageSize.getHeight();
+      if (y > pageH - 20) {
+        doc.addPage();
+        y = 16;
+      }
+      doc.setFont('DejaVuSans', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        'Полная таблица заказов доступна в Excel-выгрузке годовой сводки.',
+        12,
+        y
+      );
+
+      const pageCount = doc.internal.getNumberOfPages();
+      const pageW = doc.internal.pageSize.getWidth();
+      const footerDate = formatMgmtPdfDateTime(generatedAt);
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont('DejaVuSans', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text('Сформировано: ' + footerDate, 12, pageH - 6);
+        doc.text('Стр. ' + i + ' из ' + pageCount, pageW - 12, pageH - 6, { align: 'right' });
+      }
+
+      return doc;
+    }
+
+    async function exportMgmtYearReportToPdf() {
+      switchMgmtReportsTab('year');
+      populateMgmtReportsYearSelect();
+
+      const yearEl = document.getElementById('mgmtReportsYear');
+      const year = yearEl ? String(yearEl.value || '').trim() : '';
+      const statusEl = document.getElementById('mgmtReportsYearStatus');
+      const btn = document.getElementById('exportMgmtYearPdfBtn');
+
+      if (!year || !/^\d{4}$/.test(year)) {
+        if (statusEl) statusEl.textContent = 'Укажите год.';
+        return;
+      }
+
+      const report = getMgmtYearReportForExport(year);
+      if (report.error || !report.rows || !report.rows.length || !report.totals) {
+        if (statusEl) statusEl.textContent = 'Нет данных за выбранный год для PDF-отчёта.';
+        return;
+      }
+
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.textContent = 'Формирование PDF-отчёта за ' + year + '…';
+
+      try {
+        const doc = await buildMgmtYearPdfDocument(report);
+        doc.save('upravlencheskiy_godovoy_otchet_' + year + '.pdf');
+        if (statusEl) {
+          statusEl.textContent =
+            'PDF-отчёт за ' +
+            year +
+            ' скачан: upravlencheskiy_godovoy_otchet_' +
+            year +
+            '.pdf';
+        }
+      } catch (err) {
+        console.error('[mgmt year pdf]', err);
+        if (statusEl) {
+          statusEl.textContent =
+            (err && err.mgmtPdfMessage) ||
+            'Не удалось сформировать PDF. Проверьте подключение к интернету (нужны jsPDF и шрифт с CDN).';
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    window.exportMgmtYearReportToPdf = exportMgmtYearReportToPdf;
+
     function showMgmtReportYearPlaceholder() {
       buildMgmtYearReport();
     }
@@ -11177,6 +11721,9 @@
           if (target.id === 'buildMgmtReportYearBtn') {
             e.preventDefault();
             buildMgmtYearReport();
+          } else if (target.id === 'exportMgmtYearPdfBtn') {
+            e.preventDefault();
+            exportMgmtYearReportToPdf();
           } else if (target.id === 'buildMgmtReportPeriodBtn') {
             e.preventDefault();
             showMgmtReportPeriodPlaceholder();

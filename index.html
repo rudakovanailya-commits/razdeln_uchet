@@ -2670,7 +2670,7 @@
       <div class="mgmt-reports-head">
         <h2>Красивые управленческие отчёты</h2>
         <p class="mgmt-reports-subtitle">
-          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Раздел в разработке — ниже показана будущая структура отчётов без изменения учётных данных.
+          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Годовой отчёт читает данные из localStorage и не изменяет учёт.
         </p>
       </div>
       <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
@@ -10690,8 +10690,13 @@
 
     function collectMgmtYearReportData(year) {
       const y = String(year || '').trim();
+      console.log('[mgmt year report] collectMgmtYearReportData', { year: y });
       const base = collectAiAnalysisData('year', y);
       if (base.error) {
+        console.log('[mgmt year report] collectMgmtYearReportData: нет данных', {
+          year: y,
+          error: base.error
+        });
         return {
           error: base.error,
           year: y,
@@ -10727,13 +10732,19 @@
       const sources = listPeriodDataSourcesForYear(y);
       const monthlyRows = collectMgmtYearMonthlyRows(base.periods, sources);
 
-      return {
+      const result = {
         year: y,
         periods: base.periods,
         rows: base.rows,
         totals,
         monthlyRows
       };
+      console.log('[mgmt year report] collectMgmtYearReportData: готово', {
+        year: y,
+        months: result.periods.length,
+        groups: result.rows.length
+      });
+      return result;
     }
 
     function mgmtRenderEmptyNote(text) {
@@ -10743,6 +10754,11 @@
     function mgmtFmtPctCell(val) {
       const n = Number.isFinite(num(val)) ? num(val) : 0;
       return '<td>' + n.toFixed(1).replace('.', ',') + '%</td>';
+    }
+
+    function mgmtExportNumCell(value) {
+      const n = num(value);
+      return '<td data-export-value="' + n + '">' + escapeHtmlForReport(formatMoney(value)) + '</td>';
     }
 
     function mgmtRenderOrderCell(row) {
@@ -10863,11 +10879,11 @@
           r =>
             '<tr>' +
             mgmtRenderOrderCell(r) +
-            orderCardExportNumCell(r.shipmentNoVat) +
-            orderCardExportNumCell(r.writeoffTotal) +
-            orderCardExportNumCell(r.profit) +
+            mgmtExportNumCell(r.shipmentNoVat) +
+            mgmtExportNumCell(r.writeoffTotal) +
+            mgmtExportNumCell(r.profit) +
             mgmtFmtPctCell(r.marginPct) +
-            orderCardExportNumCell(r.wipEnd20) +
+            mgmtExportNumCell(r.wipEnd20) +
             '</tr>'
         )
         .join('');
@@ -10892,11 +10908,11 @@
           r =>
             '<tr>' +
             mgmtRenderOrderCell(r) +
-            orderCardExportNumCell(r.profit) +
+            mgmtExportNumCell(r.profit) +
             mgmtFmtPctCell(r.marginPct) +
-            orderCardExportNumCell(r.shipmentNoVat) +
-            orderCardExportNumCell(r.writeoffTotal) +
-            orderCardExportNumCell(r.wipEnd20) +
+            mgmtExportNumCell(r.shipmentNoVat) +
+            mgmtExportNumCell(r.writeoffTotal) +
+            mgmtExportNumCell(r.wipEnd20) +
             '</tr>'
         )
         .join('');
@@ -10932,10 +10948,10 @@
             cls +
             '">' +
             mgmtRenderOrderCell(r) +
-            orderCardExportNumCell(r.shipmentNoVat) +
-            orderCardExportNumCell(r.profit) +
+            mgmtExportNumCell(r.shipmentNoVat) +
+            mgmtExportNumCell(r.profit) +
             mgmtFmtPctCell(r.marginPct) +
-            orderCardExportNumCell(r.wipEnd20) +
+            mgmtExportNumCell(r.wipEnd20) +
             '<td class="mgmt-reports-comment-cell">' +
             escapeHtmlForReport(r.reasons.join('; ')) +
             '</td></tr>'
@@ -10964,14 +10980,14 @@
             '<td class="mgmt-reports-col-order">' +
             escapeHtmlForReport(m.monthLabel) +
             '</td>' +
-            orderCardExportNumCell(m.shipmentVat) +
-            orderCardExportNumCell(m.shipmentNoVat) +
-            orderCardExportNumCell(m.writeoffTotal) +
-            orderCardExportNumCell(m.writeoff20) +
-            orderCardExportNumCell(m.writeoff26) +
-            orderCardExportNumCell(m.profit) +
+            mgmtExportNumCell(m.shipmentVat) +
+            mgmtExportNumCell(m.shipmentNoVat) +
+            mgmtExportNumCell(m.writeoffTotal) +
+            mgmtExportNumCell(m.writeoff20) +
+            mgmtExportNumCell(m.writeoff26) +
+            mgmtExportNumCell(m.profit) +
             mgmtFmtPctCell(m.marginPct) +
-            orderCardExportNumCell(m.wipEnd20) +
+            mgmtExportNumCell(m.wipEnd20) +
             '</tr>'
         )
         .join('');
@@ -11001,14 +11017,14 @@
           return (
             '<tr>' +
             mgmtRenderOrderCell(r) +
-            orderCardExportNumCell(r.shipmentVat) +
-            orderCardExportNumCell(r.shipmentNoVat) +
-            orderCardExportNumCell(r.writeoffTotal) +
-            orderCardExportNumCell(r.writeoff26) +
-            orderCardExportNumCell(r.writeoff20) +
-            orderCardExportNumCell(r.wipEnd20) +
-            orderCardExportNumCell(r.wipEnd26) +
-            orderCardExportNumCell(r.profit) +
+            mgmtExportNumCell(r.shipmentVat) +
+            mgmtExportNumCell(r.shipmentNoVat) +
+            mgmtExportNumCell(r.writeoffTotal) +
+            mgmtExportNumCell(r.writeoff26) +
+            mgmtExportNumCell(r.writeoff20) +
+            mgmtExportNumCell(r.wipEnd20) +
+            mgmtExportNumCell(r.wipEnd26) +
+            mgmtExportNumCell(r.profit) +
             mgmtFmtPctCell(r.marginPct) +
             '<td class="mgmt-reports-comment-cell">' +
             escapeHtmlForReport(comment) +
@@ -11035,70 +11051,113 @@
       );
     }
 
-    function renderMgmtYearReportSections(report) {
+    function renderMgmtYearReportFull(report) {
       const emptyMsg = 'Нет данных за выбранный год в localStorage.';
-      const kpiEl = document.getElementById('mgmtReportsYearKpi');
-      const topRevEl = document.getElementById('mgmtReportsYearTopRevenue');
-      const topProfitEl = document.getElementById('mgmtReportsYearTopProfit');
-      const problemsEl = document.getElementById('mgmtReportsYearProblems');
-      const monthlyEl = document.getElementById('mgmtReportsYearMonthly');
-      const fullEl = document.getElementById('mgmtReportsYearFullTable');
+      const hasData = !report.error && report.rows && report.rows.length && report.totals;
 
-      if (report.error || !report.rows.length) {
-        if (kpiEl) kpiEl.innerHTML = '';
-        if (topRevEl) topRevEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
-        if (topProfitEl) topProfitEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
-        if (problemsEl) problemsEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
-        if (monthlyEl) monthlyEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
-        if (fullEl) fullEl.innerHTML = mgmtRenderEmptyNote(emptyMsg);
-        return;
-      }
+      const kpiHtml = hasData ? renderMgmtYearKpiHtml(report.totals) : '';
+      const topRevHtml = hasData ? renderMgmtYearTopRevenue(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+      const topProfitHtml = hasData ? renderMgmtYearTopProfit(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+      const problemsHtml = hasData ? renderMgmtYearProblems(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+      const monthlyHtml = hasData ? renderMgmtYearMonthly(report.monthlyRows) : mgmtRenderEmptyNote(emptyMsg);
+      const fullTableHtml = hasData ? renderMgmtYearFullTable(report.rows) : mgmtRenderEmptyNote(emptyMsg);
 
-      if (kpiEl) kpiEl.innerHTML = renderMgmtYearKpiHtml(report.totals);
-      if (topRevEl) topRevEl.innerHTML = renderMgmtYearTopRevenue(report.rows);
-      if (topProfitEl) topProfitEl.innerHTML = renderMgmtYearTopProfit(report.rows);
-      if (problemsEl) problemsEl.innerHTML = renderMgmtYearProblems(report.rows);
-      if (monthlyEl) monthlyEl.innerHTML = renderMgmtYearMonthly(report.monthlyRows);
-      if (fullEl) fullEl.innerHTML = renderMgmtYearFullTable(report.rows);
+      return (
+        '<div class="mgmt-reports-kpi-grid" id="mgmtReportsYearKpi">' +
+        kpiHtml +
+        '</div>' +
+        '<div class="mgmt-reports-two-col">' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>' +
+        '<div id="mgmtReportsYearTopRevenue">' +
+        topRevHtml +
+        '</div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>' +
+        '<div id="mgmtReportsYearTopProfit">' +
+        topProfitHtml +
+        '</div></div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Проблемные заказы</h3>' +
+        '<div id="mgmtReportsYearProblems">' +
+        problemsHtml +
+        '</div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Помесячная динамика</h3>' +
+        '<div id="mgmtReportsYearMonthly">' +
+        monthlyHtml +
+        '</div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Полная таблица заказов за год</h3>' +
+        '<div id="mgmtReportsYearFullTable">' +
+        fullTableHtml +
+        '</div></div>'
+      );
     }
 
     let lastMgmtYearReport = null;
 
     function buildMgmtYearReport() {
-      populateMgmtReportsYearSelect();
-      const yearEl = document.getElementById('mgmtReportsYear');
-      const year = yearEl ? String(yearEl.value || '').trim() : '';
-      const statusEl = document.getElementById('mgmtReportsYearStatus');
-      const contentEl = document.getElementById('mgmtReportsYearContent');
+      try {
+        switchMgmtReportsTab('year');
 
-      if (!year || !/^\d{4}$/.test(year)) {
-        if (statusEl) statusEl.textContent = 'Укажите год.';
-        if (contentEl) contentEl.hidden = true;
+        populateMgmtReportsYearSelect();
+        const yearEl = document.getElementById('mgmtReportsYear');
+        const year = yearEl ? String(yearEl.value || '').trim() : '';
+        const statusEl = document.getElementById('mgmtReportsYearStatus');
+        const contentEl = document.getElementById('mgmtReportsYearContent');
+
+        console.log('[mgmt year report] buildMgmtYearReport', { year });
+
+        if (!year || !/^\d{4}$/.test(year)) {
+          if (statusEl) statusEl.textContent = 'Укажите год.';
+          if (contentEl) contentEl.hidden = true;
+          return null;
+        }
+
+        const report = collectMgmtYearReportData(year);
+        lastMgmtYearReport = report;
+
+        console.log('[mgmt year report] итог', {
+          year: report.year,
+          months: (report.periods && report.periods.length) || 0,
+          groups: (report.rows && report.rows.length) || 0,
+          error: report.error || null
+        });
+
+        if (contentEl) {
+          contentEl.innerHTML = renderMgmtYearReportFull(report);
+          contentEl.hidden = false;
+        } else {
+          console.error('[mgmt year report] элемент #mgmtReportsYearContent не найден');
+        }
+
+        if (statusEl) {
+          if (report.error || !report.rows.length) {
+            statusEl.textContent = 'Нет данных за выбранный год в localStorage.';
+          } else {
+            statusEl.textContent =
+              'Годовой отчёт за ' +
+              year +
+              ': ' +
+              report.periods.length +
+              ' мес., ' +
+              report.rows.length +
+              ' групп/заказов';
+          }
+        }
+        return report;
+      } catch (err) {
+        console.error('[mgmt year report] ошибка формирования', err);
+        const statusEl = document.getElementById('mgmtReportsYearStatus');
+        if (statusEl) {
+          statusEl.textContent =
+            'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
+        }
         return null;
       }
-
-      const report = collectMgmtYearReportData(year);
-      lastMgmtYearReport = report;
-
-      if (contentEl) contentEl.hidden = false;
-      renderMgmtYearReportSections(report);
-
-      if (statusEl) {
-        if (report.error || !report.rows.length) {
-          statusEl.textContent = 'Нет данных за выбранный год в localStorage.';
-        } else {
-          statusEl.textContent =
-            'Годовой отчёт за ' +
-            year +
-            ': ' +
-            report.periods.length +
-            ' мес., ' +
-            report.rows.length +
-            ' групп/заказов';
-        }
-      }
-      return report;
     }
+    window.buildMgmtYearReport = buildMgmtYearReport;
 
     function showMgmtReportYearPlaceholder() {
       buildMgmtYearReport();
@@ -11108,6 +11167,22 @@
       populateMgmtReportsYearSelect();
       updateMgmtReportsCurrentPeriodLabel();
       switchMgmtReportsTab('period');
+
+      const card = document.getElementById('mgmtReportsCard');
+      if (card && !card.dataset.mgmtReportsClickBound) {
+        card.dataset.mgmtReportsClickBound = '1';
+        card.addEventListener('click', e => {
+          const target = e.target;
+          if (!target || !target.id) return;
+          if (target.id === 'buildMgmtReportYearBtn') {
+            e.preventDefault();
+            buildMgmtYearReport();
+          } else if (target.id === 'buildMgmtReportPeriodBtn') {
+            e.preventDefault();
+            showMgmtReportPeriodPlaceholder();
+          }
+        });
+      }
     }
 
     function buildAnnualSummaryReport() {
@@ -13986,14 +14061,6 @@
         switchMgmtReportsTab(btn.getAttribute('data-mgmt-tab') || 'period');
       });
     });
-    const buildMgmtReportPeriodBtn = document.getElementById('buildMgmtReportPeriodBtn');
-    if (buildMgmtReportPeriodBtn) {
-      buildMgmtReportPeriodBtn.addEventListener('click', () => showMgmtReportPeriodPlaceholder());
-    }
-    const buildMgmtReportYearBtn = document.getElementById('buildMgmtReportYearBtn');
-    if (buildMgmtReportYearBtn) {
-      buildMgmtReportYearBtn.addEventListener('click', () => buildMgmtYearReport());
-    }
     initMgmtReportsUi();
 
     const aiAnalysisScopeEl = document.getElementById('aiAnalysisScope');

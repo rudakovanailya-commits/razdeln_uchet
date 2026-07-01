@@ -1961,6 +1961,71 @@
       color: #475569;
     }
 
+    #mgmtReportsCard .mgmt-reports-orders-table-wrap {
+      max-height: min(68vh, 760px);
+    }
+
+    #mgmtReportsCard .mgmt-reports-status-cell {
+      text-align: left;
+      white-space: normal;
+      min-width: 120px;
+      max-width: 220px;
+      line-height: 1.5;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge {
+      display: inline-block;
+      margin: 1px 3px 1px 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.35;
+      white-space: nowrap;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge-ok {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge-loss,
+    #mgmtReportsCard .mgmt-order-badge-control {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge-low-margin {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge-high-margin {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge-big-wip {
+      background: #ffedd5;
+      color: #9a3412;
+      border: 1px solid #fdba74;
+    }
+
+    #mgmtReportsCard .mgmt-order-badge-wip-no-ship {
+      background: #f3f4f6;
+      color: #57534e;
+      border: 1px solid #d6d3d1;
+    }
+
+    #mgmtReportsCard .mgmt-reports-orders-field {
+      min-width: 140px;
+      flex: 0 0 auto;
+    }
+
     #mgmtReportsCard .mgmt-reports-two-col {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -2695,6 +2760,7 @@
       <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
         <button type="button" class="mgmt-reports-tab active" data-mgmt-tab="period" role="tab" aria-selected="true" aria-controls="mgmtReportsPanelPeriod" id="mgmtReportsTabPeriod">Отчёт за период</button>
         <button type="button" class="mgmt-reports-tab" data-mgmt-tab="year" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelYear" id="mgmtReportsTabYear">Годовой отчёт</button>
+        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="orders" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelOrders" id="mgmtReportsTabOrders">Отчёт по заказам</button>
       </div>
 
       <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
@@ -2764,6 +2830,52 @@
             <div id="mgmtReportsYearFullTable"></div>
           </div>
         </div>
+      </div>
+
+      <div id="mgmtReportsPanelOrders" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabOrders" hidden>
+        <div class="mgmt-reports-controls">
+          <div class="field mgmt-reports-orders-field">
+            <label for="mgmtReportsOrdersScope">Режим анализа</label>
+            <select id="mgmtReportsOrdersScope" autocomplete="off">
+              <option value="month">Текущий месяц</option>
+              <option value="year">Год</option>
+            </select>
+          </div>
+          <div class="mgmt-reports-period-badge" id="mgmtReportsOrdersPeriodBadge">
+            <span>Период:</span>
+            <span id="mgmtReportsOrdersCurrentPeriod">—</span>
+          </div>
+          <div class="field mgmt-reports-year-field" id="mgmtReportsOrdersYearField" hidden>
+            <label for="mgmtReportsOrdersYear">Год</label>
+            <select id="mgmtReportsOrdersYear" autocomplete="off"></select>
+          </div>
+          <div class="field mgmt-reports-orders-field">
+            <label for="mgmtReportsOrdersFilter">Фильтр заказов</label>
+            <select id="mgmtReportsOrdersFilter" autocomplete="off">
+              <option value="all">Все заказы</option>
+              <option value="shipment">Только с отгрузкой</option>
+              <option value="wip">Только с НЗП</option>
+              <option value="problems">Только проблемные</option>
+              <option value="low_margin">Низкая маржа</option>
+              <option value="high_margin">Высокая маржа</option>
+              <option value="loss">Убыток</option>
+              <option value="wip_no_shipment">НЗП без отгрузки</option>
+            </select>
+          </div>
+          <div class="field mgmt-reports-orders-field">
+            <label for="mgmtReportsOrdersSort">Сортировка</label>
+            <select id="mgmtReportsOrdersSort" autocomplete="off">
+              <option value="shipment">По отгрузке</option>
+              <option value="profit">По прибыли</option>
+              <option value="margin">По марже</option>
+              <option value="wip">По НЗП</option>
+              <option value="name">По названию</option>
+            </select>
+          </div>
+          <button type="button" id="buildMgmtOrdersReportBtn" class="mgmt-reports-build-btn">Сформировать отчёт по заказам</button>
+        </div>
+        <p class="mgmt-reports-status" id="mgmtReportsOrdersStatus"></p>
+        <div id="mgmtReportsOrdersContent" hidden></div>
       </div>
     </div>
 
@@ -10579,7 +10691,14 @@
     }
 
     function populateMgmtReportsYearSelect() {
-      const el = document.getElementById('mgmtReportsYear');
+      fillMgmtReportsYearSelect(document.getElementById('mgmtReportsYear'));
+    }
+
+    function populateMgmtReportsOrdersYearSelect() {
+      fillMgmtReportsYearSelect(document.getElementById('mgmtReportsOrdersYear'));
+    }
+
+    function fillMgmtReportsYearSelect(el) {
       if (!el || el.tagName !== 'SELECT') return;
       const minYear = parseInt(WORKING_PERIOD_MIN.slice(0, 4), 10);
       const maxYear = parseInt(WORKING_PERIOD_MAX.slice(0, 4), 10);
@@ -10609,6 +10728,7 @@
     function switchMgmtReportsTab(tabId) {
       const periodPanel = document.getElementById('mgmtReportsPanelPeriod');
       const yearPanel = document.getElementById('mgmtReportsPanelYear');
+      const ordersPanel = document.getElementById('mgmtReportsPanelOrders');
       document.querySelectorAll('#mgmtReportsCard .mgmt-reports-tab').forEach(btn => {
         const active = btn.getAttribute('data-mgmt-tab') === tabId;
         btn.classList.toggle('active', active);
@@ -10616,6 +10736,7 @@
       });
       if (periodPanel) periodPanel.hidden = tabId !== 'period';
       if (yearPanel) yearPanel.hidden = tabId !== 'year';
+      if (ordersPanel) ordersPanel.hidden = tabId !== 'orders';
     }
 
     function showMgmtReportPeriodPlaceholder() {
@@ -11248,6 +11369,342 @@
       }
     }
     window.buildMgmtPeriodReport = buildMgmtPeriodReport;
+
+    const MGMT_ORDER_STATUS_CLASS = {
+      Норма: 'mgmt-order-badge-ok',
+      Убыток: 'mgmt-order-badge-loss',
+      'Низкая маржа': 'mgmt-order-badge-low-margin',
+      'Высокая маржа': 'mgmt-order-badge-high-margin',
+      'Большой НЗП': 'mgmt-order-badge-big-wip',
+      'НЗП без отгрузки': 'mgmt-order-badge-wip-no-ship',
+      Контроль: 'mgmt-order-badge-control'
+    };
+
+    function buildMgmtOrderStatuses(row) {
+      const statuses = [];
+      if (row.profit < -RECONCILE_EPS) statuses.push('Убыток');
+      if (row.marginPct < 2 && row.shipmentNoVat > RECONCILE_EPS) statuses.push('Низкая маржа');
+      if (row.marginPct > 30 && row.shipmentNoVat > RECONCILE_EPS) statuses.push('Высокая маржа');
+      if (row.wipEnd20 > 300000) statuses.push('Большой НЗП');
+      if (row.wipEnd20 > RECONCILE_EPS && row.shipmentNoVat <= RECONCILE_EPS) {
+        statuses.push('НЗП без отгрузки');
+      }
+      if (mgmtExtractControlWarnings(row.controlComments).length) statuses.push('Контроль');
+      if (!statuses.length) statuses.push('Норма');
+      return statuses;
+    }
+
+    function mgmtOrderIsNormal(statuses) {
+      return statuses.length === 1 && statuses[0] === 'Норма';
+    }
+
+    function mgmtOrderStatusBadgesHtml(statuses) {
+      return statuses
+        .map(
+          s =>
+            '<span class="mgmt-order-badge ' +
+            (MGMT_ORDER_STATUS_CLASS[s] || '') +
+            '">' +
+            escapeHtmlForReport(s) +
+            '</span>'
+        )
+        .join(' ');
+    }
+
+    function collectMgmtOrdersReportData(scope, periodOrYear) {
+      if (scope === 'year') {
+        const report = collectMgmtYearReportData(periodOrYear);
+        return {
+          scope: 'year',
+          periodLabel: report.year || String(periodOrYear || '').trim(),
+          rows: report.rows || [],
+          totals: report.totals,
+          error: report.error || null
+        };
+      }
+      const report = collectMgmtPeriodReportData(periodOrYear);
+      return {
+        scope: 'month',
+        periodLabel: report.period || normalizePeriodStr(periodOrYear),
+        rows: report.rows || [],
+        totals: report.totals,
+        error: report.error || null
+      };
+    }
+
+    function computeMgmtOrdersKpi(rows) {
+      let withShipment = 0;
+      let withWip = 0;
+      let problematic = 0;
+      let shipmentNoVat = 0;
+      let profit = 0;
+      let wipEnd20 = 0;
+      rows.forEach(r => {
+        if (r.shipmentNoVat > RECONCILE_EPS) withShipment++;
+        if (r.wipEnd20 > RECONCILE_EPS) withWip++;
+        const statuses = buildMgmtOrderStatuses(r);
+        if (!mgmtOrderIsNormal(statuses)) problematic++;
+        shipmentNoVat += r.shipmentNoVat;
+        profit += r.profit;
+        wipEnd20 += r.wipEnd20;
+      });
+      return {
+        totalOrders: rows.length,
+        withShipment,
+        withWip,
+        problematic,
+        shipmentNoVat,
+        profit,
+        marginPct: computeAnnualMarginPct(profit, shipmentNoVat),
+        wipEnd20
+      };
+    }
+
+    function filterMgmtOrderRows(rows, filterKey) {
+      const key = filterKey || 'all';
+      if (key === 'all') return rows.slice();
+      return rows.filter(r => {
+        const statuses = buildMgmtOrderStatuses(r);
+        switch (key) {
+          case 'shipment':
+            return r.shipmentNoVat > RECONCILE_EPS;
+          case 'wip':
+            return r.wipEnd20 > RECONCILE_EPS;
+          case 'problems':
+            return !mgmtOrderIsNormal(statuses);
+          case 'low_margin':
+            return statuses.includes('Низкая маржа');
+          case 'high_margin':
+            return statuses.includes('Высокая маржа');
+          case 'loss':
+            return statuses.includes('Убыток');
+          case 'wip_no_shipment':
+            return statuses.includes('НЗП без отгрузки');
+          default:
+            return true;
+        }
+      });
+    }
+
+    function sortMgmtOrderRows(rows, sortKey) {
+      const sorted = rows.slice();
+      switch (sortKey || 'shipment') {
+        case 'profit':
+          return sorted.sort((a, b) => b.profit - a.profit);
+        case 'margin':
+          return sorted.sort((a, b) => b.marginPct - a.marginPct);
+        case 'wip':
+          return sorted.sort((a, b) => b.wipEnd20 - a.wipEnd20);
+        case 'name':
+          return sorted.sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+        default:
+          return sorted.sort((a, b) => b.shipmentNoVat - a.shipmentNoVat);
+      }
+    }
+
+    function renderMgmtOrdersKpiHtml(kpi) {
+      const cards = [
+        { label: 'Всего заказов', value: String(kpi.totalOrders), main: true },
+        { label: 'Заказов с отгрузкой', value: String(kpi.withShipment), main: true },
+        { label: 'Заказов с НЗП', value: String(kpi.withWip), main: true },
+        { label: 'Проблемных заказов', value: String(kpi.problematic), main: true },
+        { label: 'Отгрузка без НДС', value: formatMoney(kpi.shipmentNoVat) },
+        { label: 'Прибыль', value: formatMoney(kpi.profit) },
+        {
+          label: 'Средняя маржа',
+          value: kpi.marginPct.toFixed(1).replace('.', ',') + '%'
+        },
+        { label: 'НЗП конец', value: formatMoney(kpi.wipEnd20) }
+      ];
+      return cards
+        .map(
+          c =>
+            '<div class="mgmt-reports-kpi-card' +
+            (c.main ? ' mgmt-reports-kpi-card-main' : '') +
+            '"><span class="mgmt-reports-kpi-label">' +
+            escapeHtmlForReport(c.label) +
+            '</span><span class="mgmt-reports-kpi-value-filled">' +
+            escapeHtmlForReport(c.value) +
+            '</span></div>'
+        )
+        .join('');
+    }
+
+    function renderMgmtOrdersTable(rows) {
+      if (!rows.length) return mgmtRenderEmptyNote('По выбранному фильтру заказов нет.');
+      const body = rows
+        .map(r => {
+          const statuses = buildMgmtOrderStatuses(r);
+          const comment = r.controlComments && r.controlComments !== '—' ? r.controlComments : '';
+          const rowClass = mgmtOrderIsNormal(statuses) ? '' : 'mgmt-problem-warn';
+          return (
+            '<tr class="' +
+            rowClass +
+            '">' +
+            mgmtRenderOrderCell(r) +
+            mgmtExportNumCell(r.shipmentVat) +
+            mgmtExportNumCell(r.shipmentNoVat) +
+            mgmtExportNumCell(r.writeoffTotal) +
+            mgmtExportNumCell(r.writeoff26) +
+            mgmtExportNumCell(r.writeoff20) +
+            mgmtExportNumCell(r.wipEnd20) +
+            mgmtExportNumCell(r.wipEnd26) +
+            mgmtExportNumCell(r.profit) +
+            mgmtFmtPctCell(r.marginPct) +
+            '<td class="mgmt-reports-status-cell">' +
+            mgmtOrderStatusBadgesHtml(statuses) +
+            '</td>' +
+            '<td class="mgmt-reports-comment-cell">' +
+            escapeHtmlForReport(comment) +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      return (
+        '<div class="mgmt-reports-data-table-wrap mgmt-reports-orders-table-wrap">' +
+        '<table class="mgmt-reports-data-table mgmt-reports-orders-table"><thead><tr>' +
+        [
+          'Заказ / расчётная группа',
+          'Отгрузка с НДС',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'Списано с 26',
+          'Списано с 20',
+          'НЗП конец 20',
+          'НЗП конец',
+          'Прибыль',
+          'Маржа %',
+          'Статус',
+          'Комментарий / контроль'
+        ]
+          .map((title, i) => {
+            const cls = i === 0 ? ' class="mgmt-reports-col-order"' : '';
+            return '<th' + cls + '>' + escapeHtmlForReport(title) + '</th>';
+          })
+          .join('') +
+        '</tr></thead><tbody>' +
+        body +
+        '</tbody></table></div>'
+      );
+    }
+
+    function renderMgmtOrdersReportFull(kpi, rows, meta) {
+      const scopeLabel =
+        meta.scope === 'year'
+          ? 'за ' + meta.periodLabel + ' год'
+          : 'за период ' + meta.periodLabel;
+      return (
+        '<p class="hint" style="margin:0 0 14px;">Отчёт по заказам ' +
+        escapeHtmlForReport(scopeLabel) +
+        ': показано ' +
+        rows.length +
+        ' из ' +
+        kpi.totalOrders +
+        ' групп/заказов</p>' +
+        '<div class="mgmt-reports-kpi-grid" id="mgmtReportsOrdersKpi">' +
+        renderMgmtOrdersKpiHtml(kpi) +
+        '</div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Заказы / расчётные группы</h3>' +
+        renderMgmtOrdersTable(rows) +
+        '</div>'
+      );
+    }
+
+    let lastMgmtOrdersReport = null;
+
+    function updateMgmtOrdersScopeUi() {
+      const scopeEl = document.getElementById('mgmtReportsOrdersScope');
+      const scope = scopeEl ? String(scopeEl.value || 'month') : 'month';
+      const periodBadge = document.getElementById('mgmtReportsOrdersPeriodBadge');
+      const yearField = document.getElementById('mgmtReportsOrdersYearField');
+      const periodLabel = document.getElementById('mgmtReportsOrdersCurrentPeriod');
+      if (periodBadge) periodBadge.hidden = scope !== 'month';
+      if (yearField) yearField.hidden = scope !== 'year';
+      if (scope === 'month' && periodLabel) {
+        periodLabel.textContent = normalizePeriodStr(getCurrentPeriod()) || 'не выбран';
+      }
+      if (scope === 'year') populateMgmtReportsOrdersYearSelect();
+    }
+
+    function buildMgmtOrdersReport() {
+      try {
+        switchMgmtReportsTab('orders');
+        updateMgmtOrdersScopeUi();
+
+        const scopeEl = document.getElementById('mgmtReportsOrdersScope');
+        const filterEl = document.getElementById('mgmtReportsOrdersFilter');
+        const sortEl = document.getElementById('mgmtReportsOrdersSort');
+        const scope = scopeEl ? String(scopeEl.value || 'month') : 'month';
+        const filterKey = filterEl ? String(filterEl.value || 'all') : 'all';
+        const sortKey = sortEl ? String(sortEl.value || 'shipment') : 'shipment';
+
+        const statusEl = document.getElementById('mgmtReportsOrdersStatus');
+        const contentEl = document.getElementById('mgmtReportsOrdersContent');
+
+        let periodOrYear = '';
+        if (scope === 'year') {
+          const yearEl = document.getElementById('mgmtReportsOrdersYear');
+          periodOrYear = yearEl ? String(yearEl.value || '').trim() : '';
+          if (!/^\d{4}$/.test(periodOrYear)) {
+            if (statusEl) statusEl.textContent = 'Укажите год.';
+            if (contentEl) contentEl.hidden = true;
+            return null;
+          }
+        } else {
+          periodOrYear = normalizePeriodStr(getCurrentPeriod());
+          if (!periodOrYear || !/^\d{4}-\d{2}$/.test(periodOrYear)) {
+            if (statusEl) {
+              statusEl.textContent = 'Выберите период вверху страницы (формат YYYY-MM).';
+            }
+            if (contentEl) contentEl.hidden = true;
+            return null;
+          }
+        }
+
+        const raw = collectMgmtOrdersReportData(scope, periodOrYear);
+        lastMgmtOrdersReport = { ...raw, filterKey, sortKey };
+
+        if (contentEl) contentEl.hidden = false;
+
+        if (raw.error || !raw.rows.length) {
+          if (contentEl) {
+            contentEl.innerHTML = mgmtRenderEmptyNote('Нет данных для отчёта по заказам.');
+          }
+          if (statusEl) statusEl.textContent = 'Нет данных для отчёта по заказам.';
+          return raw;
+        }
+
+        const kpi = computeMgmtOrdersKpi(raw.rows);
+        const filtered = sortMgmtOrderRows(filterMgmtOrderRows(raw.rows, filterKey), sortKey);
+
+        if (contentEl) {
+          contentEl.innerHTML = renderMgmtOrdersReportFull(kpi, filtered, raw);
+        }
+
+        if (statusEl) {
+          const scopeText = scope === 'year' ? periodOrYear + ' год' : periodOrYear;
+          statusEl.textContent =
+            'Отчёт по заказам за ' +
+            scopeText +
+            ': ' +
+            filtered.length +
+            ' из ' +
+            raw.rows.length +
+            ' групп/заказов';
+        }
+        return lastMgmtOrdersReport;
+      } catch (err) {
+        console.error('[mgmt orders report]', err);
+        const statusEl = document.getElementById('mgmtReportsOrdersStatus');
+        if (statusEl) {
+          statusEl.textContent =
+            'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
+        }
+        return null;
+      }
+    }
+    window.buildMgmtOrdersReport = buildMgmtOrdersReport;
 
     function renderMgmtYearReportFull(report) {
       const emptyMsg = 'Нет данных за выбранный год в localStorage.';
@@ -12111,8 +12568,15 @@
 
     function initMgmtReportsUi() {
       populateMgmtReportsYearSelect();
+      populateMgmtReportsOrdersYearSelect();
       updateMgmtReportsCurrentPeriodLabel();
+      updateMgmtOrdersScopeUi();
       switchMgmtReportsTab('period');
+
+      const ordersScopeEl = document.getElementById('mgmtReportsOrdersScope');
+      if (ordersScopeEl) {
+        ordersScopeEl.addEventListener('change', () => updateMgmtOrdersScopeUi());
+      }
 
       const card = document.getElementById('mgmtReportsCard');
       if (card && !card.dataset.mgmtReportsClickBound) {
@@ -12129,6 +12593,9 @@
           } else if (target.id === 'buildMgmtReportPeriodBtn') {
             e.preventDefault();
             buildMgmtPeriodReport();
+          } else if (target.id === 'buildMgmtOrdersReportBtn') {
+            e.preventDefault();
+            buildMgmtOrdersReport();
           }
         });
       }

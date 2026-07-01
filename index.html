@@ -11217,27 +11217,59 @@
       return name;
     }
 
+    function mgmtPdfShortControlLabels(controlComments) {
+      const parts = mgmtExtractControlWarnings(controlComments);
+      if (!parts.length) return [];
+      let hasWriteoff = false;
+      let hasNegativeWip = false;
+      parts.forEach(part => {
+        if (/Списание|ограничен|больше итого|больше расходов|расхожден/i.test(part)) {
+          hasWriteoff = true;
+        }
+        if (/Отрицательное НЗП/i.test(part)) {
+          hasNegativeWip = true;
+        }
+      });
+      const labels = [];
+      if (hasWriteoff) labels.push('Контроль списания');
+      if (hasNegativeWip) labels.push('отрицательное НЗП');
+      if (!labels.length) labels.push('Контроль');
+      return labels;
+    }
+
+    function buildMgmtPdfProblemReasons(row) {
+      const reasons = [];
+      if (row.profit < -RECONCILE_EPS) reasons.push('Убыток');
+      mgmtPdfShortControlLabels(row.controlComments).forEach(label => reasons.push(label));
+      if (row.wipEnd20 > RECONCILE_EPS && row.shipmentNoVat <= RECONCILE_EPS) {
+        reasons.push('НЗП без отгрузки');
+      }
+      if (row.wipEnd20 > 300000) reasons.push('Большой НЗП');
+      if (row.marginPct < 2 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Низкая маржа');
+      if (row.marginPct > 30 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Высокая маржа');
+      return reasons;
+    }
+
     function mgmtPdfProblemScore(row) {
-      const reasons = buildMgmtProblemReasons(row);
       let score = 0;
-      if (reasons.includes('Убыток')) score += 1000;
-      if (reasons.some(r => r.startsWith('Контроль:'))) score += 800;
-      if (reasons.includes('Большой НЗП')) score += 600 + num(row.wipEnd20) / 1000;
-      if (reasons.includes('НЗП без отгрузки')) score += 500;
-      if (reasons.includes('Высокая маржа')) score += 300;
-      if (reasons.includes('Низкая маржа')) score += 200;
+      if (row.profit < -RECONCILE_EPS) score += 6000;
+      if (mgmtExtractControlWarnings(row.controlComments).length) score += 5000;
+      if (row.wipEnd20 > RECONCILE_EPS && row.shipmentNoVat <= RECONCILE_EPS) score += 4000;
+      if (row.wipEnd20 > 300000) score += 3000 + num(row.wipEnd20) / 100000;
+      if (row.marginPct < 2 && row.shipmentNoVat > RECONCILE_EPS) score += 2000;
+      if (row.marginPct > 30 && row.shipmentNoVat > RECONCILE_EPS) score += 1000;
       return score;
     }
 
     function pickMgmtPdfProblemRows(rows, limit) {
       const maxRows = limit || 15;
       return rows
+        .filter(r => buildMgmtProblemReasons(r).length > 0)
         .map(r => ({
           ...r,
-          reasons: buildMgmtProblemReasons(r),
+          pdfReasons: buildMgmtPdfProblemReasons(r),
           _score: mgmtPdfProblemScore(r)
         }))
-        .filter(r => r.reasons.length > 0)
         .sort((a, b) => {
           if (b._score !== a._score) return b._score - a._score;
           return a.groupName.localeCompare(b.groupName, 'ru');
@@ -11390,6 +11422,13 @@
       };
     }
 
+    function mgmtPdfCompactTopTableOptions(columnStyles) {
+      return {
+        tableWidth: 'wrap',
+        columnStyles
+      };
+    }
+
     function mgmtPdfAddSectionTable(doc, startY, title, head, body, extraOptions) {
       const pageH = doc.internal.pageSize.getHeight();
       if (startY > pageH - 24) {
@@ -11511,23 +11550,25 @@
           mgmtFmtPdfPct(r.marginPct),
           formatMoney(r.wipEnd20)
         ]),
-        {
-          columnStyles: {
-            0: { cellWidth: 78, overflow: 'linebreak' },
-            1: { halign: 'right' },
-            2: { halign: 'right' },
-            3: { halign: 'right' },
-            4: { halign: 'right' },
-            5: { halign: 'right' }
-          }
-        }
+        mgmtPdfCompactTopTableOptions({
+          0: { cellWidth: 78, overflow: 'linebreak' },
+          1: { cellWidth: 32, halign: 'right' },
+          2: { cellWidth: 32, halign: 'right' },
+          3: { cellWidth: 28, halign: 'right' },
+          4: { cellWidth: 22, halign: 'right' },
+          5: { cellWidth: 28, halign: 'right' }
+        })
       );
 
       const topProfit = [...report.rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
+      const topProfitTitle =
+        topProfit.length < 5
+          ? 'Топ заказов по прибыли (' + topProfit.length + ')'
+          : 'Топ-5 заказов по прибыли';
       y = mgmtPdfAddSectionTable(
         doc,
         y,
-        'Топ-5 заказов по прибыли',
+        topProfitTitle,
         [
           'Заказ',
           'Прибыль',
@@ -11544,16 +11585,14 @@
           formatMoney(r.writeoffTotal),
           formatMoney(r.wipEnd20)
         ]),
-        {
-          columnStyles: {
-            0: { cellWidth: 78, overflow: 'linebreak' },
-            1: { halign: 'right' },
-            2: { halign: 'right' },
-            3: { halign: 'right' },
-            4: { halign: 'right' },
-            5: { halign: 'right' }
-          }
-        }
+        mgmtPdfCompactTopTableOptions({
+          0: { cellWidth: 78, overflow: 'linebreak' },
+          1: { cellWidth: 28, halign: 'right' },
+          2: { cellWidth: 22, halign: 'right' },
+          3: { cellWidth: 32, halign: 'right' },
+          4: { cellWidth: 32, halign: 'right' },
+          5: { cellWidth: 28, halign: 'right' }
+        })
       );
 
       const problemRows = pickMgmtPdfProblemRows(report.rows, 15);
@@ -11581,17 +11620,18 @@
               formatMoney(r.profit),
               mgmtFmtPdfPct(r.marginPct),
               formatMoney(r.wipEnd20),
-              r.reasons.join('; ')
+              r.pdfReasons.join('; ')
             ])
           : [['—', '—', '—', '—', '—', 'Проблемных заказов не найдено']],
         {
+          tableWidth: 'wrap',
           columnStyles: {
-            0: { cellWidth: 52, overflow: 'linebreak' },
-            1: { halign: 'right' },
-            2: { halign: 'right' },
-            3: { halign: 'right' },
-            4: { halign: 'right' },
-            5: { cellWidth: 72, overflow: 'linebreak', fontSize: 7.5 }
+            0: { cellWidth: 58, overflow: 'linebreak' },
+            1: { cellWidth: 32, halign: 'right' },
+            2: { cellWidth: 28, halign: 'right' },
+            3: { cellWidth: 20, halign: 'right' },
+            4: { cellWidth: 28, halign: 'right' },
+            5: { cellWidth: 42, overflow: 'linebreak', fontSize: 7, valign: 'top' }
           },
           didParseCell: data => {
             if (data.section === 'body' && problemRows.length) {
@@ -11627,6 +11667,31 @@
         }
       );
 
+      y = mgmtPdfAddSectionTable(
+        doc,
+        y,
+        'Итог года',
+        ['Показатель', 'Значение'],
+        [
+          ['Отгрузка без НДС', formatMoney(totals.shipmentNoVat)],
+          ['Списано всего', formatMoney(totals.writeoffTotal)],
+          ['Прибыль', formatMoney(totals.profit)],
+          ['Маржа', mgmtFmtPdfPct(totals.marginPct)],
+          ['НЗП конец', formatMoney(totals.wipEnd20)]
+        ],
+        {
+          tableWidth: 110,
+          columnStyles: {
+            0: { cellWidth: 58, textColor: [100, 116, 139] },
+            1: { cellWidth: 42, halign: 'right', fontSize: 9, textColor: [15, 118, 110] }
+          },
+          styles: {
+            ...mgmtPdfBaseTableOptions().styles,
+            fontSize: 8.5
+          }
+        }
+      );
+
       const pageH = doc.internal.pageSize.getHeight();
       if (y > pageH - 20) {
         doc.addPage();
@@ -11636,7 +11701,7 @@
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
       doc.text(
-        'Полная таблица заказов доступна в Excel-выгрузке годовой сводки.',
+        'Подробная таблица всех заказов доступна в Excel-выгрузке годовой сводки.',
         12,
         y
       );

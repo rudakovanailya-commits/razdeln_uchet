@@ -11401,10 +11401,20 @@
     }
 
     const MGMT_PDF_MARGIN = { left: 9, right: 9, top: 10, bottom: 10 };
+    const MGMT_PDF_LANDSCAPE_WIDTH = 297;
+    const MGMT_PDF_LANDSCAPE_HEIGHT = 210;
 
     function mgmtPdfGetLayout(doc) {
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
+      const rawW =
+        typeof doc.internal.pageSize.getWidth === 'function'
+          ? doc.internal.pageSize.getWidth()
+          : doc.internal.pageSize.width;
+      const rawH =
+        typeof doc.internal.pageSize.getHeight === 'function'
+          ? doc.internal.pageSize.getHeight()
+          : doc.internal.pageSize.height;
+      const pageW = rawW > 250 ? rawW : MGMT_PDF_LANDSCAPE_WIDTH;
+      const pageH = rawH > 200 ? rawH : MGMT_PDF_LANDSCAPE_HEIGHT;
       const marginLeft = MGMT_PDF_MARGIN.left;
       const marginRight = MGMT_PDF_MARGIN.right;
       const marginTop = MGMT_PDF_MARGIN.top;
@@ -11421,10 +11431,90 @@
       };
     }
 
+    function mgmtPdfWidthsFromWeights(totalWidth, weights) {
+      const sum = weights.reduce((a, b) => a + b, 0);
+      if (!sum) return [];
+      const scaled = weights.map(w => (totalWidth * w) / sum);
+      const widths = scaled.map(w => Math.floor(w * 10) / 10);
+      let remainder = Math.round((totalWidth - widths.reduce((a, b) => a + b, 0)) * 10);
+      let i = 0;
+      while (remainder > 0 && i < widths.length * 20) {
+        widths[i % widths.length] = Math.round((widths[i % widths.length] + 0.1) * 10) / 10;
+        remainder--;
+        i++;
+      }
+      return widths;
+    }
+
+    function mgmtPdfColumnStylesFromWidths(widths, perColExtras) {
+      const styles = {};
+      widths.forEach((w, i) => {
+        styles[i] = { cellWidth: w, ...((perColExtras && perColExtras[i]) || {}) };
+      });
+      return styles;
+    }
+
+    function mgmtPdfCombineDidParseCell() {
+      const fns = Array.from(arguments).filter(Boolean);
+      if (!fns.length) return null;
+      return data => {
+        fns.forEach(fn => fn(data));
+      };
+    }
+
+    function mgmtPdfForceColWidthHook(widths) {
+      return data => {
+        const w = widths[data.column.index];
+        if (w != null) {
+          data.cell.styles.cellWidth = w;
+        }
+      };
+    }
+
+    function mgmtPdfSixColWidths(layout, orderShare) {
+      const share = orderShare || 0.4;
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [
+        share,
+        (1 - share) / 5,
+        (1 - share) / 5,
+        (1 - share) / 5,
+        (1 - share) / 5,
+        (1 - share) / 5
+      ]);
+    }
+
+    function mgmtPdfProblemColWidths(layout) {
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [0.3, 0.115, 0.115, 0.1, 0.13, 0.3]);
+    }
+
+    function mgmtPdfMonthlyColWidths(layout) {
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [0.1, 0.18, 0.18, 0.18, 0.18, 0.18]);
+    }
+
+    function mgmtPdfKpiColWidths(layout) {
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [0.28, 0.22, 0.28, 0.22]);
+    }
+
+    function mgmtPdfMakeTableOptions(layout, colWidths, extraOptions) {
+      const tableWidth = colWidths.reduce((a, b) => a + b, 0);
+      const base = mgmtPdfBaseTableOptions(layout);
+      const extra = extraOptions || {};
+      const widthHook = mgmtPdfForceColWidthHook(colWidths);
+      const mergedDidParseCell = mgmtPdfCombineDidParseCell(widthHook, extra.didParseCell);
+      const result = {
+        ...base,
+        tableWidth,
+        styles: { ...base.styles, ...(extra.styles || {}) },
+        headStyles: { ...base.headStyles, ...(extra.headStyles || {}) },
+        columnStyles: mgmtPdfColumnStylesFromWidths(colWidths, extra.columnStylesPerCol)
+      };
+      if (mergedDidParseCell) result.didParseCell = mergedDidParseCell;
+      return result;
+    }
+
     function mgmtPdfBaseTableOptions(layout) {
       return {
         theme: 'grid',
-        tableWidth: layout.contentWidth,
         styles: {
           font: 'DejaVuSans',
           fontSize: 8.5,
@@ -11432,13 +11522,15 @@
           lineColor: [209, 231, 223],
           lineWidth: 0.1,
           textColor: [30, 41, 59],
-          overflow: 'linebreak'
+          overflow: 'linebreak',
+          valign: 'middle'
         },
         headStyles: {
           fillColor: [232, 245, 239],
           textColor: [20, 83, 45],
           fontStyle: 'normal',
-          halign: 'center'
+          halign: 'center',
+          valign: 'middle'
         },
         alternateRowStyles: { fillColor: [248, 253, 251] },
         margin: {
@@ -11451,76 +11543,83 @@
     }
 
     function mgmtPdfSixColStyles(layout, orderShare) {
-      const cw = layout.contentWidth;
-      const orderW = Math.round(cw * (orderShare || 0.38));
-      const numW = (cw - orderW) / 5;
+      const widths = mgmtPdfSixColWidths(layout, orderShare);
       return {
-        0: { cellWidth: orderW, overflow: 'linebreak', valign: 'top' },
-        1: { cellWidth: numW, halign: 'right' },
-        2: { cellWidth: numW, halign: 'right' },
-        3: { cellWidth: numW, halign: 'right' },
-        4: { cellWidth: numW, halign: 'right' },
-        5: { cellWidth: numW, halign: 'right' }
+        widths,
+        options: mgmtPdfMakeTableOptions(layout, widths, {
+          columnStylesPerCol: {
+            0: { overflow: 'linebreak', valign: 'top' },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+          }
+        })
       };
     }
 
     function mgmtPdfProblemColStyles(layout) {
-      const cw = layout.contentWidth;
-      const orderW = Math.round(cw * 0.3);
-      const reasonsW = Math.round(cw * 0.3);
-      const numW = (cw - orderW - reasonsW) / 4;
+      const widths = mgmtPdfProblemColWidths(layout);
       return {
-        0: { cellWidth: orderW, overflow: 'linebreak', valign: 'top' },
-        1: { cellWidth: numW, halign: 'right' },
-        2: { cellWidth: numW, halign: 'right' },
-        3: { cellWidth: numW * 0.85, halign: 'right' },
-        4: { cellWidth: numW * 1.15, halign: 'right' },
-        5: {
-          cellWidth: reasonsW,
-          overflow: 'linebreak',
-          fontSize: 8,
-          valign: 'top'
-        }
+        widths,
+        options: mgmtPdfMakeTableOptions(layout, widths, {
+          columnStylesPerCol: {
+            0: { overflow: 'linebreak', valign: 'top' },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { overflow: 'linebreak', fontSize: 8, valign: 'top' }
+          }
+        })
       };
     }
 
     function mgmtPdfMonthlyColStyles(layout) {
-      const cw = layout.contentWidth;
-      const monthW = Math.round(cw * 0.1);
-      const numW = (cw - monthW) / 5;
+      const widths = mgmtPdfMonthlyColWidths(layout);
       return {
-        0: { cellWidth: monthW },
-        1: { cellWidth: numW, halign: 'right' },
-        2: { cellWidth: numW, halign: 'right' },
-        3: { cellWidth: numW, halign: 'right' },
-        4: { cellWidth: numW, halign: 'right' },
-        5: { cellWidth: numW, halign: 'right' }
+        widths,
+        options: mgmtPdfMakeTableOptions(layout, widths, {
+          columnStylesPerCol: {
+            0: { halign: 'left' },
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' },
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+          }
+        })
       };
     }
 
     function mgmtPdfKpiColStyles(layout) {
-      const cw = layout.contentWidth;
-      const labelW = cw * 0.28;
-      const valueW = cw * 0.22;
+      const widths = mgmtPdfKpiColWidths(layout);
       return {
-        0: { cellWidth: labelW, textColor: [100, 116, 139] },
-        1: {
-          cellWidth: valueW,
-          fontSize: 10,
-          halign: 'right',
-          textColor: [15, 118, 110]
-        },
-        2: { cellWidth: labelW, textColor: [100, 116, 139] },
-        3: {
-          cellWidth: valueW,
-          fontSize: 10,
-          halign: 'right',
-          textColor: [15, 118, 110]
-        }
+        widths,
+        options: mgmtPdfMakeTableOptions(layout, widths, {
+          styles: {
+            font: 'DejaVuSans',
+            fontSize: 9,
+            cellPadding: 2,
+            overflow: 'linebreak'
+          },
+          columnStylesPerCol: {
+            0: { textColor: [100, 116, 139] },
+            1: { fontSize: 10, halign: 'right', textColor: [15, 118, 110] },
+            2: { textColor: [100, 116, 139] },
+            3: { fontSize: 10, halign: 'right', textColor: [15, 118, 110] }
+          },
+          headStyles: {
+            fillColor: [204, 251, 241],
+            textColor: [17, 94, 89],
+            fontStyle: 'normal'
+          }
+        })
       };
     }
 
-    function mgmtPdfAddSectionTable(doc, layout, startY, title, head, body, extraOptions) {
+    function mgmtPdfAddSectionTable(doc, layout, startY, title, head, body, tableOptions) {
       const pageH = layout.pageH;
       if (startY > pageH - layout.marginBottom - 14) {
         doc.addPage();
@@ -11535,8 +11634,7 @@
         startY,
         head: [head],
         body,
-        ...mgmtPdfBaseTableOptions(layout),
-        ...(extraOptions || {})
+        ...tableOptions
       });
       return doc.lastAutoTable.finalY + 7;
     }
@@ -11600,24 +11698,16 @@
         ]
       ];
 
+      const kpiTable = mgmtPdfKpiColStyles(layout);
       doc.autoTable({
         startY: y,
         head: [['Показатель', 'Значение', 'Показатель', 'Значение']],
         body: kpiBody,
-        ...mgmtPdfBaseTableOptions(layout),
-        styles: {
-          ...mgmtPdfBaseTableOptions(layout).styles,
-          fontSize: 9
-        },
-        columnStyles: mgmtPdfKpiColStyles(layout),
-        headStyles: {
-          fillColor: [204, 251, 241],
-          textColor: [17, 94, 89],
-          fontStyle: 'normal'
-        }
+        ...kpiTable.options
       });
       y = doc.lastAutoTable.finalY + 8;
 
+      const topRevenueTable = mgmtPdfSixColStyles(layout, 0.4);
       const topRevenue = [...report.rows]
         .sort((a, b) => b.shipmentNoVat - a.shipmentNoVat)
         .slice(0, 5);
@@ -11642,9 +11732,10 @@
           mgmtFmtPdfPct(r.marginPct),
           formatMoney(r.wipEnd20)
         ]),
-        { columnStyles: mgmtPdfSixColStyles(layout, 0.4) }
+        topRevenueTable.options
       );
 
+      const topProfitTable = mgmtPdfSixColStyles(layout, 0.4);
       const topProfit = [...report.rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
       const topProfitTitle =
         topProfit.length < 5
@@ -11671,9 +11762,10 @@
           formatMoney(r.writeoffTotal),
           formatMoney(r.wipEnd20)
         ]),
-        { columnStyles: mgmtPdfSixColStyles(layout, 0.4) }
+        topProfitTable.options
       );
 
+      const problemTable = mgmtPdfProblemColStyles(layout);
       const problemRows = pickMgmtPdfProblemRows(report.rows, 15);
       const problemFillByIndex = problemRows.map(r => mgmtPdfProblemFillColor(r));
       const problemTitle =
@@ -11704,16 +11796,17 @@
             ])
           : [['—', '—', '—', '—', '—', 'Проблемных заказов не найдено']],
         {
-          columnStyles: mgmtPdfProblemColStyles(layout),
-          didParseCell: data => {
+          ...problemTable.options,
+          didParseCell: mgmtPdfCombineDidParseCell(problemTable.options.didParseCell, data => {
             if (data.section === 'body' && problemRows.length) {
               const fill = problemFillByIndex[data.row.index];
               if (fill) data.cell.styles.fillColor = fill;
             }
-          }
+          })
         }
       );
 
+      const monthlyTable = mgmtPdfMonthlyColStyles(layout);
       y = mgmtPdfAddSectionTable(
         doc,
         layout,
@@ -11728,9 +11821,10 @@
           mgmtFmtPdfPct(m.marginPct),
           formatMoney(m.wipEnd20)
         ]),
-        { columnStyles: mgmtPdfMonthlyColStyles(layout) }
+        monthlyTable.options
       );
 
+      const yearTotalWidths = mgmtPdfWidthsFromWeights(layout.contentWidth * 0.55, [0.55, 0.45]);
       y = mgmtPdfAddSectionTable(
         doc,
         layout,
@@ -11744,22 +11838,12 @@
           ['Маржа', mgmtFmtPdfPct(totals.marginPct)],
           ['НЗП конец', formatMoney(totals.wipEnd20)]
         ],
-        {
-          tableWidth: layout.contentWidth * 0.55,
-          columnStyles: {
-            0: { cellWidth: layout.contentWidth * 0.3, textColor: [100, 116, 139] },
-            1: {
-              cellWidth: layout.contentWidth * 0.25,
-              halign: 'right',
-              fontSize: 9,
-              textColor: [15, 118, 110]
-            }
-          },
-          styles: {
-            ...mgmtPdfBaseTableOptions(layout).styles,
-            fontSize: 8.5
+        mgmtPdfMakeTableOptions(layout, yearTotalWidths, {
+          columnStylesPerCol: {
+            0: { textColor: [100, 116, 139] },
+            1: { halign: 'right', fontSize: 9, textColor: [15, 118, 110] }
           }
-        }
+        })
       );
 
       const pageH = layout.pageH;

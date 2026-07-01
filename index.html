@@ -2689,7 +2689,7 @@
       <div class="mgmt-reports-head">
         <h2>Красивые управленческие отчёты</h2>
         <p class="mgmt-reports-subtitle">
-          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Годовой отчёт читает данные из localStorage и не изменяет учёт.
+          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Данные читаются из текущего периода или localStorage и не изменяют учёт.
         </p>
       </div>
       <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
@@ -2707,31 +2707,24 @@
         </div>
         <p class="mgmt-reports-status" id="mgmtReportsPeriodStatus"></p>
         <div id="mgmtReportsPeriodContent" hidden>
-          <div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi">
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Выручка</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Прибыль</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">Маржа</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-            <div class="mgmt-reports-kpi-card"><span class="mgmt-reports-kpi-label">НЗП конец</span><span class="mgmt-reports-kpi-value">скоро</span></div>
-          </div>
+          <div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi"></div>
           <div class="mgmt-reports-two-col">
             <div class="mgmt-reports-section">
               <h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>
-              <div class="mgmt-reports-placeholder">Диаграмма и таблица рейтинга — в следующей версии</div>
+              <div id="mgmtReportsPeriodTopRevenue"></div>
             </div>
             <div class="mgmt-reports-section">
               <h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>
-              <div class="mgmt-reports-placeholder">Диаграмма и таблица рейтинга — в следующей версии</div>
+              <div id="mgmtReportsPeriodTopProfit"></div>
             </div>
           </div>
           <div class="mgmt-reports-section">
             <h3 class="mgmt-reports-section-title">Проблемные заказы</h3>
-            <div class="mgmt-reports-placeholder">Заказы с отрицательной маржой, перерасходом и прочими сигналами — в следующей версии</div>
+            <div id="mgmtReportsPeriodProblems"></div>
           </div>
           <div class="mgmt-reports-section">
             <h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>
-            <div class="mgmt-reports-table-wrap">
-              <span class="mgmt-reports-placeholder" style="border:none;background:transparent;">Таблица с горизонтальной прокруткой — в следующей версии</span>
-            </div>
+            <div id="mgmtReportsPeriodFullTable"></div>
           </div>
         </div>
       </div>
@@ -10626,22 +10619,47 @@
     }
 
     function showMgmtReportPeriodPlaceholder() {
-      updateMgmtReportsCurrentPeriodLabel();
-      const period = normalizePeriodStr(getCurrentPeriod());
-      const statusEl = document.getElementById('mgmtReportsPeriodStatus');
-      const contentEl = document.getElementById('mgmtReportsPeriodContent');
-      if (!period || !/^\d{4}-\d{2}$/.test(period)) {
-        if (statusEl) {
-          statusEl.textContent = 'Выберите период вверху страницы (формат YYYY-MM).';
-        }
-        if (contentEl) contentEl.hidden = true;
-        return;
+      buildMgmtPeriodReport();
+    }
+
+    function collectMgmtPeriodReportData(period) {
+      const p = normalizePeriodStr(period || getCurrentPeriod());
+      const base = collectAiAnalysisData('month', p);
+      if (base.error) {
+        return {
+          error: base.error,
+          period: p,
+          rows: [],
+          totals: null
+        };
       }
-      if (contentEl) contentEl.hidden = false;
-      if (statusEl) {
-        statusEl.textContent =
-          'Каркас отчёта за ' + period + ' готов. Расчёты и данные учёта не изменяются.';
-      }
+      const totals = {
+        shipmentVat: 0,
+        shipmentNoVat: 0,
+        writeoffTotal: 0,
+        writeoff20: 0,
+        writeoff26: 0,
+        profit: 0,
+        wipEnd20: 0,
+        wipEnd26: 0,
+        marginPct: 0
+      };
+      base.rows.forEach(r => {
+        totals.shipmentVat += r.shipmentVat;
+        totals.shipmentNoVat += r.shipmentNoVat;
+        totals.writeoffTotal += r.writeoffTotal;
+        totals.writeoff20 += r.writeoff20;
+        totals.writeoff26 += r.writeoff26;
+        totals.wipEnd20 += r.wipEnd20;
+        totals.wipEnd26 += r.wipEnd26;
+      });
+      totals.profit = totals.shipmentNoVat - totals.writeoffTotal;
+      totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipmentNoVat);
+      return {
+        period: p,
+        rows: base.rows,
+        totals
+      };
     }
 
     function formatMgmtPeriodMonthLabel(period) {
@@ -10850,28 +10868,40 @@
 
     function mgmtProblemRowClass(row) {
       const reasons = buildMgmtProblemReasons(row);
-      if (!reasons.length) return '';
-      if (reasons.some(r => r === 'Убыток' || r.startsWith('Контроль:'))) return 'mgmt-problem-loss';
+      return mgmtProblemRowClassForReasons(reasons);
+    }
+
+    function mgmtProblemRowClassForReasons(reasons) {
+      if (!reasons || !reasons.length) return '';
+      if (
+        reasons.includes('Убыток') ||
+        reasons.some(r => r.startsWith('Контроль:')) ||
+        reasons.includes('Контроль') ||
+        reasons.includes('Отрицательное НЗП')
+      ) {
+        return 'mgmt-problem-loss';
+      }
       if (reasons.includes('Большой НЗП') || reasons.includes('НЗП без отгрузки')) return 'mgmt-problem-wip';
       if (reasons.includes('Высокая маржа')) return 'mgmt-problem-high-margin';
       if (reasons.includes('Низкая маржа')) return 'mgmt-problem-low-margin';
       return 'mgmt-problem-warn';
     }
 
-    function renderMgmtYearKpiHtml(totals) {
+    function renderMgmtKpiHtml(totals, labels) {
+      const l = labels || {};
       const cards = [
         {
-          label: 'Выручка за год / отгрузка без НДС',
+          label: l.revenue || 'Выручка / отгрузка без НДС',
           value: formatMoney(totals.shipmentNoVat),
           main: true
         },
-        { label: 'Прибыль за год', value: formatMoney(totals.profit), main: true },
+        { label: l.profit || 'Прибыль', value: formatMoney(totals.profit), main: true },
         {
-          label: 'Маржа',
+          label: l.margin || 'Маржа',
           value: totals.marginPct.toFixed(1).replace('.', ',') + '%',
           main: true
         },
-        { label: 'НЗП конец года', value: formatMoney(totals.wipEnd20), main: true },
+        { label: l.wip || 'НЗП конец', value: formatMoney(totals.wipEnd20), main: true },
         { label: 'Отгрузка с НДС', value: formatMoney(totals.shipmentVat) },
         { label: 'Списано всего', value: formatMoney(totals.writeoffTotal) },
         { label: 'Списано с 20', value: formatMoney(totals.writeoff20) },
@@ -10889,6 +10919,18 @@
             '</span></div>'
         )
         .join('');
+    }
+
+    function renderMgmtYearKpiHtml(totals) {
+      return renderMgmtKpiHtml(totals, {
+        revenue: 'Выручка за год / отгрузка без НДС',
+        profit: 'Прибыль за год',
+        wip: 'НЗП конец года'
+      });
+    }
+
+    function renderMgmtPeriodKpiHtml(totals) {
+      return renderMgmtKpiHtml(totals, { wip: 'НЗП конец периода' });
     }
 
     function renderMgmtYearTopRevenue(rows) {
@@ -10949,9 +10991,10 @@
       );
     }
 
-    function renderMgmtYearProblems(rows) {
+    function renderMgmtProblemsTable(rows, reasonFn, useShortRowClass) {
+      const getReasons = reasonFn || buildMgmtProblemReasons;
       const problems = rows
-        .map(r => ({ ...r, reasons: buildMgmtProblemReasons(r) }))
+        .map(r => ({ ...r, reasons: getReasons(r) }))
         .filter(r => r.reasons.length > 0)
         .sort((a, b) => {
           const aLoss = a.profit < -RECONCILE_EPS ? 1 : 0;
@@ -10962,7 +11005,56 @@
       if (!problems.length) return mgmtRenderEmptyNote('Проблемных заказов не найдено.');
       const body = problems
         .map(r => {
-          const cls = mgmtProblemRowClass(r);
+          const cls = useShortRowClass
+            ? mgmtProblemRowClassForReasons(r.reasons)
+            : mgmtProblemRowClass(r);
+          return (
+            '<tr class="' +
+            cls +
+            '">' +
+            mgmtRenderOrderCell(r) +
+            mgmtExportNumCell(r.shipmentNoVat) +
+            mgmtExportNumCell(r.profit) +
+            mgmtFmtPctCell(r.marginPct) +
+            mgmtExportNumCell(r.wipEnd20) +
+            '<td class="mgmt-reports-comment-cell">' +
+            escapeHtmlForReport(r.reasons.join('; ')) +
+            '</td></tr>'
+          );
+        })
+        .join('');
+      return mgmtRenderDataTable(
+        [
+          'Заказ / расчётная группа',
+          'Отгрузка без НДС',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец',
+          'Причина / статус'
+        ],
+        body
+      );
+    }
+
+    function renderMgmtYearProblems(rows) {
+      return renderMgmtProblemsTable(rows, buildMgmtProblemReasons, false);
+    }
+
+    function renderMgmtPeriodProblems(rows) {
+      const candidates = rows
+        .filter(r => buildMgmtProblemReasons(r).length > 0)
+        .map(r => ({ ...r, reasons: buildMgmtShortProblemReasons(r) }))
+        .filter(r => r.reasons.length > 0)
+        .sort((a, b) => {
+          const aLoss = a.profit < -RECONCILE_EPS ? 1 : 0;
+          const bLoss = b.profit < -RECONCILE_EPS ? 1 : 0;
+          if (bLoss !== aLoss) return bLoss - aLoss;
+          return a.groupName.localeCompare(b.groupName, 'ru');
+        });
+      if (!candidates.length) return mgmtRenderEmptyNote('Проблемных заказов не найдено.');
+      const body = candidates
+        .map(r => {
+          const cls = mgmtProblemRowClassForReasons(r.reasons);
           return (
             '<tr class="' +
             cls +
@@ -11070,6 +11162,92 @@
         'mgmt-reports-full-table'
       );
     }
+
+    function renderMgmtPeriodReportFull(report) {
+      const emptyMsg = 'Нет данных за выбранный период.';
+      const hasData = !report.error && report.rows && report.rows.length && report.totals;
+
+      const kpiHtml = hasData ? renderMgmtPeriodKpiHtml(report.totals) : '';
+      const topRevHtml = hasData ? renderMgmtYearTopRevenue(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+      const topProfitHtml = hasData ? renderMgmtYearTopProfit(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+      const problemsHtml = hasData ? renderMgmtPeriodProblems(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+      const fullTableHtml = hasData ? renderMgmtYearFullTable(report.rows) : mgmtRenderEmptyNote(emptyMsg);
+
+      return (
+        '<div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi">' +
+        kpiHtml +
+        '</div>' +
+        '<div class="mgmt-reports-two-col">' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>' +
+        '<div id="mgmtReportsPeriodTopRevenue">' +
+        topRevHtml +
+        '</div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>' +
+        '<div id="mgmtReportsPeriodTopProfit">' +
+        topProfitHtml +
+        '</div></div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Проблемные заказы</h3>' +
+        '<div id="mgmtReportsPeriodProblems">' +
+        problemsHtml +
+        '</div></div>' +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>' +
+        '<div id="mgmtReportsPeriodFullTable">' +
+        fullTableHtml +
+        '</div></div>'
+      );
+    }
+
+    let lastMgmtPeriodReport = null;
+
+    function buildMgmtPeriodReport() {
+      try {
+        switchMgmtReportsTab('period');
+        updateMgmtReportsCurrentPeriodLabel();
+
+        const period = normalizePeriodStr(getCurrentPeriod());
+        const statusEl = document.getElementById('mgmtReportsPeriodStatus');
+        const contentEl = document.getElementById('mgmtReportsPeriodContent');
+
+        if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+          if (statusEl) {
+            statusEl.textContent = 'Выберите период вверху страницы (формат YYYY-MM).';
+          }
+          if (contentEl) contentEl.hidden = true;
+          return null;
+        }
+
+        const report = collectMgmtPeriodReportData(period);
+        lastMgmtPeriodReport = report;
+
+        if (contentEl) {
+          contentEl.innerHTML = renderMgmtPeriodReportFull(report);
+          contentEl.hidden = false;
+        }
+
+        if (statusEl) {
+          if (report.error || !report.rows.length) {
+            statusEl.textContent = 'Нет данных за выбранный период.';
+          } else {
+            statusEl.textContent =
+              'Отчёт за ' + period + ': ' + report.rows.length + ' групп/заказов';
+          }
+        }
+        return report;
+      } catch (err) {
+        console.error('[mgmt period report]', err);
+        const statusEl = document.getElementById('mgmtReportsPeriodStatus');
+        if (statusEl) {
+          statusEl.textContent =
+            'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
+        }
+        return null;
+      }
+    }
+    window.buildMgmtPeriodReport = buildMgmtPeriodReport;
 
     function renderMgmtYearReportFull(report) {
       const emptyMsg = 'Нет данных за выбранный год в localStorage.';
@@ -11217,7 +11395,7 @@
       return name;
     }
 
-    function buildMgmtPdfProblemReasons(row) {
+    function buildMgmtShortProblemReasons(row) {
       const reasons = [];
       const controlWarnings = mgmtExtractControlWarnings(row.controlComments);
 
@@ -11246,6 +11424,10 @@
       if (row.marginPct > 30 && row.shipmentNoVat > RECONCILE_EPS) reasons.push('Высокая маржа');
 
       return reasons.filter((reason, index) => reasons.indexOf(reason) === index);
+    }
+
+    function buildMgmtPdfProblemReasons(row) {
+      return buildMgmtShortProblemReasons(row);
     }
 
     function mgmtPdfProblemScore(row) {
@@ -11946,7 +12128,7 @@
             exportMgmtYearReportToPdf();
           } else if (target.id === 'buildMgmtReportPeriodBtn') {
             e.preventDefault();
-            showMgmtReportPeriodPlaceholder();
+            buildMgmtPeriodReport();
           }
         });
       }

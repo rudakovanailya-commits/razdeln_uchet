@@ -11400,16 +11400,39 @@
       doc.setFont('DejaVuSans', 'normal');
     }
 
-    function mgmtPdfBaseTableOptions() {
+    const MGMT_PDF_MARGIN = { left: 9, right: 9, top: 10, bottom: 10 };
+
+    function mgmtPdfGetLayout(doc) {
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const marginLeft = MGMT_PDF_MARGIN.left;
+      const marginRight = MGMT_PDF_MARGIN.right;
+      const marginTop = MGMT_PDF_MARGIN.top;
+      const marginBottom = MGMT_PDF_MARGIN.bottom;
+      const contentWidth = pageW - marginLeft - marginRight;
+      return {
+        pageW,
+        pageH,
+        marginLeft,
+        marginRight,
+        marginTop,
+        marginBottom,
+        contentWidth
+      };
+    }
+
+    function mgmtPdfBaseTableOptions(layout) {
       return {
         theme: 'grid',
+        tableWidth: layout.contentWidth,
         styles: {
           font: 'DejaVuSans',
-          fontSize: 8,
-          cellPadding: 2.2,
+          fontSize: 8.5,
+          cellPadding: 2,
           lineColor: [209, 231, 223],
           lineWidth: 0.1,
-          textColor: [30, 41, 59]
+          textColor: [30, 41, 59],
+          overflow: 'linebreak'
         },
         headStyles: {
           fillColor: [232, 245, 239],
@@ -11418,33 +11441,101 @@
           halign: 'center'
         },
         alternateRowStyles: { fillColor: [248, 253, 251] },
-        margin: { left: 12, right: 12 }
+        margin: {
+          left: layout.marginLeft,
+          right: layout.marginRight,
+          top: layout.marginTop,
+          bottom: layout.marginBottom
+        }
       };
     }
 
-    function mgmtPdfCompactTopTableOptions(columnStyles) {
+    function mgmtPdfSixColStyles(layout, orderShare) {
+      const cw = layout.contentWidth;
+      const orderW = Math.round(cw * (orderShare || 0.38));
+      const numW = (cw - orderW) / 5;
       return {
-        tableWidth: 'wrap',
-        columnStyles
+        0: { cellWidth: orderW, overflow: 'linebreak', valign: 'top' },
+        1: { cellWidth: numW, halign: 'right' },
+        2: { cellWidth: numW, halign: 'right' },
+        3: { cellWidth: numW, halign: 'right' },
+        4: { cellWidth: numW, halign: 'right' },
+        5: { cellWidth: numW, halign: 'right' }
       };
     }
 
-    function mgmtPdfAddSectionTable(doc, startY, title, head, body, extraOptions) {
-      const pageH = doc.internal.pageSize.getHeight();
-      if (startY > pageH - 24) {
+    function mgmtPdfProblemColStyles(layout) {
+      const cw = layout.contentWidth;
+      const orderW = Math.round(cw * 0.3);
+      const reasonsW = Math.round(cw * 0.3);
+      const numW = (cw - orderW - reasonsW) / 4;
+      return {
+        0: { cellWidth: orderW, overflow: 'linebreak', valign: 'top' },
+        1: { cellWidth: numW, halign: 'right' },
+        2: { cellWidth: numW, halign: 'right' },
+        3: { cellWidth: numW * 0.85, halign: 'right' },
+        4: { cellWidth: numW * 1.15, halign: 'right' },
+        5: {
+          cellWidth: reasonsW,
+          overflow: 'linebreak',
+          fontSize: 8,
+          valign: 'top'
+        }
+      };
+    }
+
+    function mgmtPdfMonthlyColStyles(layout) {
+      const cw = layout.contentWidth;
+      const monthW = Math.round(cw * 0.1);
+      const numW = (cw - monthW) / 5;
+      return {
+        0: { cellWidth: monthW },
+        1: { cellWidth: numW, halign: 'right' },
+        2: { cellWidth: numW, halign: 'right' },
+        3: { cellWidth: numW, halign: 'right' },
+        4: { cellWidth: numW, halign: 'right' },
+        5: { cellWidth: numW, halign: 'right' }
+      };
+    }
+
+    function mgmtPdfKpiColStyles(layout) {
+      const cw = layout.contentWidth;
+      const labelW = cw * 0.28;
+      const valueW = cw * 0.22;
+      return {
+        0: { cellWidth: labelW, textColor: [100, 116, 139] },
+        1: {
+          cellWidth: valueW,
+          fontSize: 10,
+          halign: 'right',
+          textColor: [15, 118, 110]
+        },
+        2: { cellWidth: labelW, textColor: [100, 116, 139] },
+        3: {
+          cellWidth: valueW,
+          fontSize: 10,
+          halign: 'right',
+          textColor: [15, 118, 110]
+        }
+      };
+    }
+
+    function mgmtPdfAddSectionTable(doc, layout, startY, title, head, body, extraOptions) {
+      const pageH = layout.pageH;
+      if (startY > pageH - layout.marginBottom - 14) {
         doc.addPage();
-        startY = 16;
+        startY = layout.marginTop + 6;
       }
       doc.setFont('DejaVuSans', 'normal');
       doc.setFontSize(11);
       doc.setTextColor(20, 83, 45);
-      doc.text(title, 12, startY);
+      doc.text(title, layout.marginLeft, startY);
       startY += 5;
       doc.autoTable({
         startY,
         head: [head],
         body,
-        ...mgmtPdfBaseTableOptions(),
+        ...mgmtPdfBaseTableOptions(layout),
         ...(extraOptions || {})
       });
       return doc.lastAutoTable.finalY + 7;
@@ -11456,25 +11547,30 @@
       const doc = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       await ensureMgmtPdfFont(doc);
 
+      const layout = mgmtPdfGetLayout(doc);
       const totals = report.totals;
-      let y = 16;
+      let y = layout.marginTop + 4;
 
       doc.setFont('DejaVuSans', 'normal');
       doc.setFontSize(20);
       doc.setTextColor(15, 118, 110);
-      doc.text('Управленческий годовой отчёт', 12, y);
+      doc.text('Управленческий годовой отчёт', layout.marginLeft, y);
       y += 9;
 
       doc.setFontSize(12);
       doc.setTextColor(51, 65, 85);
-      doc.text('Год: ' + report.year, 12, y);
+      doc.text('Год: ' + report.year, layout.marginLeft, y);
       y += 6;
-      doc.text('Дата формирования: ' + formatMgmtPdfDateTime(generatedAt), 12, y);
+      doc.text('Дата формирования: ' + formatMgmtPdfDateTime(generatedAt), layout.marginLeft, y);
       y += 6;
 
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
-      doc.text('Данные из локального расчёта, без изменения учётных данных', 12, y);
+      doc.text(
+        'Данные из локального расчёта, без изменения учётных данных',
+        layout.marginLeft,
+        y
+      );
       y += 8;
 
       const kpiBody = [
@@ -11508,17 +11604,12 @@
         startY: y,
         head: [['Показатель', 'Значение', 'Показатель', 'Значение']],
         body: kpiBody,
-        ...mgmtPdfBaseTableOptions(),
+        ...mgmtPdfBaseTableOptions(layout),
         styles: {
-          ...mgmtPdfBaseTableOptions().styles,
+          ...mgmtPdfBaseTableOptions(layout).styles,
           fontSize: 9
         },
-        columnStyles: {
-          0: { fontStyle: 'normal', textColor: [100, 116, 139], cellWidth: 52 },
-          1: { fontStyle: 'normal', fontSize: 11, textColor: [15, 118, 110], halign: 'right' },
-          2: { fontStyle: 'normal', textColor: [100, 116, 139], cellWidth: 52 },
-          3: { fontStyle: 'normal', fontSize: 11, textColor: [15, 118, 110], halign: 'right' }
-        },
+        columnStyles: mgmtPdfKpiColStyles(layout),
         headStyles: {
           fillColor: [204, 251, 241],
           textColor: [17, 94, 89],
@@ -11532,6 +11623,7 @@
         .slice(0, 5);
       y = mgmtPdfAddSectionTable(
         doc,
+        layout,
         y,
         'Топ-5 заказов по выручке',
         [
@@ -11550,14 +11642,7 @@
           mgmtFmtPdfPct(r.marginPct),
           formatMoney(r.wipEnd20)
         ]),
-        mgmtPdfCompactTopTableOptions({
-          0: { cellWidth: 78, overflow: 'linebreak' },
-          1: { cellWidth: 32, halign: 'right' },
-          2: { cellWidth: 32, halign: 'right' },
-          3: { cellWidth: 28, halign: 'right' },
-          4: { cellWidth: 22, halign: 'right' },
-          5: { cellWidth: 28, halign: 'right' }
-        })
+        { columnStyles: mgmtPdfSixColStyles(layout, 0.4) }
       );
 
       const topProfit = [...report.rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
@@ -11567,6 +11652,7 @@
           : 'Топ-5 заказов по прибыли';
       y = mgmtPdfAddSectionTable(
         doc,
+        layout,
         y,
         topProfitTitle,
         [
@@ -11585,14 +11671,7 @@
           formatMoney(r.writeoffTotal),
           formatMoney(r.wipEnd20)
         ]),
-        mgmtPdfCompactTopTableOptions({
-          0: { cellWidth: 78, overflow: 'linebreak' },
-          1: { cellWidth: 28, halign: 'right' },
-          2: { cellWidth: 22, halign: 'right' },
-          3: { cellWidth: 32, halign: 'right' },
-          4: { cellWidth: 32, halign: 'right' },
-          5: { cellWidth: 28, halign: 'right' }
-        })
+        { columnStyles: mgmtPdfSixColStyles(layout, 0.4) }
       );
 
       const problemRows = pickMgmtPdfProblemRows(report.rows, 15);
@@ -11603,6 +11682,7 @@
           : 'Проблемные заказы';
       y = mgmtPdfAddSectionTable(
         doc,
+        layout,
         y,
         problemTitle,
         [
@@ -11624,15 +11704,7 @@
             ])
           : [['—', '—', '—', '—', '—', 'Проблемных заказов не найдено']],
         {
-          tableWidth: 'wrap',
-          columnStyles: {
-            0: { cellWidth: 58, overflow: 'linebreak' },
-            1: { cellWidth: 32, halign: 'right' },
-            2: { cellWidth: 28, halign: 'right' },
-            3: { cellWidth: 20, halign: 'right' },
-            4: { cellWidth: 28, halign: 'right' },
-            5: { cellWidth: 42, overflow: 'linebreak', fontSize: 7, valign: 'top' }
-          },
+          columnStyles: mgmtPdfProblemColStyles(layout),
           didParseCell: data => {
             if (data.section === 'body' && problemRows.length) {
               const fill = problemFillByIndex[data.row.index];
@@ -11644,6 +11716,7 @@
 
       y = mgmtPdfAddSectionTable(
         doc,
+        layout,
         y,
         'Помесячная динамика',
         ['Месяц', 'Отгрузка без НДС', 'Списано всего', 'Прибыль', 'Маржа %', 'НЗП конец'],
@@ -11655,20 +11728,12 @@
           mgmtFmtPdfPct(m.marginPct),
           formatMoney(m.wipEnd20)
         ]),
-        {
-          columnStyles: {
-            0: { cellWidth: 34 },
-            1: { halign: 'right' },
-            2: { halign: 'right' },
-            3: { halign: 'right' },
-            4: { halign: 'right' },
-            5: { halign: 'right' }
-          }
-        }
+        { columnStyles: mgmtPdfMonthlyColStyles(layout) }
       );
 
       y = mgmtPdfAddSectionTable(
         doc,
+        layout,
         y,
         'Итог года',
         ['Показатель', 'Значение'],
@@ -11680,42 +11745,50 @@
           ['НЗП конец', formatMoney(totals.wipEnd20)]
         ],
         {
-          tableWidth: 110,
+          tableWidth: layout.contentWidth * 0.55,
           columnStyles: {
-            0: { cellWidth: 58, textColor: [100, 116, 139] },
-            1: { cellWidth: 42, halign: 'right', fontSize: 9, textColor: [15, 118, 110] }
+            0: { cellWidth: layout.contentWidth * 0.3, textColor: [100, 116, 139] },
+            1: {
+              cellWidth: layout.contentWidth * 0.25,
+              halign: 'right',
+              fontSize: 9,
+              textColor: [15, 118, 110]
+            }
           },
           styles: {
-            ...mgmtPdfBaseTableOptions().styles,
+            ...mgmtPdfBaseTableOptions(layout).styles,
             fontSize: 8.5
           }
         }
       );
 
-      const pageH = doc.internal.pageSize.getHeight();
-      if (y > pageH - 20) {
+      const pageH = layout.pageH;
+      if (y > pageH - layout.marginBottom - 10) {
         doc.addPage();
-        y = 16;
+        y = layout.marginTop + 6;
       }
       doc.setFont('DejaVuSans', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
       doc.text(
         'Подробная таблица всех заказов доступна в Excel-выгрузке годовой сводки.',
-        12,
+        layout.marginLeft,
         y
       );
 
       const pageCount = doc.internal.getNumberOfPages();
-      const pageW = doc.internal.pageSize.getWidth();
+      const pageW = layout.pageW;
+      const footerY = pageH - layout.marginBottom + 2;
       const footerDate = formatMgmtPdfDateTime(generatedAt);
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFont('DejaVuSans', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(148, 163, 184);
-        doc.text('Сформировано: ' + footerDate, 12, pageH - 6);
-        doc.text('Стр. ' + i + ' из ' + pageCount, pageW - 12, pageH - 6, { align: 'right' });
+        doc.text('Сформировано: ' + footerDate, layout.marginLeft, footerY);
+        doc.text('Стр. ' + i + ' из ' + pageCount, pageW - layout.marginRight, footerY, {
+          align: 'right'
+        });
       }
 
       return doc;

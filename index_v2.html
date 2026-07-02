@@ -2521,6 +2521,7 @@
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+      <div class="hint" id="cloudPeriodVersionInfo" hidden style="margin-top: 6px; color: #475569;"></div>
     </div>
 
     <div class="card" id="wipChainStatusCard">
@@ -6650,6 +6651,7 @@
       hidePeriodDataMismatchHint();
       updateMgmtReportsCurrentPeriodLabel();
       if (typeof updateMgmtOrdersScopeUi === 'function') updateMgmtOrdersScopeUi();
+      updateCloudPeriodVersionUi();
     }
 
     function hidePeriodDataMismatchHint() {
@@ -7198,6 +7200,102 @@
     const CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING =
       'Загружена урезанная версия из старого формата Google Sheets. Группировка, переносы и НЗП начало могут быть не восстановлены.';
 
+    let uiCloudPeriodVersionMeta = null;
+
+    function normalizeCloudPeriodVersionMeta(result, period) {
+      if (!result || result.ok !== true) return null;
+      return {
+        period: normalizePeriodStr(period || result.period),
+        updated_at: result.updated_at != null ? String(result.updated_at) : '',
+        updated_by: result.updated_by != null ? String(result.updated_by) : '',
+        format_version:
+          result.format_version != null && result.format_version !== ''
+            ? String(result.format_version)
+            : ''
+      };
+    }
+
+    function formatCloudVersionDateTime(isoStr) {
+      if (!isoStr) return '—';
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return String(isoStr);
+      return d.toLocaleString('ru-RU');
+    }
+
+    function formatCloudPeriodVersionDisplay(meta) {
+      if (!meta) return '';
+      const at = formatCloudVersionDateTime(meta.updated_at);
+      const by = meta.updated_by || '—';
+      const fv = meta.format_version || '—';
+      return at + ', ' + by + ', ' + fv;
+    }
+
+    function setCloudPeriodVersionMeta(meta) {
+      uiCloudPeriodVersionMeta = meta && meta.period ? meta : null;
+      updateCloudPeriodVersionUi();
+    }
+
+    function clearCloudPeriodVersionMeta() {
+      uiCloudPeriodVersionMeta = null;
+      updateCloudPeriodVersionUi();
+    }
+
+    function updateCloudPeriodVersionUi() {
+      const el = document.getElementById('cloudPeriodVersionInfo');
+      if (!el) return;
+      const pn = normalizePeriodStr(getCurrentPeriod());
+      if (
+        !uiCloudPeriodVersionMeta ||
+        normalizePeriodStr(uiCloudPeriodVersionMeta.period) !== pn
+      ) {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+      }
+      el.textContent =
+        'Облачная копия: ' + formatCloudPeriodVersionDisplay(uiCloudPeriodVersionMeta);
+      el.hidden = false;
+    }
+
+    async function fetchCloudPeriodVersionMeta(period) {
+      try {
+        const result = await fetchPeriodDataFromCloud(period);
+        return normalizeCloudPeriodVersionMeta(result, period);
+      } catch (e) {
+        console.warn('[v2 cloud] fetchCloudPeriodVersionMeta failed', e);
+        return null;
+      }
+    }
+
+    async function confirmCloudSaveV2(period) {
+      const pn = normalizePeriodStr(period);
+      const existing = await fetchCloudPeriodVersionMeta(pn);
+
+      if (existing) {
+        const when = formatCloudVersionDateTime(existing.updated_at);
+        const who = existing.updated_by || '—';
+        const fv = existing.format_version || '—';
+        return confirm(
+          'В Google Sheets уже есть облачная копия периода ' +
+            pn +
+            '.\n\n' +
+            'Последняя облачная версия: ' +
+            when +
+            ', ' +
+            who +
+            ', ' +
+            fv +
+            '.\n\n' +
+            'Сохранение заменит её новой версией.\n\n' +
+            'Продолжить?'
+        );
+      }
+
+      return confirm(
+        'Вы обновляете общую облачную копию периода ' + pn + '. Продолжить?'
+      );
+    }
+
     async function fetchPeriodDataFromCloud(period) {
       const pn = normalizePeriodStr(period);
       if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
@@ -7351,6 +7449,7 @@
         rows: filtered.map(r => mapSheetRowToAppRow(r, vatRate))
       };
       applyData(data);
+      clearCloudPeriodVersionMeta();
       if (statusEl) {
         statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
       }
@@ -7390,6 +7489,7 @@
           }
 
           applyPeriodDataFromCloud(data, 'Google Sheets period_data');
+          setCloudPeriodVersionMeta(normalizeCloudPeriodVersionMeta(result, period));
           if (statusEl) {
             statusEl.textContent =
               'Загружена полная копия периода ' +
@@ -7709,6 +7809,27 @@
       markLoadedPeriodOnScreen(getCurrentPeriod());
     }
 
+    function getStoredPeriodDataFromLocal(period) {
+      const raw = localStorage.getItem(getStorageKey(period));
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function storedLocalPeriodHasRows(period) {
+      const data = getStoredPeriodDataFromLocal(period);
+      return !!(data && Array.isArray(data.rows) && data.rows.length > 0);
+    }
+
+    function wouldBlockSavingEmptyOverExistingLocal(period) {
+      if (!storedLocalPeriodHasRows(period)) return false;
+      if (ordersTableHasNonEmptyRows()) return false;
+      return true;
+    }
+
     function savePeriod(showAlert = true, options = {}) {
       const period = getCurrentPeriod();
       const allowFinal = options && options.allowFinal;
@@ -7739,8 +7860,18 @@
         const key = 'razdelny_uchet_' + period;
         if (localStorage.getItem(key)) {
           const ok = confirm('Период уже существует. Перезаписать?');
-          if (!ok) return;
+          if (!ok) return false;
         }
+      }
+
+      if (wouldBlockSavingEmptyOverExistingLocal(period)) {
+        console.warn('[v2 safety] blocked saving empty period over existing local data');
+        if (showAlert) {
+          alert(
+            'Вы пытаетесь сохранить пустой период поверх существующих данных. Это может удалить все строки периода. Сохранение отменено.'
+          );
+        }
+        return false;
       }
 
       const data = collectData();
@@ -7766,6 +7897,7 @@
 
     function loadPeriod(showAlert = true) {
       const period = getCurrentPeriod();
+      clearCloudPeriodVersionMeta();
 
       if (!period) {
         if (showAlert) {
@@ -8646,9 +8778,7 @@
       }
       if (!requireValidWorkingPeriod(period)) return;
 
-      const confirmed = confirm(
-        'Вы сохраняете данные из тестовой версии 2 в общую Google Sheets. Будут обновлены Лист1 и полная копия period_data. Продолжить?'
-      );
+      const confirmed = await confirmCloudSaveV2(period);
       if (!confirmed) return;
 
       const statusEl = document.getElementById('periodActionStatus');
@@ -8692,9 +8822,15 @@
             payload && payload.period
           );
 
-          await savePeriodDataToCloud(period, payload);
-
+          const saveResult = await savePeriodDataToCloud(period, payload);
+          let savedMeta = normalizeCloudPeriodVersionMeta(saveResult, period);
           const verify = await verifyPeriodDataInCloud(period);
+          if (!savedMeta || !savedMeta.updated_at) {
+            savedMeta = normalizeCloudPeriodVersionMeta(verify, period);
+          }
+          if (savedMeta && savedMeta.updated_at) {
+            setCloudPeriodVersionMeta(savedMeta);
+          }
           if (verify && verify.ok && verify.json) {
             periodDataNote =
               '\n\nПолная копия периода сохранена в period_data.';
@@ -8726,7 +8862,7 @@
       return saveToCloudV2();
     }
 
-    function clearAll(skipAutoSave) {
+    function clearAll(internalOnly) {
       if (isPeriodFinal()) {
         alert(
           'Закрытый период нельзя очистить. Сначала верните период в работу.'
@@ -8757,8 +8893,14 @@
       refreshAllGlobalNums();
       createRow();
       calculateAll();
-      if (!skipAutoSave) autoSave();
       populateOrderSelect();
+
+      if (!internalOnly) {
+        setUiPeriodDirty(true);
+        alert(
+          'Экран очищен. Сохранённый локальный период не изменён. Чтобы удалить период, используйте отдельную кнопку удаления.'
+        );
+      }
     }
 
     /** Заказы из всех периодов localStorage и облака (allData) — для будущего режима «архив». */
@@ -17710,7 +17852,10 @@
       if (inp && document.activeElement === inp) {
         inp.blur();
       }
-      requestAnimationFrame(() => savePeriod(true));
+      requestAnimationFrame(() => {
+        const ok = savePeriod(true);
+        if (ok) setUiPeriodDirty(false);
+      });
     });
 
     document.getElementById('saveCloudBtn').addEventListener('click', () => {
@@ -18081,7 +18226,6 @@
         saveLocalBtn.addEventListener('click', () => {
           const btn = document.getElementById('saveBtn');
           if (btn) btn.click();
-          setUiPeriodDirty(false);
         });
       }
       if (saveCloudBtn && !saveCloudBtn.dataset.bound) {
@@ -18126,13 +18270,13 @@
         true
       );
 
-      ['saveBtn', 'saveCloudBtn', 'loadBtn', 'loadCloudBtn', 'clearBtn'].forEach(id => {
+      ['saveBtn', 'saveCloudBtn', 'loadBtn', 'loadCloudBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         if (el.dataset.dirtyHooked) return;
         el.dataset.dirtyHooked = '1';
         el.addEventListener('click', () => {
-          if (id === 'loadBtn' || id === 'loadCloudBtn' || id === 'clearBtn') {
+          if (id === 'loadBtn' || id === 'loadCloudBtn') {
             setUiPeriodDirty(false);
           }
           if (id === 'saveBtn' || id === 'saveCloudBtn') {

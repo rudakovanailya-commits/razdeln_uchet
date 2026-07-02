@@ -7371,42 +7371,20 @@
       if (!requireValidWorkingPeriod(period)) return;
       if (!confirmIfUnsyncedCloudLoad()) return;
 
-      const pn = normalizePeriodStr(period);
-      console.log('[v2 cloud load] normalized period', pn);
-      console.log('[v2 cloud load] CLOUD_SAVE_URL', CLOUD_SAVE_URL);
-      console.log('[v2 cloud load] CLOUD_DATA_URL', CLOUD_DATA_URL);
-
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Загрузка из облака…';
 
       try {
-        let cloudPeriodData = null;
-        try {
-          cloudPeriodData = await fetchPeriodDataFromCloud(pn);
-          console.log('[v2 cloud load] getPeriodData result', cloudPeriodData);
-        } catch (periodDataErr) {
-          console.error('[v2 cloud load] getPeriodData fetch failed', periodDataErr);
-          if (statusEl) statusEl.textContent = '';
-          alert(
-            'Не удалось прочитать period_data из Google Sheets: ' +
-              (periodDataErr && periodDataErr.message
-                ? periodDataErr.message
-                : String(periodDataErr))
-          );
-          return;
-        }
+        const result = await fetchPeriodDataFromCloud(period);
+        console.log('[v2 cloud load] getPeriodData result', result);
 
-        if (cloudPeriodData && cloudPeriodData.ok === true && cloudPeriodData.json) {
-          const data = parsePeriodDataFromCloud(cloudPeriodData.json);
+        if (result && result.ok === true && result.json) {
+          const data = parsePeriodDataFromCloud(result.json);
           if (!data) {
-            console.error('[v2 cloud load] parsePeriodDataFromCloud failed', {
-              jsonLength: cloudPeriodData.json ? cloudPeriodData.json.length : 0
-            });
+            console.error('[v2 cloud load] parsePeriodDataFromCloud failed');
             if (statusEl) statusEl.textContent = '';
             alert(
-              'В period_data найден JSON периода ' +
-                pn +
-                ', но его не удалось разобрать. Проверьте Console.'
+              'В period_data найден JSON, но его не удалось разобрать. Проверьте Console.'
             );
             return;
           }
@@ -7414,26 +7392,29 @@
           applyPeriodDataFromCloud(data, 'Google Sheets period_data');
           if (statusEl) {
             statusEl.textContent =
-              'Загружена полная копия периода ' + pn + ' из Google Sheets';
+              'Загружена полная копия периода ' +
+              normalizePeriodStr(period) +
+              ' из Google Sheets';
           }
           alert('Загружена полная копия периода из Google Sheets.');
           return;
         }
 
-        const periodDataError =
-          cloudPeriodData && cloudPeriodData.error
-            ? String(cloudPeriodData.error)
-            : 'not_found';
-        console.warn('[v2 cloud load] period_data unavailable, legacy fallback', periodDataError);
+        if (result && result.ok === false) {
+          console.warn('[v2 cloud load] getPeriodData error', result.error || 'not_found');
+        }
 
-        await loadPeriodFromCloudLegacyFlat(pn, statusEl);
+        await loadPeriodFromCloudLegacyFlat(period, statusEl);
       } catch (err) {
+        console.error('[v2 cloud load] failed', err);
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось загрузить из облака: ' + (err && err.message ? err.message : String(err))
         );
       }
     }
+
+    window.loadPeriodFromCloudV2 = loadPeriodFromCloudV2;
 
     async function loadPeriodFromCloud() {
       return loadPeriodFromCloudV2();
@@ -18120,19 +18101,13 @@
 
     function setupCloudLoadUi() {
       const btn = document.getElementById('loadCloudBtn');
-      if (!btn) return;
-      if (btn.dataset.cloudLoadBound) return;
-      btn.dataset.cloudLoadBound = '1';
-      btn.addEventListener('click', () => {
-        console.log('[v2 cloud load] loadCloudBtn click (setupCloudLoadUi)');
-        const inp = getElementByIdDeep('periodInput');
-        if (inp && document.activeElement === inp) {
-          inp.blur();
-        }
-        loadPeriodFromCloudV2().catch(err => {
-          console.error('[v2 cloud load] unhandled error', err);
-        });
-      });
+      if (btn) {
+        btn.onclick = function (e) {
+          e.preventDefault();
+          console.log('[v2 cloud load] loadCloudBtn click (setupCloudLoadUi)');
+          loadPeriodFromCloudV2();
+        };
+      }
     }
 
     function setupDirtyTrackingUi() {
@@ -18170,12 +18145,14 @@
     setupMainNavigationUi();
     setupHelpTogglesUi();
     setupQuickActionsUi();
-    setupCloudLoadUi();
     setupDirtyTrackingUi();
     updateQuickSaveUi();
     updateWipChainUiStatus();
-    console.log('[v2 cloud load] handlers ready, loadPeriodFromCloudV2=', typeof loadPeriodFromCloudV2);
-    window.loadPeriodFromCloudV2 = loadPeriodFromCloudV2;
+    setupCloudLoadUi();
+    console.log(
+      '[v2 cloud load] handlers ready, loadPeriodFromCloudV2=',
+      typeof window.loadPeriodFromCloudV2
+    );
   </script>
 
   <div id="wipChainApplyOverlay" class="wip-chain-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="wipChainApplyTitle">

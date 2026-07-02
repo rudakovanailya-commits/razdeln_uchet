@@ -14,6 +14,7 @@
  *
  * doPost:
  *   { "action": "replacePeriod", "period": "YYYY-MM", "rows": [...] }
+ *   { "action": "savePeriodData", "period": "YYYY-MM", "periodData": { "json": "...", "updated_by": "v2", "format_version": 2 } }
  *   { "action": "upsert", "rows": [...] }
  *   { "action": "deletePeriod", "period": "YYYY-MM", "token": "..." }
  */
@@ -177,6 +178,69 @@ function getPeriodDataRow(periodParam) {
   }
 
   return latest;
+}
+
+function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
+  var period = normalizePeriodDataKey(periodParam);
+  if (!period) {
+    return jsonOut({ ok: false, error: 'invalid_period' });
+  }
+  if (jsonStr == null || String(jsonStr).trim() === '') {
+    return jsonOut({ ok: false, error: 'json_required' });
+  }
+
+  var sheet = getPeriodDataSheet();
+  var updatedAt = new Date().toISOString();
+  var by =
+    updatedBy != null && String(updatedBy).trim() !== ''
+      ? String(updatedBy).trim()
+      : 'v2';
+  var fv =
+    formatVersion != null && String(formatVersion).trim() !== ''
+      ? String(formatVersion).trim()
+      : '2';
+  var json = String(jsonStr);
+
+  var lastRow = sheet.getLastRow();
+  var n = PERIOD_DATA_HEADERS.length;
+  var targetRow = -1;
+
+  if (lastRow >= 2) {
+    var periodCol = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var r = 0; r < periodCol.length; r++) {
+      if (String(periodCol[r][0] || '').trim() === period) {
+        targetRow = r + 2;
+        break;
+      }
+    }
+  }
+
+  var rowArr = [period, json, updatedAt, by, fv];
+  if (targetRow > 0) {
+    sheet.getRange(targetRow, 1, targetRow, n).setValues([rowArr]);
+  } else {
+    sheet.appendRow(rowArr);
+  }
+
+  writeDebugLog('savePeriodData: upserted', {
+    action: 'savePeriodData',
+    period: period,
+    data: {
+      updated_at: updatedAt,
+      updated_by: by,
+      format_version: fv,
+      jsonLength: json.length,
+      row: targetRow > 0 ? targetRow : lastRow + 1
+    }
+  });
+
+  return jsonOut({
+    ok: true,
+    period: period,
+    updated_at: updatedAt,
+    updated_by: by,
+    format_version: fv
+  });
 }
 
 function setLastError(obj) {
@@ -930,6 +994,27 @@ function doPost(e) {
         data: { rawBodyLength: rawBodyLength, stage: 'doPost_received' }
       });
       return replacePeriodRows(sheet, body.period, body.rows);
+    }
+
+    if (body && body.action === 'savePeriodData') {
+      var periodData = body.periodData || {};
+      writeDebugLog('savePeriodData: doPost received', {
+        action: 'savePeriodData',
+        period: body.period,
+        data: {
+          rawBodyLength: rawBodyLength,
+          updated_by: periodData.updated_by || '',
+          format_version: periodData.format_version || '',
+          jsonLength:
+            periodData.json != null ? String(periodData.json).length : 0
+        }
+      });
+      return upsertPeriodData(
+        body.period,
+        periodData.json,
+        periodData.updated_by,
+        periodData.format_version
+      );
     }
 
     if (body && body.action === 'upsert' && Array.isArray(body.rows)) {

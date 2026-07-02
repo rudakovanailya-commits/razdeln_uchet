@@ -7021,12 +7021,27 @@
       if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
         return { ok: false, error: 'invalid_period' };
       }
-      const url = getCloudApiUrl('getPeriodData', { period: pn });
-      const res = await fetch(url, { method: 'GET' });
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
+      const urls =
+        typeof getCloudV2WriteUrls === 'function'
+          ? getCloudV2WriteUrls()
+          : [CLOUD_DATA_URL];
+      let last = { ok: false, error: 'not_found' };
+      for (let i = 0; i < urls.length; i++) {
+        const base = urls[i];
+        const sep = base.indexOf('?') >= 0 ? '&' : '?';
+        const url =
+          base + sep + 'action=getPeriodData&period=' + encodeURIComponent(pn);
+        try {
+          const res = await fetch(url, { method: 'GET' });
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data && data.ok && data.json) return data;
+          last = data || last;
+        } catch (e) {
+          console.warn('getPeriodData:', base, e);
+        }
       }
-      return await res.json();
+      return last;
     }
 
     function parsePeriodDataFromCloud(jsonStr) {
@@ -7078,6 +7093,83 @@
         populateOrderSelect();
       }
       return true;
+    }
+
+    function buildCloudPeriodDataPayload(period) {
+      flushPeriodStateFromDomBeforeSave();
+      const data = collectData();
+      data.format_version = 2;
+      data.meta = data.meta || {};
+      data.meta.updatedAt = new Date().toISOString();
+      data.meta.updatedBy = 'v2';
+      return {
+        period: normalizePeriodStr(period),
+        json: JSON.stringify(data),
+        updated_by: 'v2',
+        format_version: 2
+      };
+    }
+
+    async function savePeriodDataToCloud(period, payload) {
+      const pn = normalizePeriodStr(period);
+      const body = {
+        action: 'savePeriodData',
+        period: pn,
+        periodData: {
+          json: payload.json,
+          updated_by: payload.updated_by,
+          format_version: payload.format_version
+        }
+      };
+      const urls = getCloudV2WriteUrls();
+
+      console.log('[v2 cloud] savePeriodDataToCloud start', {
+        period: pn,
+        jsonLength: payload && payload.json ? payload.json.length : 0,
+        urls: urls
+      });
+
+      let lastErr = null;
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        try {
+          const data = await postCloudJsonRequest(url, body);
+          console.log('[v2 cloud] savePeriodDataToCloud result', { url: url, data: data });
+          if (data && data.ok) return data;
+          lastErr = new Error((data && data.error) || 'savePeriodData failed');
+        } catch (e) {
+          console.warn('[v2 cloud] savePeriodDataToCloud error', url, e);
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error('savePeriodData failed');
+    }
+
+    async function verifyPeriodDataInCloud(period) {
+      const pn = normalizePeriodStr(period);
+      const urls = getCloudV2WriteUrls();
+      let last = { ok: false };
+      for (let i = 0; i < urls.length; i++) {
+        const base = urls[i];
+        const sep = base.indexOf('?') >= 0 ? '&' : '?';
+        const url =
+          base + sep + 'action=getPeriodData&period=' + encodeURIComponent(pn);
+        try {
+          const res = await fetch(url, { method: 'GET' });
+          if (!res.ok) continue;
+          const data = await res.json();
+          console.log('[v2 cloud] fetchPeriodData verify result', {
+            url: base,
+            ok: !!(data && data.ok),
+            jsonLength: data && data.json ? data.json.length : 0
+          });
+          if (data && data.ok && data.json) return data;
+          last = data || last;
+        } catch (e) {
+          console.warn('[v2 cloud] verifyPeriodDataInCloud failed', base, e);
+        }
+      }
+      return last;
     }
 
     async function loadPeriodFromCloudLegacyFlat(period, statusEl) {
@@ -7593,6 +7685,16 @@
     const CLOUD_DATA_URL =
       'https://script.google.com/macros/s/AKfycbzevbcYIAH6-YgAthMDW58RjJEOULACRQmbHyM5h3E-pecLiTBTotlKmVYKWgtp4lNxYw/exec';
 
+    const CLOUD_V2_SAVE_DONE_MESSAGE =
+      'Период сохранён в Google Sheets: Лист1 + полная копия period_data.';
+
+    function getCloudV2WriteUrls() {
+      const urls = [];
+      if (CLOUD_SAVE_URL) urls.push(CLOUD_SAVE_URL);
+      if (CLOUD_DATA_URL && CLOUD_DATA_URL !== CLOUD_SAVE_URL) urls.push(CLOUD_DATA_URL);
+      return urls;
+    }
+
     const UNSYNCED_CLOUD_STORAGE_KEY = 'razdelny_uchet_unsynced_cloud';
 
     let allData = [];
@@ -7770,6 +7872,25 @@
         throw new Error(err && err.message ? err.message : 'Failed to fetch');
       }
       return { ok: true, opaque: true };
+    }
+
+    async function postCloudJsonRequest(url, payload) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Ответ облака не JSON');
+      }
+      return data;
     }
 
     function formatCloudSaveSentMessage(period) {
@@ -8326,7 +8447,8 @@
       }
     }
 
-    async function saveToCloud() {
+    async function saveToCloudV2() {
+      console.log('[v2 cloud] saveToCloud start');
       const period = getCurrentPeriod();
       if (!period) {
         alert('Укажите период');
@@ -8334,10 +8456,17 @@
       }
       if (!requireValidWorkingPeriod(period)) return;
 
+      const confirmed = confirm(
+        'Вы сохраняете данные из тестовой версии 2 в общую Google Sheets. Будут обновлены Лист1 и полная копия period_data. Продолжить?'
+      );
+      if (!confirmed) return;
+
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
       try {
+        flushPeriodStateFromDomBeforeSave();
+
         const rows = getCloudPayloadRows(period);
         const check = validateCloudPayloadRowsForSave(period, rows);
         if (!check.ok) {
@@ -8347,19 +8476,50 @@
         }
 
         await replacePeriodInCloud(period, check.rows);
+        console.log('[v2 cloud] flat rows sent');
 
-        const msg = formatCloudSaveSentMessage(period);
-        if (statusEl) statusEl.textContent = msg;
+        let periodDataNote = '';
+        try {
+          const payload = buildCloudPeriodDataPayload(period);
+          console.log(
+            '[v2 cloud] periodData payload json length',
+            payload && payload.json ? payload.json.length : 0,
+            'period',
+            payload && payload.period
+          );
+
+          await savePeriodDataToCloud(period, payload);
+
+          const verify = await verifyPeriodDataInCloud(period);
+          if (verify && verify.ok && verify.json) {
+            periodDataNote =
+              '\n\nПолная копия периода сохранена в period_data.';
+          }
+        } catch (periodDataErr) {
+          console.error('[v2 cloud] savePeriodData:', periodDataErr);
+          periodDataNote =
+            '\n\nНе удалось сохранить полную копию в period_data: ' +
+            (periodDataErr && periodDataErr.message
+              ? periodDataErr.message
+              : String(periodDataErr));
+        }
+
+        const msg = CLOUD_V2_SAVE_DONE_MESSAGE + periodDataNote;
+        if (statusEl) statusEl.textContent = msg.replace(/\n\n/g, ' ');
         alert(msg);
         offerMarkPeriodsSyncedAfterCloudSend([period]);
       } catch (err) {
-        console.error('ERROR:', err);
+        console.error('[v2 cloud] saveToCloud error:', err);
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось сохранить в Google Sheets: ' +
             (err && err.message ? err.message : String(err))
         );
       }
+    }
+
+    async function saveToCloud() {
+      return saveToCloudV2();
     }
 
     function clearAll(skipAutoSave) {
@@ -17355,7 +17515,7 @@
         inp.blur();
       }
       if (!confirmWipChainBeforeCloudSave()) return;
-      requestAnimationFrame(() => saveToCloud());
+      requestAnimationFrame(() => saveToCloudV2());
     });
 
     const buildPeriodReportBtn = document.getElementById('buildPeriodReportBtn');
@@ -17734,9 +17894,14 @@
       if (saveCloudBtn && !saveCloudBtn.dataset.bound) {
         saveCloudBtn.dataset.bound = '1';
         saveCloudBtn.addEventListener('click', () => {
-          const btn = document.getElementById('saveCloudBtn');
-          if (btn) btn.click();
-          setUiPeriodDirty(false);
+          const inp = getElementByIdDeep('periodInput');
+          if (inp && document.activeElement === inp) {
+            inp.blur();
+          }
+          if (!confirmWipChainBeforeCloudSave()) return;
+          requestAnimationFrame(() => {
+            saveToCloudV2().finally(() => setUiPeriodDirty(false));
+          });
         });
       }
     }

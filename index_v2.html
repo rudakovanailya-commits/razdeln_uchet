@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Раздельный учет — версия 1</title>
+  <title>Раздельный учет — версия 2</title>
   <style>
     * { box-sizing: border-box; }
 
@@ -129,6 +129,37 @@
 
     h1, h2 {
       margin: 0 0 12px;
+    }
+
+    .app-page-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+      margin-bottom: 12px;
+    }
+
+    .app-page-header h1 {
+      margin: 0;
+    }
+
+    .app-version-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #1e40af;
+      background: #dbeafe;
+      border: 1px solid #bfdbfe;
+    }
+
+    .app-version-note {
+      flex: 1 1 100%;
+      margin: 0;
+      font-size: 14px;
+      color: #64748b;
     }
 
     .card {
@@ -2372,7 +2403,11 @@
 </head>
 <body>
   <div class="container">
-    <h1>Раздельный учет — версия 1</h1>
+    <header class="app-page-header">
+      <h1>Раздельный учет — версия 2</h1>
+      <span class="app-version-badge">V2 / тест</span>
+      <p class="app-version-note">Тестовая версия нового интерфейса</p>
+    </header>
 
     <div class="app-main-nav" id="appMainNav">
       <span class="app-main-nav-title">Раздел:</span>

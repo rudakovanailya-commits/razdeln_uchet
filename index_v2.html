@@ -7358,8 +7358,12 @@
       return true;
     }
 
-    async function loadPeriodFromCloud() {
+    async function loadPeriodFromCloudV2() {
+      console.log('[v2 cloud load] loadPeriodFromCloudV2() called');
+
       const period = getCurrentPeriod();
+      console.log('[v2 cloud load] selected period', period);
+
       if (!period) {
         alert('Укажите период');
         return;
@@ -7368,7 +7372,7 @@
       if (!confirmIfUnsyncedCloudLoad()) return;
 
       const pn = normalizePeriodStr(period);
-      console.log('[v2 cloud load] selected period', pn);
+      console.log('[v2 cloud load] normalized period', pn);
       console.log('[v2 cloud load] CLOUD_SAVE_URL', CLOUD_SAVE_URL);
       console.log('[v2 cloud load] CLOUD_DATA_URL', CLOUD_DATA_URL);
 
@@ -7407,7 +7411,7 @@
             return;
           }
 
-          applyPeriodDataFromCloud(data, 'period_data');
+          applyPeriodDataFromCloud(data, 'Google Sheets period_data');
           if (statusEl) {
             statusEl.textContent =
               'Загружена полная копия периода ' + pn + ' из Google Sheets';
@@ -7429,6 +7433,10 @@
           'Не удалось загрузить из облака: ' + (err && err.message ? err.message : String(err))
         );
       }
+    }
+
+    async function loadPeriodFromCloud() {
+      return loadPeriodFromCloudV2();
     }
 
     const PERIOD_REPORT_NUMERIC_KEYS = [
@@ -17748,17 +17756,6 @@
       requestAnimationFrame(() => loadPeriod(true));
     });
 
-    const loadCloudBtn = document.getElementById('loadCloudBtn');
-    if (loadCloudBtn) {
-      loadCloudBtn.addEventListener('click', () => {
-        const inp = getElementByIdDeep('periodInput');
-        if (inp && document.activeElement === inp) {
-          inp.blur();
-        }
-        requestAnimationFrame(() => loadPeriodFromCloud());
-      });
-    }
-
     const deleteCloudPeriodBtn = document.getElementById('deleteCloudPeriodBtn');
     if (deleteCloudPeriodBtn) {
       deleteCloudPeriodBtn.addEventListener('click', () => {
@@ -18121,6 +18118,23 @@
       }
     }
 
+    function setupCloudLoadUi() {
+      const btn = document.getElementById('loadCloudBtn');
+      if (!btn) return;
+      if (btn.dataset.cloudLoadBound) return;
+      btn.dataset.cloudLoadBound = '1';
+      btn.addEventListener('click', () => {
+        console.log('[v2 cloud load] loadCloudBtn click (setupCloudLoadUi)');
+        const inp = getElementByIdDeep('periodInput');
+        if (inp && document.activeElement === inp) {
+          inp.blur();
+        }
+        loadPeriodFromCloudV2().catch(err => {
+          console.error('[v2 cloud load] unhandled error', err);
+        });
+      });
+    }
+
     function setupDirtyTrackingUi() {
       if (document.body.dataset.dirtyBound) return;
       document.body.dataset.dirtyBound = '1';
@@ -18156,9 +18170,12 @@
     setupMainNavigationUi();
     setupHelpTogglesUi();
     setupQuickActionsUi();
+    setupCloudLoadUi();
     setupDirtyTrackingUi();
     updateQuickSaveUi();
     updateWipChainUiStatus();
+    console.log('[v2 cloud load] handlers ready, loadPeriodFromCloudV2=', typeof loadPeriodFromCloudV2);
+    window.loadPeriodFromCloudV2 = loadPeriodFromCloudV2;
   </script>
 
   <div id="wipChainApplyOverlay" class="wip-chain-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="wipChainApplyTitle">

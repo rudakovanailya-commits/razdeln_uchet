@@ -11807,39 +11807,106 @@
       return 'kartochka_zakaza_' + slug + '_' + periodPart + '.pdf';
     }
 
-    function mgmtPdfTruncateComment(text, maxLen) {
-      const s = String(text || '').trim();
-      if (!s) return '';
-      const limit = maxLen || 120;
-      return s.length > limit ? s.slice(0, limit - 1) + '…' : s;
+    function mgmtPdfShortControlLabel(controlComments) {
+      const warnings = mgmtExtractControlWarnings(controlComments);
+      if (!warnings.length) return '';
+      const labels = [];
+      warnings.forEach(part => {
+        if (/Отрицательное НЗП/i.test(part)) {
+          if (!labels.includes('Отриц. НЗП')) labels.push('Отриц. НЗП');
+        } else if (/ограничен/i.test(part)) {
+          if (!labels.includes('Ограничение')) labels.push('Ограничение');
+        } else if (/Списание|больше итого|больше расходов|расхожден/i.test(part)) {
+          if (!labels.includes('Контроль')) labels.push('Контроль');
+        }
+      });
+      if (!labels.length) labels.push('Контроль');
+      return labels.join('; ');
     }
 
-    function mgmtPdfSingleOrderMonthlyColWidths(layout) {
-      return mgmtPdfWidthsFromWeights(layout.contentWidth, [
-        0.07, 0.08, 0.08, 0.08, 0.07, 0.07, 0.07, 0.07, 0.07, 0.08, 0.05, 0.21
-      ]);
+    function mgmtPdfSingleOrderHasControlComments(monthlyRows) {
+      return (monthlyRows || []).some(r => {
+        const c = r.controlComments;
+        return c && c !== '—' && String(c).trim();
+      });
     }
 
-    function mgmtPdfSingleOrderMonthlyColStyles(layout) {
-      const widths = mgmtPdfSingleOrderMonthlyColWidths(layout);
+    function mgmtPdfSingleOrderMonthlyColWidths(includeControl, contentWidth) {
+      let base = [19, 25, 25, 25, 23, 25, 25, 25, 25, 25, 15];
+      if (includeControl) {
+        base = [19, 24, 24, 24, 22, 24, 24, 24, 24, 24, 14];
+        const used = base.reduce((a, b) => a + b, 0);
+        const controlW = Math.max(28, Math.min(35, contentWidth - used));
+        return base.concat([controlW]);
+      }
+      const used = base.reduce((a, b) => a + b, 0);
+      const extra = contentWidth - used;
+      if (extra > 0.5) {
+        const bump = extra / 9;
+        return base.map((w, i) => (i >= 1 && i <= 9 ? w + bump : w));
+      }
+      return base;
+    }
+
+    function mgmtPdfSingleOrderMonthlyColStyles(layout, includeControl) {
+      const widths = mgmtPdfSingleOrderMonthlyColWidths(includeControl, layout.contentWidth);
+      const lastIdx = widths.length - 1;
+      const numColStyle = {
+        halign: 'right',
+        fontSize: 7.5,
+        overflow: 'hidden',
+        valign: 'middle',
+        cellPadding: { top: 1.5, right: 1.5, bottom: 1.5, left: 1 }
+      };
+      const columnStylesPerCol = {
+        0: { overflow: 'linebreak', valign: 'middle', fontSize: 7.5, cellPadding: 1.5 }
+      };
+      const numericEnd = includeControl ? lastIdx - 1 : lastIdx;
+      for (let i = 1; i <= numericEnd; i++) {
+        columnStylesPerCol[i] = Object.assign({}, numColStyle);
+      }
+      if (includeControl) {
+        columnStylesPerCol[lastIdx] = {
+          overflow: 'linebreak',
+          valign: 'top',
+          fontSize: 7.5,
+          cellPadding: 1.5
+        };
+      }
       return {
         widths,
         options: mgmtPdfMakeTableOptions(layout, widths, {
-          columnStylesPerCol: {
-            0: { overflow: 'linebreak', valign: 'top', fontSize: 7 },
-            1: { halign: 'right', fontSize: 7 },
-            2: { halign: 'right', fontSize: 7 },
-            3: { halign: 'right', fontSize: 7 },
-            4: { halign: 'right', fontSize: 7 },
-            5: { halign: 'right', fontSize: 7 },
-            6: { halign: 'right', fontSize: 7 },
-            7: { halign: 'right', fontSize: 7 },
-            8: { halign: 'right', fontSize: 7 },
-            9: { halign: 'right', fontSize: 7 },
-            10: { halign: 'right', fontSize: 7 },
-            11: { overflow: 'linebreak', valign: 'top', fontSize: 6.5 }
-          }
+          columnStylesPerCol,
+          styles: { fontSize: 7.5, overflow: 'hidden', cellPadding: 1.5 },
+          headStyles: { fontSize: 8, cellPadding: 2 }
         })
+      };
+    }
+
+    function mgmtPdfGetLayoutForSingleOrder(doc) {
+      const rawW =
+        typeof doc.internal.pageSize.getWidth === 'function'
+          ? doc.internal.pageSize.getWidth()
+          : doc.internal.pageSize.width;
+      const rawH =
+        typeof doc.internal.pageSize.getHeight === 'function'
+          ? doc.internal.pageSize.getHeight()
+          : doc.internal.pageSize.height;
+      const pageW = rawW > 250 ? rawW : MGMT_PDF_LANDSCAPE_WIDTH;
+      const pageH = rawH > 200 ? rawH : MGMT_PDF_LANDSCAPE_HEIGHT;
+      const marginLeft = 8;
+      const marginRight = 8;
+      const marginTop = 9;
+      const marginBottom = 9;
+      const contentWidth = pageW - marginLeft - marginRight;
+      return {
+        pageW,
+        pageH,
+        marginLeft,
+        marginRight,
+        marginTop,
+        marginBottom,
+        contentWidth
       };
     }
 
@@ -11869,7 +11936,7 @@
       const doc = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       await ensureMgmtPdfFont(doc);
 
-      const layout = mgmtPdfGetLayout(doc);
+      const layout = mgmtPdfGetLayoutForSingleOrder(doc);
       const totals = report.totals;
       let y = layout.marginTop + 4;
 
@@ -11945,6 +12012,8 @@
       });
       y = doc.lastAutoTable.finalY + 8;
 
+      const includeControl = mgmtPdfSingleOrderHasControlComments(report.monthlyRows);
+
       const monthlyHead = [
         'Месяц',
         'Отгр. с НДС',
@@ -11956,14 +12025,12 @@
         'НЗП к.20',
         'НЗП общ.',
         'Прибыль',
-        'Маржа',
-        'Контроль'
+        'Маржа %'
       ];
+      if (includeControl) monthlyHead.push('Контроль');
 
       const monthlyBody = (report.monthlyRows || []).map(r => {
-        const comment =
-          r.controlComments && r.controlComments !== '—' ? r.controlComments : '';
-        return [
+        const row = [
           r.monthLabel || r.period,
           formatMoney(r.shipmentVat),
           formatMoney(r.shipmentNoVat),
@@ -11974,12 +12041,15 @@
           formatMoney(r.wipEnd20),
           formatMoney(r.wipEnd26),
           formatMoney(r.profit),
-          mgmtFmtPdfPct(r.marginPct),
-          mgmtPdfTruncateComment(comment, 100)
+          mgmtFmtPdfPct(r.marginPct)
         ];
+        if (includeControl) {
+          row.push(mgmtPdfShortControlLabel(r.controlComments));
+        }
+        return row;
       });
 
-      monthlyBody.push([
+      const totalRow = [
         'Итого',
         formatMoney(totals.shipmentVat),
         formatMoney(totals.shipmentNoVat),
@@ -11990,11 +12060,12 @@
         formatMoney(totals.wipEnd20),
         formatMoney(totals.wipEnd26),
         formatMoney(totals.profit),
-        mgmtFmtPdfPct(totals.marginPct),
-        ''
-      ]);
+        mgmtFmtPdfPct(totals.marginPct)
+      ];
+      if (includeControl) totalRow.push('');
+      monthlyBody.push(totalRow);
 
-      const monthlyTable = mgmtPdfSingleOrderMonthlyColStyles(layout);
+      const monthlyTable = mgmtPdfSingleOrderMonthlyColStyles(layout, includeControl);
       y = mgmtPdfAddSectionTable(
         doc,
         layout,

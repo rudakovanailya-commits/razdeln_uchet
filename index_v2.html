@@ -2452,11 +2452,12 @@
           <input id="periodInput" type="text" placeholder="YYYY-MM" autocomplete="off">
         </div>
 
-        <div class="field" style="width: 180px;">
+        <div class="field" style="width: 280px;">
           <label for="periodSelect">Сохранённые периоды</label>
           <select id="periodSelect">
             <option value="">—</option>
           </select>
+          <div class="hint" id="periodListSourceStatus" style="margin-top: 4px; font-size: 12px; color: #475569;"></div>
         </div>
 
         <div class="field" style="width: 160px;">
@@ -7911,7 +7912,15 @@
       const raw = localStorage.getItem(getStorageKey(period));
 
       if (!raw) {
-        if (showAlert) alert('Нет данных за этот период');
+        if (showAlert) {
+          if (getPeriodSourceKind(period) === 'cloud') {
+            alert(
+              'Локальная версия периода не найдена. Используйте загрузку из Google Sheets.'
+            );
+          } else {
+            alert('Нет данных за этот период');
+          }
+        }
         setPeriodStatus('draft');
         applyPeriodEditMode();
         markLoadedPeriodOnScreen(period);
@@ -7936,6 +7945,60 @@
       markLoadedPeriodOnScreen(period);
     }
 
+    let uiCloudPeriodList = [];
+
+    const PERIOD_SOURCE_LABELS = {
+      both: 'локально + Google',
+      local: 'только локально',
+      cloud: 'только Google'
+    };
+
+    function getLocalPeriodIds() {
+      return Object.keys(localStorage)
+        .filter(
+          key =>
+            key.startsWith(LOCAL_PERIOD_STORAGE_PREFIX) &&
+            key !== UNSYNCED_CLOUD_STORAGE_KEY
+        )
+        .map(key => periodFromStorageKey(key))
+        .filter(p => p && !isBlockedPeriodId(p))
+        .sort();
+    }
+
+    function getCloudPeriodIds() {
+      return uiCloudPeriodList
+        .map(item => normalizePeriodStr(item.period))
+        .filter(p => p && isValidWorkingPeriod(p))
+        .sort();
+    }
+
+    function getMergedPeriodIds() {
+      const all = new Set([...getLocalPeriodIds(), ...getCloudPeriodIds()]);
+      return Array.from(all).sort();
+    }
+
+    function getPeriodSourceKind(period) {
+      const pn = normalizePeriodStr(period);
+      if (!pn) return null;
+      const hasLocal = !!localStorage.getItem(getStorageKey(pn));
+      const hasCloud = getCloudPeriodIds().includes(pn);
+      if (hasLocal && hasCloud) return 'both';
+      if (hasLocal) return 'local';
+      if (hasCloud) return 'cloud';
+      return null;
+    }
+
+    function formatPeriodSelectOptionLabel(period, sourceKind) {
+      const label = sourceKind ? PERIOD_SOURCE_LABELS[sourceKind] : '';
+      return label ? period + ' — ' + label : period;
+    }
+
+    function updatePeriodListSourceStatusUi() {
+      const el = document.getElementById('periodListSourceStatus');
+      if (!el) return;
+      el.textContent = 'Список периодов: локально + Google Sheets';
+    }
+
     function updatePeriodList() {
       const select = getElementByIdDeep('periodSelect');
       const inputEl = getElementByIdDeep('periodInput');
@@ -7946,17 +8009,14 @@
 
       select.innerHTML = '<option value="">—</option>';
 
-      Object.keys(localStorage)
-        .filter(key => key.startsWith(LOCAL_PERIOD_STORAGE_PREFIX) && key !== UNSYNCED_CLOUD_STORAGE_KEY)
-        .sort()
-        .forEach(key => {
-          const p = periodFromStorageKey(key);
-          if (isBlockedPeriodId(p)) return;
-          const option = document.createElement('option');
-          option.value = p;
-          option.textContent = p;
-          select.appendChild(option);
-        });
+      getMergedPeriodIds().forEach(p => {
+        const sourceKind = getPeriodSourceKind(p);
+        const option = document.createElement('option');
+        option.value = p;
+        option.textContent = formatPeriodSelectOptionLabel(p, sourceKind);
+        if (sourceKind) option.dataset.periodSource = sourceKind;
+        select.appendChild(option);
+      });
 
       function ensureOption(val) {
         if (!val || isBlockedPeriodId(val)) return;
@@ -7968,9 +8028,11 @@
           }
         }
         if (!found) {
+          const sourceKind = getPeriodSourceKind(val);
           const option = document.createElement('option');
           option.value = val;
-          option.textContent = val;
+          option.textContent = formatPeriodSelectOptionLabel(val, sourceKind);
+          if (sourceKind) option.dataset.periodSource = sourceKind;
           select.appendChild(option);
         }
       }
@@ -7979,6 +8041,8 @@
       if (currentValue) {
         select.value = currentValue;
       }
+
+      updatePeriodListSourceStatusUi();
     }
 
     function fillPeriodsSelect() {
@@ -8382,6 +8446,48 @@
       return url;
     }
 
+    async function fetchCloudPeriodDataList() {
+      try {
+        const url = getCloudApiUrl('getPeriodDataList');
+        console.log('[v2 cloud] getPeriodDataList URL', url);
+        const res = await fetch(url, { method: 'GET' });
+        const text = await res.text();
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch (parseErr) {
+          console.error('[v2 cloud] getPeriodDataList response not JSON', text.slice(0, 500));
+          throw new Error('Ответ getPeriodDataList не JSON (HTTP ' + res.status + ')');
+        }
+        if (!res.ok) {
+          throw new Error(
+            'HTTP ' + res.status + ': ' + (result && result.error ? result.error : text.slice(0, 200))
+          );
+        }
+        if (result && result.ok === true && Array.isArray(result.periods)) {
+          uiCloudPeriodList = result.periods
+            .map(item => ({
+              period: normalizePeriodStr(item.period),
+              updated_at: item.updated_at != null ? String(item.updated_at) : '',
+              updated_by: item.updated_by != null ? String(item.updated_by) : '',
+              format_version:
+                item.format_version != null && item.format_version !== ''
+                  ? String(item.format_version)
+                  : ''
+            }))
+            .filter(item => item.period && isValidWorkingPeriod(item.period));
+          return true;
+        }
+        console.warn('[v2 cloud] getPeriodDataList unexpected payload', result);
+        uiCloudPeriodList = [];
+        return false;
+      } catch (e) {
+        console.warn('[v2 cloud] fetchCloudPeriodDataList failed', e);
+        uiCloudPeriodList = [];
+        return false;
+      }
+    }
+
     async function refreshAllDataFromCloud() {
       try {
         const res = await fetch(getCloudApiUrl('getRows'), { method: 'GET' });
@@ -8496,6 +8602,8 @@
           applyPeriodEditMode();
         }
         populateOrderSelect();
+        await fetchCloudPeriodDataList();
+        updatePeriodList();
 
         if (statusEl) {
           statusEl.textContent = 'Из Google Sheets удалено строк: ' + deleted;
@@ -8848,6 +8956,8 @@
         if (statusEl) statusEl.textContent = msg.replace(/\n\n/g, ' ');
         alert(msg);
         offerMarkPeriodsSyncedAfterCloudSend([period]);
+        await fetchCloudPeriodDataList();
+        updatePeriodList();
       } catch (err) {
         console.error('[v2 cloud] saveToCloud error:', err);
         if (statusEl) statusEl.textContent = '';
@@ -17992,8 +18102,14 @@
     if (periodSelectEl) {
       periodSelectEl.addEventListener('change', e => {
         const inputEl = getElementByIdDeep('periodInput');
-        if (inputEl) inputEl.value = e.target.value;
-        loadPeriod(false);
+        const val = normalizePeriodStr(e.target.value);
+        if (inputEl) inputEl.value = val;
+        const prev = loadedPeriodOnScreen;
+        if (val && prev && val !== prev && ordersTableHasNonEmptyRows()) {
+          showPeriodDataMismatchHint(prev, val);
+        } else {
+          hidePeriodDataMismatchHint();
+        }
         updateMgmtOrdersScopeUi();
       });
     }
@@ -18025,6 +18141,7 @@
     setupTransfersPanel();
     setupPeriodSummaryToggle();
     (async function initFromCloud() {
+      updatePeriodList();
       try {
         allData = await loadData();
       } catch (e) {
@@ -18034,6 +18151,7 @@
         if (h) h.textContent = 'Не удалось загрузить данные';
       }
       renderTable(allData);
+      await fetchCloudPeriodDataList();
       updatePeriodList();
       populateOrderSelect();
       refreshAllOrderNameTitles();

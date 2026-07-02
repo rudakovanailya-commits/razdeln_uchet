@@ -2885,7 +2885,7 @@
             <datalist id="mgmtReportsOrderList"></datalist>
           </div>
           <button type="button" id="buildMgmtOrdersReportBtn" class="mgmt-reports-build-btn">Сформировать отчёт по заказу</button>
-          <button type="button" id="exportMgmtSingleOrderBtn" class="mgmt-reports-build-btn secondary">Выгрузить карточку заказа в Excel</button>
+          <button type="button" id="exportMgmtSingleOrderPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF по заказу</button>
         </div>
         <p class="mgmt-reports-status" id="mgmtReportsOrdersStatus"></p>
         <div id="mgmtReportsOrdersContent" hidden></div>
@@ -11773,112 +11773,315 @@
       return html;
     }
 
-    function readMgmtSingleOrderTableForExport() {
-      const table = document.getElementById('mgmtReportsSingleOrderTable');
-      if (!table) return null;
-
-      const headerRow = table.querySelector('thead tr');
-      if (!headerRow) return null;
-
-      const headers = Array.from(headerRow.querySelectorAll('th')).map(th =>
-        String(th.textContent ?? '').trim()
+    function extractShortOrderSlugForPdf(groupName) {
+      const s = String(groupName || '').trim();
+      const numMatch = s.match(
+        /(?:No\/?|№\/?|#)\s*([0-9A-Za-z][0-9A-Za-z./_-]{1,28})|(?:^|\s)([0-9]{4,}[0-9A-Za-z/_-]*)/
       );
-      const colCount = headers.length;
-      if (!colCount) return null;
-
-      const dataRows = [];
-      const rowMetas = [];
-      table.querySelectorAll('tbody tr').forEach(tr => {
-        const tds = Array.from(tr.querySelectorAll('td'));
-        if (!tds.length) return;
-        const row = [];
-        for (let c = 0; c < colCount; c++) {
-          row.push(tds[c] ? exportOrderCardCellValue(tds[c], c) : c === 0 ? '' : 0);
-        }
-        const isTotal = String(row[0] || '')
-          .trim()
-          .toLowerCase() === 'итого';
-        dataRows.push(row);
-        rowMetas.push({ isTotal });
-      });
-
-      return { headers, dataRows, rowMetas, colCount };
+      let core = '';
+      if (numMatch) {
+        core = String(numMatch[1] || numMatch[2] || '')
+          .replace(/[/\\.\s]+/g, '')
+          .replace(/[^a-zA-Z0-9]/g, '');
+      }
+      if (!core) core = slugifyOrderForFilename(s).replace(/_/g, '');
+      return (core || 'zakaz').slice(0, 40);
     }
 
-    function exportMgmtSingleOrderToExcel() {
-      if (!lastMgmtSingleOrderReport || !lastMgmtSingleOrderReport.monthlyRows.length) {
-        alert('Сначала сформируйте отчёт по заказу.');
-        return;
+    function buildMgmtSingleOrderPdfFilename(report) {
+      const slug = extractShortOrderSlugForPdf(report.groupName);
+      let periodPart = 'period';
+      if (report.scope === 'month') {
+        periodPart = report.periodOrYear || report.periodFrom || 'month';
+      } else if (report.scope === 'year') {
+        periodPart =
+          report.periodOrYear ||
+          (report.periodFrom ? String(report.periodFrom).slice(0, 4) : 'god');
+      } else if (report.periodFrom && report.periodTo && report.periodFrom !== report.periodTo) {
+        periodPart = report.periodFrom + '_' + report.periodTo;
+      } else if (report.periodFrom) {
+        periodPart = report.periodFrom;
+      } else {
+        periodPart = 'vse_periody';
       }
+      return 'kartochka_zakaza_' + slug + '_' + periodPart + '.pdf';
+    }
 
-      const tableData = readMgmtSingleOrderTableForExport();
-      if (!tableData || !tableData.dataRows.length) {
-        alert('В отчёте нет данных для выгрузки.');
-        return;
-      }
+    function mgmtPdfTruncateComment(text, maxLen) {
+      const s = String(text || '').trim();
+      if (!s) return '';
+      const limit = maxLen || 120;
+      return s.length > limit ? s.slice(0, limit - 1) + '…' : s;
+    }
 
-      if (typeof XLSX === 'undefined') {
-        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
-        return;
-      }
+    function mgmtPdfSingleOrderMonthlyColWidths(layout) {
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [
+        0.07, 0.08, 0.08, 0.08, 0.07, 0.07, 0.07, 0.07, 0.07, 0.08, 0.05, 0.21
+      ]);
+    }
 
-      const report = lastMgmtSingleOrderReport;
-      const aoa = [];
-      aoa.push(['Карточка заказа: ' + report.groupName]);
-      aoa.push([report.scopeHint]);
-
-      if (report.periodFrom && report.periodTo) {
-        const periodLine =
-          report.periodFrom === report.periodTo
-            ? report.periodFrom
-            : report.periodFrom + ' — ' + report.periodTo;
-        aoa.push(['Месяцы: ' + periodLine]);
-      }
-
-      aoa.push([]);
-      const headerRowIndex = aoa.length;
-      aoa.push(tableData.headers.slice());
-
-      const dataStartRow = aoa.length;
-      tableData.dataRows.forEach(row => {
-        aoa.push(row.slice());
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      const colCount = tableData.colCount;
-      const lastRowIndex = aoa.length - 1;
-
-      for (let r = dataStartRow; r <= lastRowIndex; r++) {
-        const rowMeta = tableData.rowMetas[r - dataStartRow];
-        for (let c = 1; c < colCount; c++) {
-          setExcelCellNumber(ws, XLSX.utils.encode_cell({ r, c }));
-        }
-        if (rowMeta && rowMeta.isTotal) {
-          setExcelRowBold(ws, r, colCount);
-        }
-      }
-
-      setExcelRowBold(ws, headerRowIndex, colCount);
-      setExcelRowBold(ws, 0, 1);
-      if (headerRowIndex > 1) {
-        setExcelRowBold(ws, 1, 1);
-      }
-      if (headerRowIndex > 2) {
-        setExcelRowBold(ws, 2, 1);
-      }
-
-      ws['!cols'] = buildOrderCardExcelColumnWidths(tableData.headers, tableData.dataRows);
-
-      const exportReport = {
-        orderName: report.groupName,
-        periodFrom: report.periodFrom,
-        periodTo: report.periodTo,
-        reportPeriod: report.scope === 'month' ? report.periodOrYear : ''
+    function mgmtPdfSingleOrderMonthlyColStyles(layout) {
+      const widths = mgmtPdfSingleOrderMonthlyColWidths(layout);
+      return {
+        widths,
+        options: mgmtPdfMakeTableOptions(layout, widths, {
+          columnStylesPerCol: {
+            0: { overflow: 'linebreak', valign: 'top', fontSize: 7 },
+            1: { halign: 'right', fontSize: 7 },
+            2: { halign: 'right', fontSize: 7 },
+            3: { halign: 'right', fontSize: 7 },
+            4: { halign: 'right', fontSize: 7 },
+            5: { halign: 'right', fontSize: 7 },
+            6: { halign: 'right', fontSize: 7 },
+            7: { halign: 'right', fontSize: 7 },
+            8: { halign: 'right', fontSize: 7 },
+            9: { halign: 'right', fontSize: 7 },
+            10: { halign: 'right', fontSize: 7 },
+            11: { overflow: 'linebreak', valign: 'top', fontSize: 6.5 }
+          }
+        })
       };
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Карточка');
-      XLSX.writeFile(wb, buildOrderCardExportFilename(exportReport), { cellStyles: true });
     }
+
+    function getMgmtSingleOrderReportForExport() {
+      if (
+        lastMgmtSingleOrderReport &&
+        lastMgmtSingleOrderReport.monthlyRows &&
+        lastMgmtSingleOrderReport.monthlyRows.length &&
+        lastMgmtSingleOrderReport.totals
+      ) {
+        const orderInputEl = document.getElementById('mgmtReportsOrderInput');
+        const orderInput = orderInputEl ? String(orderInputEl.value || '').trim() : '';
+        const groupName = resolveMgmtOrderGroupSelection(
+          orderInput,
+          lastMgmtOrderGroupOptions
+        );
+        if (groupName === lastMgmtSingleOrderReport.groupName) {
+          return lastMgmtSingleOrderReport;
+        }
+      }
+      return null;
+    }
+
+    async function buildMgmtSingleOrderPdfDocument(report) {
+      const JsPDF = await loadMgmtPdfLibraries();
+      const generatedAt = new Date();
+      const doc = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      await ensureMgmtPdfFont(doc);
+
+      const layout = mgmtPdfGetLayout(doc);
+      const totals = report.totals;
+      let y = layout.marginTop + 4;
+
+      doc.setFont('DejaVuSans', 'normal');
+      doc.setFontSize(20);
+      doc.setTextColor(15, 118, 110);
+      doc.text('Управленческий отчёт по заказу', layout.marginLeft, y);
+      y += 9;
+
+      doc.setFontSize(11);
+      doc.setTextColor(51, 65, 85);
+      const nameLines = doc.splitTextToSize(String(report.groupName || '—'), layout.contentWidth);
+      nameLines.forEach(line => {
+        doc.text(line, layout.marginLeft, y);
+        y += 5;
+      });
+      y += 1;
+
+      doc.setFontSize(10);
+      doc.text(String(report.scopeHint || ''), layout.marginLeft, y);
+      y += 5;
+      doc.text('Дата формирования: ' + formatMgmtPdfDateTime(generatedAt), layout.marginLeft, y);
+      y += 5;
+
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        'Данные из локального расчёта, без изменения учётных данных',
+        layout.marginLeft,
+        y
+      );
+      y += 8;
+
+      const kpiBody = [
+        [
+          'Отгрузка с НДС',
+          formatMoney(totals.shipmentVat),
+          'Отгрузка без НДС',
+          formatMoney(totals.shipmentNoVat)
+        ],
+        [
+          'Списано всего',
+          formatMoney(totals.writeoffTotal),
+          'Списано с 26',
+          formatMoney(totals.writeoff26)
+        ],
+        [
+          'Списано с 20',
+          formatMoney(totals.writeoff20),
+          'НЗП начало',
+          formatMoney(totals.wipStart20)
+        ],
+        [
+          'НЗП конец 20',
+          formatMoney(totals.wipEnd20),
+          'НЗП конец общий',
+          formatMoney(totals.wipEnd26)
+        ],
+        [
+          'Прибыль',
+          formatMoney(totals.profit),
+          'Маржа %',
+          mgmtFmtPdfPct(totals.marginPct)
+        ]
+      ];
+
+      const kpiTable = mgmtPdfKpiColStyles(layout);
+      doc.autoTable({
+        startY: y,
+        head: [['Показатель', 'Значение', 'Показатель', 'Значение']],
+        body: kpiBody,
+        ...kpiTable.options
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      const monthlyHead = [
+        'Месяц',
+        'Отгр. с НДС',
+        'Отгр. без НДС',
+        'Списано',
+        'С 26',
+        'С 20',
+        'НЗП нач.',
+        'НЗП к.20',
+        'НЗП общ.',
+        'Прибыль',
+        'Маржа',
+        'Контроль'
+      ];
+
+      const monthlyBody = (report.monthlyRows || []).map(r => {
+        const comment =
+          r.controlComments && r.controlComments !== '—' ? r.controlComments : '';
+        return [
+          r.monthLabel || r.period,
+          formatMoney(r.shipmentVat),
+          formatMoney(r.shipmentNoVat),
+          formatMoney(r.writeoffTotal),
+          formatMoney(r.writeoff26),
+          formatMoney(r.writeoff20),
+          formatMoney(r.wipStart20),
+          formatMoney(r.wipEnd20),
+          formatMoney(r.wipEnd26),
+          formatMoney(r.profit),
+          mgmtFmtPdfPct(r.marginPct),
+          mgmtPdfTruncateComment(comment, 100)
+        ];
+      });
+
+      monthlyBody.push([
+        'Итого',
+        formatMoney(totals.shipmentVat),
+        formatMoney(totals.shipmentNoVat),
+        formatMoney(totals.writeoffTotal),
+        formatMoney(totals.writeoff26),
+        formatMoney(totals.writeoff20),
+        formatMoney(totals.wipStart20),
+        formatMoney(totals.wipEnd20),
+        formatMoney(totals.wipEnd26),
+        formatMoney(totals.profit),
+        mgmtFmtPdfPct(totals.marginPct),
+        ''
+      ]);
+
+      const monthlyTable = mgmtPdfSingleOrderMonthlyColStyles(layout);
+      y = mgmtPdfAddSectionTable(
+        doc,
+        layout,
+        y,
+        'Помесячная динамика по заказу',
+        monthlyHead,
+        monthlyBody,
+        {
+          ...monthlyTable.options,
+          didParseCell: mgmtPdfCombineDidParseCell(monthlyTable.options.didParseCell, data => {
+            if (
+              data.section === 'body' &&
+              data.row.index === monthlyBody.length - 1
+            ) {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor = [232, 245, 239];
+            }
+          })
+        }
+      );
+
+      const pageCount = doc.internal.getNumberOfPages();
+      const pageH = layout.pageH;
+      const pageW = layout.pageW;
+      const footerY = pageH - layout.marginBottom + 2;
+      const footerDate = formatMgmtPdfDateTime(generatedAt);
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont('DejaVuSans', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text('Сформировано: ' + footerDate, layout.marginLeft, footerY);
+        doc.text('Стр. ' + i + ' из ' + pageCount, pageW - layout.marginRight, footerY, {
+          align: 'right'
+        });
+      }
+
+      return doc;
+    }
+
+    async function exportMgmtSingleOrderToPdf() {
+      switchMgmtReportsTab('orders');
+      updateMgmtOrdersScopeUi();
+
+      const statusEl = document.getElementById('mgmtReportsOrdersStatus');
+      const btn = document.getElementById('exportMgmtSingleOrderPdfBtn');
+      const orderInputEl = document.getElementById('mgmtReportsOrderInput');
+      const orderInput = orderInputEl ? String(orderInputEl.value || '').trim() : '';
+
+      if (!orderInput) {
+        if (statusEl) statusEl.textContent = 'Выберите заказ для PDF-отчёта.';
+        return;
+      }
+
+      const report = getMgmtSingleOrderReportForExport();
+      if (!report || !report.monthlyRows.length || !report.totals) {
+        if (statusEl) {
+          statusEl.textContent = 'Нет данных по выбранному заказу для PDF-отчёта.';
+        }
+        return;
+      }
+
+      const filename = buildMgmtSingleOrderPdfFilename(report);
+
+      if (btn) btn.disabled = true;
+      if (statusEl) {
+        statusEl.textContent = 'Формирование PDF по заказу «' + report.groupName + '»…';
+      }
+
+      try {
+        const doc = await buildMgmtSingleOrderPdfDocument(report);
+        doc.save(filename);
+        if (statusEl) {
+          statusEl.textContent = 'PDF по заказу скачан: ' + filename;
+        }
+      } catch (err) {
+        console.error('[mgmt single order pdf]', err);
+        if (statusEl) {
+          statusEl.textContent =
+            (err && err.mgmtPdfMessage) ||
+            'Не удалось сформировать PDF. Проверьте подключение к интернету (нужны jsPDF и шрифт с CDN).';
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    window.exportMgmtSingleOrderToPdf = exportMgmtSingleOrderToPdf;
 
     function updateMgmtOrdersScopeUi() {
       const scopeEl = document.getElementById('mgmtReportsOrdersScope');
@@ -12877,9 +13080,9 @@
           } else if (target.id === 'buildMgmtOrdersReportBtn') {
             e.preventDefault();
             buildMgmtOrdersReport();
-          } else if (target.id === 'exportMgmtSingleOrderBtn') {
+          } else if (target.id === 'exportMgmtSingleOrderPdfBtn') {
             e.preventDefault();
-            exportMgmtSingleOrderToExcel();
+            exportMgmtSingleOrderToPdf();
           }
         });
       }

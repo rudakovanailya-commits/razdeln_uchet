@@ -6987,6 +6987,41 @@
       };
     }
 
+    function findGroupCalculationRowDom(groupName) {
+      const groupBody = document.getElementById('ordersGroupBody');
+      if (!groupBody) return null;
+      const gn = String(groupName || '').trim();
+      if (!gn) return null;
+      const rows = groupBody.querySelectorAll('tr.order-group-item[data-group-name]');
+      for (let i = 0; i < rows.length; i++) {
+        if (String(rows[i].getAttribute('data-group-name') || '').trim() === gn) {
+          return rows[i];
+        }
+      }
+      return null;
+    }
+
+    function allocateGroupW26DisplayToOrder(
+      groupWriteoff,
+      groupShipmentNoVat,
+      orderShipmentNoVat,
+      memberCount
+    ) {
+      let share = 1;
+      if (memberCount > 1) {
+        if (groupShipmentNoVat > RECONCILE_EPS) {
+          share = orderShipmentNoVat / groupShipmentNoVat;
+        } else {
+          share = 1 / memberCount;
+        }
+      }
+      const writeOffTotal = groupWriteoff * share;
+      const profitRub = orderShipmentNoVat - writeOffTotal;
+      const profitMarginPct =
+        orderShipmentNoVat > 0 ? (profitRub / orderShipmentNoVat) * 100 : 0;
+      return { writeOffTotal, profitRub, profitMarginPct };
+    }
+
     function allocateV26MetricsToOrder(metrics26, sums, orderShipmentNoVat, memberCount) {
       let share = 1;
       if (memberCount > 1) {
@@ -7015,10 +7050,34 @@
       const group = groups.find(g => g.groupName === groupName);
       if (!group) return null;
 
+      const orderShipmentNoVat = num(orderTr.querySelector('.shipment-no-vat')?.textContent);
+      const groupRow = findGroupCalculationRowDom(groupName);
+
+      if (groupRow) {
+        const groupWriteoff = num(groupRow.querySelector('.w26-writeoff-total')?.textContent);
+        const groupProfit = num(groupRow.querySelector('.w26-profit')?.textContent);
+        const groupMargin = num(groupRow.querySelector('.w26-profit-margin')?.textContent);
+        const groupShipmentNoVat = num(groupRow.querySelector('.shipment-no-vat')?.textContent);
+
+        if (group.rows.length === 1) {
+          return {
+            writeOffTotal: groupWriteoff,
+            profitRub: groupProfit,
+            profitMarginPct: groupMargin
+          };
+        }
+
+        return allocateGroupW26DisplayToOrder(
+          groupWriteoff,
+          groupShipmentNoVat,
+          orderShipmentNoVat,
+          group.rows.length
+        );
+      }
+
       const sums = sumGroupMetricsWithTransfers(group.rows, group.groupName);
       const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
       const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
-      const orderShipmentNoVat = num(orderTr.querySelector('.shipment-no-vat')?.textContent);
 
       return allocateV26MetricsToOrder(
         metrics26,
@@ -7073,6 +7132,9 @@
       );
     }
 
+    const CLOUD_FLAT_PAYLOAD_DEBUG_ORDER =
+      'Договор №9/Э/090/20/25 от 17.07.2025';
+
     function getCloudPayloadRows(period) {
       flushPeriodStateFromDomBeforeSave();
       calculateAll();
@@ -7080,13 +7142,15 @@
       const st = getPeriodStatus();
       let flatRowLogged = false;
 
-      return getRows()
+      const rows = getRows()
         .map(tr => {
           const order = (tr.querySelector('.order-name').value || '').trim();
           if (!order) return null;
 
           const v26 = getCloudFlatRowV26MetricsFromDom(tr);
-          const writeoff = v26 ? v26.writeOffTotal : num(tr.querySelector('.w26-writeoff-total')?.textContent);
+          const writeoff = v26
+            ? v26.writeOffTotal
+            : num(tr.querySelector('.w26-writeoff-total')?.textContent);
           const profit = v26 ? v26.profitRub : num(tr.querySelector('.w26-profit')?.textContent);
           const profitMarginPct = v26
             ? v26.profitMarginPct
@@ -7110,13 +7174,15 @@
             status: st
           };
 
-          if (!flatRowLogged) {
+          const isDebugOrder = order === CLOUD_FLAT_PAYLOAD_DEBUG_ORDER;
+          if (isDebugOrder || !flatRowLogged) {
             console.log('[v2 cloud flat row]', {
               order: flatRow.order,
               shipment: flatRow.shipment,
               writeoff: flatRow.writeoff,
               profit: flatRow.profit,
-              profit_percent: flatRow.profit_percent
+              profit_percent: flatRow.profit_percent,
+              source: v26 ? 'writeoff26-group-row' : 'dom-fallback'
             });
             flatRowLogged = true;
           }
@@ -7124,6 +7190,9 @@
           return flatRow;
         })
         .filter(Boolean);
+
+      console.log('[v2 cloud] getCloudPayloadRows built', rows.length, 'rows');
+      return rows;
     }
 
     const CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING =
@@ -8559,11 +8628,25 @@
         flushPeriodStateFromDomBeforeSave();
 
         const rows = getCloudPayloadRows(period);
+        console.log('[v2 cloud] saveToCloudV2 uses getCloudPayloadRows, count:', rows.length);
         const check = validateCloudPayloadRowsForSave(period, rows);
         if (!check.ok) {
           if (statusEl) statusEl.textContent = '';
           alertCloudSaveCancelledNoRows(period);
           return;
+        }
+
+        console.log('[v2 cloud payload rows before send]', check.rows);
+        const targetRow = check.rows.find(
+          r => String(r.order || '').trim() === CLOUD_FLAT_PAYLOAD_DEBUG_ORDER
+        );
+        if (targetRow) {
+          console.log('[v2 cloud payload target row]', targetRow);
+        } else {
+          console.warn(
+            '[v2 cloud payload target row] not found:',
+            CLOUD_FLAT_PAYLOAD_DEBUG_ORDER
+          );
         }
 
         await replacePeriodInCloud(period, check.rows);

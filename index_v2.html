@@ -7201,14 +7201,25 @@
     async function fetchPeriodDataFromCloud(period) {
       const pn = normalizePeriodStr(period);
       if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
-        return { ok: false, error: 'invalid_period' };
+        return { ok: false, error: 'invalid_period', period: pn };
       }
       const url = getCloudApiUrl('getPeriodData', { period: pn });
+      console.log('[v2 cloud load] getPeriodData URL', url);
       const res = await fetch(url, { method: 'GET' });
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('[v2 cloud load] getPeriodData response not JSON', text.slice(0, 500));
+        throw new Error('Ответ getPeriodData не JSON (HTTP ' + res.status + ')');
       }
-      return await res.json();
+      if (!res.ok) {
+        throw new Error(
+          'HTTP ' + res.status + ': ' + (result && result.error ? result.error : text.slice(0, 200))
+        );
+      }
+      return result;
     }
 
     function parsePeriodDataFromCloud(jsonStr) {
@@ -7356,32 +7367,62 @@
       if (!requireValidWorkingPeriod(period)) return;
       if (!confirmIfUnsyncedCloudLoad()) return;
 
+      const pn = normalizePeriodStr(period);
+      console.log('[v2 cloud load] selected period', pn);
+      console.log('[v2 cloud load] CLOUD_SAVE_URL', CLOUD_SAVE_URL);
+      console.log('[v2 cloud load] CLOUD_DATA_URL', CLOUD_DATA_URL);
+
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Загрузка из облака…';
+
       try {
-        let loadedFull = false;
+        let cloudPeriodData = null;
         try {
-          const cloudPeriodData = await fetchPeriodDataFromCloud(period);
-          if (cloudPeriodData && cloudPeriodData.ok && cloudPeriodData.json) {
-            const data = parsePeriodDataFromCloud(cloudPeriodData.json);
-            if (data && applyPeriodDataFromCloud(data, 'period_data')) {
-              loadedFull = true;
-              if (statusEl) {
-                statusEl.textContent =
-                  'Загружена полная копия периода ' +
-                  normalizePeriodStr(period) +
-                  ' из Google Sheets';
-              }
-              alert('Загружена полная копия периода из Google Sheets.');
-            }
-          }
+          cloudPeriodData = await fetchPeriodDataFromCloud(pn);
+          console.log('[v2 cloud load] getPeriodData result', cloudPeriodData);
         } catch (periodDataErr) {
-          console.warn('getPeriodData:', periodDataErr);
+          console.error('[v2 cloud load] getPeriodData fetch failed', periodDataErr);
+          if (statusEl) statusEl.textContent = '';
+          alert(
+            'Не удалось прочитать period_data из Google Sheets: ' +
+              (periodDataErr && periodDataErr.message
+                ? periodDataErr.message
+                : String(periodDataErr))
+          );
+          return;
         }
 
-        if (!loadedFull) {
-          await loadPeriodFromCloudLegacyFlat(period, statusEl);
+        if (cloudPeriodData && cloudPeriodData.ok === true && cloudPeriodData.json) {
+          const data = parsePeriodDataFromCloud(cloudPeriodData.json);
+          if (!data) {
+            console.error('[v2 cloud load] parsePeriodDataFromCloud failed', {
+              jsonLength: cloudPeriodData.json ? cloudPeriodData.json.length : 0
+            });
+            if (statusEl) statusEl.textContent = '';
+            alert(
+              'В period_data найден JSON периода ' +
+                pn +
+                ', но его не удалось разобрать. Проверьте Console.'
+            );
+            return;
+          }
+
+          applyPeriodDataFromCloud(data, 'period_data');
+          if (statusEl) {
+            statusEl.textContent =
+              'Загружена полная копия периода ' + pn + ' из Google Sheets';
+          }
+          alert('Загружена полная копия периода из Google Sheets.');
+          return;
         }
+
+        const periodDataError =
+          cloudPeriodData && cloudPeriodData.error
+            ? String(cloudPeriodData.error)
+            : 'not_found';
+        console.warn('[v2 cloud load] period_data unavailable, legacy fallback', periodDataError);
+
+        await loadPeriodFromCloudLegacyFlat(pn, statusEl);
       } catch (err) {
         if (statusEl) statusEl.textContent = '';
         alert(

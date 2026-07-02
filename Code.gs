@@ -153,7 +153,7 @@ function getPeriodDataRow(periodParam) {
   if (lastRow < 2) return null;
 
   var n = PERIOD_DATA_HEADERS.length;
-  var values = sheet.getRange(2, 1, lastRow - 1, n).getValues();
+  var values = sheet.getRange(2, 1, lastRow, n).getValues();
   var latest = null;
   var latestAt = '';
 
@@ -206,7 +206,7 @@ function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
   var targetRow = -1;
 
   if (lastRow >= 2) {
-    var periodCol = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    var periodCol = sheet.getRange(2, 1, lastRow, 1).getValues();
     for (var r = 0; r < periodCol.length; r++) {
       if (String(periodCol[r][0] || '').trim() === period) {
         targetRow = r + 2;

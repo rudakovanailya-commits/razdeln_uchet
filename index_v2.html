@@ -2363,6 +2363,24 @@
       color: #15803d;
     }
 
+    .wip-chain-source-field {
+      margin-top: 12px;
+      max-width: 420px;
+    }
+
+    .wip-chain-status-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+
+    .wip-chain-source-warn {
+      margin-top: 6px;
+      color: #b45309;
+    }
+
     #applyWipChainBtn.wip-chain-action-needed {
       background: #d97706;
       color: #ffffff;
@@ -2506,8 +2524,22 @@
       <div class="help-panel" id="helpWipChain" hidden>
         Проверяет, что НЗП конец 20 предыдущего периода правильно перешёл в НЗП начало следующего периода. Рекомендуется выполнять перед закрытием периода и перед отправкой данных в Google Sheets.
       </div>
-      <div class="hint" id="wipChainUiStatus" style="margin-top: 6px; min-height: 1.2em;">Не проверено</div>
-      <div class="hint" id="wipChainUiMeta" style="margin-top: 2px; color:#64748b;">—</div>
+      <div class="field wip-chain-source-field">
+        <label for="wipChainCheckSource">Источник проверки цепочки НЗП</label>
+        <select id="wipChainCheckSource">
+          <option value="local" selected>Локальные данные</option>
+          <option value="cloud">Google Sheets</option>
+          <option value="auto">Авто</option>
+        </select>
+      </div>
+      <div class="hint" id="wipChainSourceDesc" style="margin-top: 6px;">
+        Проверяет периоды из localStorage текущего браузера.
+      </div>
+      <div class="wip-chain-status-panel" id="wipChainStatusPanel">
+        <div class="hint" id="wipChainUiStatus" style="min-height: 1.2em;">Не проверено</div>
+        <div class="hint" id="wipChainUiMeta" style="margin-top: 2px; color:#64748b;">—</div>
+        <div class="hint wip-chain-source-warn" id="wipChainSourceWarning" hidden></div>
+      </div>
       <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         <button id="checkWipChainBtn" type="button" class="secondary">Проверить цепочку НЗП</button>
         <span class="help-toggle" data-help-id="helpCheckWip">ⓘ Что это?</span>
@@ -2524,9 +2556,6 @@
       </div>
       <div class="help-panel" id="helpPullWip" hidden>
         Подставляет НЗП начало текущего периода из НЗП конца 20 предыдущего периода.
-      </div>
-      <div class="hint" id="wipChainSourceHint" style="margin-top: 8px;">
-        Цепочка НЗП и подтягивание из предыдущего периода используют «НЗП конец 20» с вкладки «Списание 20 сч.» (без 26 сч.). Данные берутся из localStorage; Google Sheets не изменяется автоматически.
       </div>
       <div class="hint wip-chain-auto-hint" id="wipChainAutoHint" hidden style="margin-top: 8px;"></div>
       <div id="wipChainReportPanel" hidden></div>
@@ -8772,6 +8801,164 @@
     const WIP_CHAIN_EPS = 0.01;
     let lastWipChainCheckResult = null;
 
+    const WIP_CHAIN_SOURCE_LABELS = {
+      localStorage: 'Локальные данные',
+      googleSheets: 'Google Sheets'
+    };
+
+    function getWipChainCheckSourceSelection() {
+      const el = document.getElementById('wipChainCheckSource');
+      const v = el ? String(el.value || '').trim() : 'local';
+      if (v === 'cloud' || v === 'auto') return v;
+      return 'local';
+    }
+
+    function getSubsequentPeriodsFromList(startPeriod, allPeriods) {
+      const start = normalizePeriodStr(startPeriod);
+      return (allPeriods || [])
+        .filter(p => /^\d{4}-\d{2}$/.test(p) && p > start)
+        .sort();
+    }
+
+    function buildPeriodDataForWipChainFromCloudRows(period, sheetRows) {
+      if (!sheetRows || !sheetRows.length) return null;
+
+      const pn = normalizePeriodStr(period);
+      let globals = {
+        vatRate: '22',
+        totalInsurance: '0',
+        totalSick: '0',
+        total25: '0',
+        total26: '0',
+        total44: '0'
+      };
+      let grouping = {};
+      let groupCalc26 = {};
+      let groupCalc20 = {};
+      let transfers = [];
+      let enrichedFromLocal = false;
+      let vatRate = globals.vatRate;
+
+      const localRaw = localStorage.getItem(getStorageKey(pn));
+      if (localRaw) {
+        try {
+          const local = JSON.parse(localRaw);
+          if (local.globals && typeof local.globals === 'object') {
+            globals = Object.assign({}, globals, local.globals);
+            vatRate = globals.vatRate || vatRate;
+          }
+          if (local.grouping && typeof local.grouping === 'object') grouping = local.grouping;
+          if (local.groupCalc26 && typeof local.groupCalc26 === 'object') groupCalc26 = local.groupCalc26;
+          if (local.groupCalc20 && typeof local.groupCalc20 === 'object') groupCalc20 = local.groupCalc20;
+          if (Array.isArray(local.transfers)) transfers = local.transfers;
+          enrichedFromLocal = true;
+        } catch (e) {
+          /* повреждённая локальная запись */
+        }
+      }
+
+      const rows = sheetRows.map(r => mapSheetRowToAppRow(r, vatRate));
+
+      if (localRaw) {
+        try {
+          const local = JSON.parse(localRaw);
+          if (local.rows && Array.isArray(local.rows)) {
+            const localByKey = new Map();
+            local.rows.forEach(r => {
+              const o = String(r.order != null ? r.order : '').trim();
+              if (!o) return;
+              localByKey.set(canonicalOrderKey(o), r);
+            });
+            rows.forEach(r => {
+              const o = String(r.order != null ? r.order : '').trim();
+              const lr = localByKey.get(canonicalOrderKey(o));
+              if (!lr) return;
+              if (lr.wipStart != null) r.wipStart = lr.wipStart;
+              if (lr.manualWriteoff != null) r.manualWriteoff = lr.manualWriteoff;
+            });
+          }
+        } catch (e) {
+          /* пропуск */
+        }
+      }
+
+      const periodStatus = inferPeriodStatusFromSheetRow(normalizeSheetRecord(sheetRows[0]));
+
+      return {
+        globals,
+        periodStatus,
+        rows,
+        grouping,
+        groupCalc26,
+        groupCalc20,
+        transfers,
+        _enrichedFromLocal: enrichedFromLocal
+      };
+    }
+
+    async function fetchCloudPeriodDataForWipChain() {
+      const rows = await fetchSheetRowsForPeriodReport();
+      const byPeriod = new Map();
+      (rows || []).forEach(r => {
+        const p = normalizePeriodFromSheet(r.period);
+        if (!p || !/^\d{4}-\d{2}$/.test(p)) return;
+        if (!byPeriod.has(p)) byPeriod.set(p, []);
+        byPeriod.get(p).push(r);
+      });
+
+      const periods = Array.from(byPeriod.keys()).sort();
+      const dataByPeriod = new Map();
+      let anyEnrichedFromLocal = false;
+
+      periods.forEach(p => {
+        const data = buildPeriodDataForWipChainFromCloudRows(p, byPeriod.get(p));
+        if (data) {
+          if (data._enrichedFromLocal) anyEnrichedFromLocal = true;
+          dataByPeriod.set(p, data);
+        }
+      });
+
+      return { periods, dataByPeriod, anyEnrichedFromLocal };
+    }
+
+    async function checkWipChainFromPeriodCloud(startPeriod) {
+      let cloud;
+      try {
+        cloud = await fetchCloudPeriodDataForWipChain();
+      } catch (e) {
+        return {
+          ok: false,
+          error:
+            'Не удалось загрузить данные из Google Sheets. Можно проверить локальные данные.'
+        };
+      }
+
+      if (!cloud.periods.length) {
+        return { ok: false, error: 'В Google Sheets нет сохранённых периодов.' };
+      }
+
+      const start = normalizePeriodStr(startPeriod);
+      if (!cloud.dataByPeriod.has(start)) {
+        return {
+          ok: false,
+          error: 'Период ' + start + ' не найден в Google Sheets.'
+        };
+      }
+
+      const getPeriodData = period => {
+        const pn = normalizePeriodStr(period);
+        return cloud.dataByPeriod.get(pn) || null;
+      };
+
+      const result = checkWipChainFromPeriod(startPeriod, {
+        source: 'googleSheets',
+        getPeriodData,
+        allPeriods: cloud.periods,
+        enrichedFromLocal: cloud.anyEnrichedFromLocal
+      });
+      return result;
+    }
+
     function listLocalStoragePeriods() {
       return Object.keys(localStorage)
         .filter(key => key.startsWith('razdelny_uchet_'))
@@ -10091,28 +10278,35 @@
       return link;
     }
 
-    function checkWipChainFromPeriod(startPeriod) {
+    function checkWipChainFromPeriod(startPeriod, options) {
+      options = options || {};
+      const source = options.source || 'localStorage';
+      const resolvePeriodData = options.getPeriodData || getPeriodDataForChain;
+      const allPeriods = options.allPeriods || listLocalStoragePeriods();
       const start = normalizePeriodStr(startPeriod);
       if (!start || !/^\d{4}-\d{2}$/.test(start)) {
         return { ok: false, error: 'Укажите период в формате YYYY-MM' };
       }
 
-      const subsequent = getSubsequentPeriods(start);
+      const subsequent = getSubsequentPeriodsFromList(start, allPeriods);
       if (!subsequent.length) {
+        const where =
+          source === 'googleSheets' ? 'в Google Sheets' : 'локально сохранённых';
         return {
           ok: false,
-          error: 'После периода ' + start + ' нет локально сохранённых периодов'
+          error: 'После периода ' + start + ' нет ' + where + ' периодов'
         };
       }
 
-      let prevData = getPeriodDataForChain(start);
+      let prevData = resolvePeriodData(start);
       if (!prevData) {
+        const where =
+          source === 'googleSheets'
+            ? 'в Google Sheets'
+            : 'в localStorage. Сохраните его локально или откройте на экране';
         return {
           ok: false,
-          error:
-            'Стартовый период ' +
-            start +
-            ' не найден в localStorage. Сохраните его локально или откройте на экране.'
+          error: 'Стартовый период ' + start + ' не найден ' + where + '.'
         };
       }
       prevData = clonePeriodData(prevData);
@@ -10124,13 +10318,17 @@
 
       for (let i = 0; i < subsequent.length; i++) {
         const nextPeriod = subsequent[i];
-        const nextData = getPeriodDataForChain(nextPeriod);
+        const nextData = resolvePeriodData(nextPeriod);
         if (!nextData) {
+          const skipReason =
+            source === 'googleSheets'
+              ? 'Период не найден в Google Sheets'
+              : 'Период не найден в localStorage';
           links.push({
             period: nextPeriod,
             prevPeriod: i === 0 ? start : subsequent[i - 1],
             skipped: true,
-            skipReason: 'Период не найден в localStorage',
+            skipReason,
             periodStatus: 'unknown',
             isFinal: false,
             discrepancies: [],
@@ -10156,7 +10354,8 @@
       const result = {
         ok: true,
         startPeriod: start,
-        source: 'localStorage',
+        source,
+        enrichedFromLocal: !!options.enrichedFromLocal,
         periodsChecked: subsequent,
         links,
         finalPeriodsInChain,
@@ -10205,7 +10404,9 @@
       let html =
         '<p><strong>Стартовый период:</strong> ' +
         escapeHtmlForReport(result.startPeriod) +
-        ' · <strong>Источник:</strong> localStorage · <strong>Проверено периодов:</strong> ' +
+        ' · <strong>Источник:</strong> ' +
+        escapeHtmlForReport(WIP_CHAIN_SOURCE_LABELS[result.source] || result.source || '—') +
+        ' · <strong>Проверено периодов:</strong> ' +
         result.periodsChecked.length +
         '</p>';
 
@@ -10445,25 +10646,77 @@
       panel.innerHTML = renderWipChainReportHtml(result);
     }
 
-    function runCheckWipChain() {
+    async function runCheckWipChain() {
       const startPeriod = getCurrentPeriod();
       if (!startPeriod) {
         alert('Укажите стартовый период в поле «Период»');
         return;
       }
       if (!requireValidWorkingPeriod(startPeriod)) return;
-      const result = checkWipChainFromPeriod(startPeriod);
-      if (!result.ok) {
-        alert(result.error);
+
+      const sourceSel = getWipChainCheckSourceSelection();
+      const checkBtn = document.getElementById('checkWipChainBtn');
+      if (checkBtn) checkBtn.disabled = true;
+
+      let result = null;
+      let sourceUsed = 'localStorage';
+      let fallbackWarning = '';
+
+      try {
+        if (sourceSel === 'cloud') {
+          result = await checkWipChainFromPeriodCloud(startPeriod);
+          if (!result.ok) {
+            alert(
+              result.error ||
+                'Не удалось загрузить данные из Google Sheets. Можно проверить локальные данные.'
+            );
+            return;
+          }
+          sourceUsed = 'googleSheets';
+        } else if (sourceSel === 'auto') {
+          const cloudResult = await checkWipChainFromPeriodCloud(startPeriod);
+          if (cloudResult.ok) {
+            result = cloudResult;
+            sourceUsed = 'googleSheets';
+          } else {
+            result = checkWipChainFromPeriod(startPeriod, { source: 'localStorage' });
+            if (!result.ok) {
+              alert(result.error);
+              return;
+            }
+            sourceUsed = 'localStorage';
+            fallbackWarning =
+              'Google Sheets недоступен. Проверка выполнена по локальным данным.';
+          }
+        } else {
+          result = checkWipChainFromPeriod(startPeriod, { source: 'localStorage' });
+          if (!result.ok) {
+            alert(result.error);
+            return;
+          }
+          sourceUsed = 'localStorage';
+        }
+      } catch (e) {
+        console.error(e);
+        alert(
+          'Не удалось загрузить данные из Google Sheets. Можно проверить локальные данные.'
+        );
         return;
+      } finally {
+        if (checkBtn) checkBtn.disabled = false;
       }
+
       lastWipChainCheckResult = result;
+      uiWipCheckSourceUsed = sourceUsed;
+      uiWipCheckFallbackWarning = fallbackWarning;
       showWipChainReportPanel(result);
       updateWipChainAutoHint(normalizePeriodStr(startPeriod), result);
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) {
         statusEl.textContent =
-          'Проверка цепочки НЗП: ' +
+          'Проверка цепочки НЗП (' +
+          (WIP_CHAIN_SOURCE_LABELS[sourceUsed] || sourceUsed) +
+          '): ' +
           result.periodsChecked.length +
           ' периодов, расхождений по заказам: ' +
           result.totalDiscrepancies;
@@ -16963,12 +17216,7 @@
       if (inp && document.activeElement === inp) {
         inp.blur();
       }
-      if (!uiWipCheckedAt || !lastWipChainCheckResult || uiWipNeedsRecheck) {
-        const statusEl = document.getElementById('periodActionStatus');
-        const msg =
-          'Перед отправкой в Google Sheets рекомендуется проверить цепочку НЗП.';
-        if (statusEl) statusEl.textContent = msg;
-      }
+      if (!confirmWipChainBeforeCloudSave()) return;
       requestAnimationFrame(() => saveToCloud());
     });
 
@@ -17024,7 +17272,19 @@
 
     const checkWipChainBtn = document.getElementById('checkWipChainBtn');
     if (checkWipChainBtn) {
-      checkWipChainBtn.addEventListener('click', () => runCheckWipChain());
+      checkWipChainBtn.addEventListener('click', () => {
+        runCheckWipChain();
+      });
+    }
+
+    const wipChainCheckSourceEl = document.getElementById('wipChainCheckSource');
+    if (wipChainCheckSourceEl) {
+      wipChainCheckSourceEl.addEventListener('change', () => {
+        updateWipChainSourceDesc();
+        if (uiWipCheckedAt) uiWipNeedsRecheck = true;
+        updateWipChainUiStatus();
+      });
+      updateWipChainSourceDesc();
     }
 
     const applyWipChainBtn = document.getElementById('applyWipChainBtn');
@@ -17153,6 +17413,36 @@
     let uiPeriodDirty = false;
     let uiWipCheckedAt = null;
     let uiWipNeedsRecheck = false;
+    let uiWipCheckSourceUsed = null;
+    let uiWipCheckFallbackWarning = '';
+
+    function updateWipChainSourceDesc() {
+      const el = document.getElementById('wipChainSourceDesc');
+      if (!el) return;
+      const sel = getWipChainCheckSourceSelection();
+      if (sel === 'cloud') {
+        el.textContent =
+          'Проверяет периоды, сохранённые в общей Google Sheets. Исправления по цепочке по-прежнему применяются только к локальным данным.';
+      } else if (sel === 'auto') {
+        el.textContent =
+          'Сначала пробует Google Sheets; если облако недоступно — использует localStorage и показывает предупреждение.';
+      } else {
+        el.textContent = 'Проверяет периоды из localStorage текущего браузера.';
+      }
+    }
+
+    function confirmWipChainBeforeCloudSave() {
+      if (
+        uiWipCheckedAt &&
+        !uiWipNeedsRecheck &&
+        uiWipCheckSourceUsed === 'googleSheets'
+      ) {
+        return true;
+      }
+      return confirm(
+        'Цепочка НЗП не проверялась по общей базе Google Sheets. Локальная проверка может не учитывать изменения других пользователей. Продолжить сохранение?'
+      );
+    }
 
     function setUiActiveScreen(screenId) {
       uiActiveScreen = screenId || 'accounting';
@@ -17223,35 +17513,65 @@
     function updateWipChainUiStatus() {
       const statusEl = document.getElementById('wipChainUiStatus');
       const metaEl = document.getElementById('wipChainUiMeta');
+      const warnEl = document.getElementById('wipChainSourceWarning');
       const r = lastWipChainCheckResult;
       const checkedAt = uiWipCheckedAt ? formatMgmtPdfDateTime(uiWipCheckedAt) : '';
+      const sourceLabel = uiWipCheckSourceUsed
+        ? WIP_CHAIN_SOURCE_LABELS[uiWipCheckSourceUsed] || uiWipCheckSourceUsed
+        : '';
 
       if (!statusEl || !metaEl) return;
+
       if (!uiWipCheckedAt || !r) {
         statusEl.textContent = 'Не проверено';
-        metaEl.textContent = 'Рекомендуется проверить перед закрытием периода и перед отправкой в Google Sheets.';
+        metaEl.textContent =
+          'Рекомендуется проверить перед закрытием периода и перед отправкой в Google Sheets.';
+        if (warnEl) {
+          warnEl.hidden = true;
+          warnEl.textContent = '';
+        }
         return;
       }
 
       if (uiWipNeedsRecheck) {
         statusEl.textContent = 'Требуется повторная проверка';
-        metaEl.textContent = 'Последняя проверка: ' + checkedAt + '. Данные изменены после проверки.';
-        return;
-      }
-
-      if (r.totalDiscrepancies > 0) {
+      } else if (r.totalDiscrepancies > 0) {
         statusEl.textContent = 'Есть расхождения: ' + r.totalDiscrepancies;
-        metaEl.textContent =
-          'Последняя проверка: ' +
-          checkedAt +
-          '. Проверено периодов: ' +
-          (r.periodsChecked ? r.periodsChecked.length : r.periodsChecked) +
-          '.';
-        return;
+      } else {
+        statusEl.textContent = 'Проверено, расхождений нет';
       }
 
-      statusEl.textContent = 'Проверено, расхождений нет';
-      metaEl.textContent = 'Последняя проверка: ' + checkedAt + '.';
+      let meta = sourceLabel ? 'Источник: ' + sourceLabel : '—';
+      if (checkedAt) meta += ' · Последняя проверка: ' + checkedAt;
+      if (uiWipNeedsRecheck) {
+        meta += ' · Данные изменены после проверки';
+      } else if (r.periodsChecked && r.periodsChecked.length) {
+        meta += ' · Проверено периодов: ' + r.periodsChecked.length;
+      }
+      metaEl.textContent = meta;
+
+      if (warnEl) {
+        let warn = '';
+        if (uiWipCheckFallbackWarning) {
+          warn = uiWipCheckFallbackWarning;
+        } else if (
+          uiWipCheckSourceUsed === 'localStorage' &&
+          !uiWipNeedsRecheck
+        ) {
+          warn =
+            'Проверка выполнена по локальным данным. Она может не учитывать изменения других пользователей в Google Sheets.';
+        } else if (r.enrichedFromLocal && uiWipCheckSourceUsed === 'googleSheets') {
+          warn =
+            'В Google Sheets не хранятся НЗП нач., группировка и переносы — для этих полей использованы локальные данные по совпадающим периодам.';
+        }
+        if (warn) {
+          warnEl.hidden = false;
+          warnEl.textContent = warn;
+        } else {
+          warnEl.hidden = true;
+          warnEl.textContent = '';
+        }
+      }
     }
 
     function setupQuickActionsUi() {

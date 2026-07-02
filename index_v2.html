@@ -1045,6 +1045,10 @@
       color: #f0fdf4;
     }
 
+    .orders-tab-btn.orders-tab-btn-legacy-hidden {
+      display: none !important;
+    }
+
     #ordersTable[data-active-tab="expenses"]
       :is(th, td):not(.tab-v-expenses):not(.tab-v-common) {
       display: none;
@@ -2639,10 +2643,10 @@
         <button type="button" class="orders-tab-btn" data-orders-tab="transfers" role="tab" aria-selected="false">
           Перенос НЗП
         </button>
-        <button type="button" class="orders-tab-btn" data-orders-tab="economist" role="tab" aria-selected="false">
+        <button type="button" class="orders-tab-btn orders-tab-btn-legacy-hidden" data-orders-tab="economist" role="tab" aria-selected="false" hidden tabindex="-1" aria-hidden="true">
           План списания и НЗП
         </button>
-        <button type="button" class="orders-tab-btn" data-orders-tab="reconcile" role="tab" aria-selected="false">
+        <button type="button" class="orders-tab-btn orders-tab-btn-legacy-hidden" data-orders-tab="reconcile" role="tab" aria-selected="false" hidden tabindex="-1" aria-hidden="true">
           НЗП для 1С
         </button>
       </div>
@@ -4813,6 +4817,24 @@
       });
     }
 
+    /** Скрытые в UI v2 вкладки (логика расчётов/экспорта сохранена). */
+    const ORDERS_UI_HIDDEN_TABS = new Set(['economist', 'reconcile']);
+
+    function normalizeOrdersUiTab(tabId) {
+      const id = String(tabId || '').trim() || 'expenses';
+      if (ORDERS_UI_HIDDEN_TABS.has(id)) return 'expenses';
+      if (
+        id === 'writeoff20' ||
+        id === 'writeoff26' ||
+        id === 'grouping' ||
+        id === 'transfers' ||
+        id === 'expenses'
+      ) {
+        return id;
+      }
+      return 'expenses';
+    }
+
     function setupOrdersTableTabs() {
       const table = document.getElementById('ordersTable');
       const bar = document.getElementById('ordersTabBar');
@@ -4822,17 +4844,10 @@
       const hint = document.getElementById('ordersTabReconcileHint');
 
       function setOrdersTab(tabId) {
-        const id =
-          tabId === 'economist' ||
-          tabId === 'reconcile' ||
-          tabId === 'writeoff20' ||
-          tabId === 'writeoff26' ||
-          tabId === 'grouping' ||
-          tabId === 'transfers'
-            ? tabId
-            : 'expenses';
+        const id = normalizeOrdersUiTab(tabId);
         table.setAttribute('data-active-tab', id);
         bar.querySelectorAll('[data-orders-tab]').forEach(btn => {
+          if (btn.classList.contains('orders-tab-btn-legacy-hidden')) return;
           const active = btn.getAttribute('data-orders-tab') === id;
           btn.classList.toggle('active', active);
           btn.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -4878,15 +4893,11 @@
 
       bar.addEventListener('click', e => {
         const btn = e.target.closest('[data-orders-tab]');
-        if (!btn) return;
+        if (!btn || btn.classList.contains('orders-tab-btn-legacy-hidden')) return;
         setOrdersTab(btn.getAttribute('data-orders-tab'));
       });
 
-      if (!table.getAttribute('data-active-tab')) {
-        setOrdersTab('expenses');
-      } else {
-        applyOrdersTabHeaderLabels(table.getAttribute('data-active-tab'));
-      }
+      setOrdersTab(table.getAttribute('data-active-tab') || 'expenses');
     }
 
     ordersBody.addEventListener('input', (e) => {
@@ -6843,6 +6854,7 @@
     }
 
     function collectRowData(tr) {
+      const writeoffPlan = getRowWriteoffPlanValues(tr);
       return {
         order: tr.querySelector('.order-name').value,
         shipmentVat: tr.querySelector('.shipment-vat').value,
@@ -6851,8 +6863,8 @@
         processing: tr.querySelector('.processing').value,
         other: tr.querySelector('.other-direct').value,
         salary: tr.querySelector('.salary').value,
-        profitPercent: tr.querySelector('.profit-percent').value,
-        manualWriteoff: tr.querySelector('.manual-writeoff').value,
+        profitPercent: writeoffPlan.profitPercent,
+        manualWriteoff: writeoffPlan.manualWriteoff,
         snapshot: {
           shipmentNoVat: tr.querySelector('.shipment-no-vat').textContent,
           shipmentPercent: tr.querySelector('.shipment-percent').textContent,
@@ -7185,18 +7197,49 @@
       groupBody.querySelectorAll('tr.order-group-item[data-group-name]').forEach(tr => {
         const gn = tr.getAttribute('data-group-name');
         if (!gn) return;
+        if (!groupCalc20[gn]) groupCalc20[gn] = {};
         if (!groupCalc26[gn]) groupCalc26[gn] = {};
+        const pct20 = tr.querySelector('input.group-w20-profit-percent');
+        const man20 = tr.querySelector('input.group-w20-manual-writeoff');
         const pct = tr.querySelector('input.group-w26-profit-percent');
         const man = tr.querySelector('input.group-w26-manual-writeoff');
         const man26 = tr.querySelector('input.group-w26-manual-writeoff-26');
+        if (pct20) groupCalc20[gn].profitPercent20 = pct20.value;
+        if (man20) groupCalc20[gn].manualWriteoff20 = man20.value;
         if (pct) groupCalc26[gn].profitPercent26 = pct.value;
         if (man) groupCalc26[gn].manualTotalWriteoff26 = man.value;
         if (man26) groupCalc26[gn].manualWriteoff26 = man26.value;
       });
     }
 
-    function collectData() {
+    /** Синхронизирует DOM с рабочей моделью перед локальным сохранением. */
+    function flushPeriodStateFromDomBeforeSave() {
+      const groupingBody = document.getElementById('groupingTableBody');
+      if (groupingBody && groupingBody.querySelector('tr[data-order-name]')) {
+        collectGroupingFromPanel();
+      } else {
+        ensureGroupingForAllRows();
+      }
+      collectTransfersFromPanel();
       flushGroupCalcStateFromDom();
+      getRows().forEach(row => syncWriteoffPlanInputsInRow(row));
+    }
+
+    function getRowWriteoffPlanValues(tr) {
+      syncWriteoffPlanInputsInRow(tr);
+      const manualInput = getManualWriteoffInput(tr);
+      const pctEl =
+        tr.querySelector('input.w26-profit-percent') ||
+        tr.querySelector('input.w20-profit-percent') ||
+        tr.querySelector('input.profit-percent');
+      return {
+        profitPercent: pctEl ? pctEl.value : '0',
+        manualWriteoff: manualInput ? manualInput.value : ''
+      };
+    }
+
+    function collectData() {
+      flushPeriodStateFromDomBeforeSave();
       const rows = getRows().map(row => collectRowData(row));
       const groupingCopy = {};
       Object.keys(orderGrouping).forEach(k => {
@@ -16762,7 +16805,7 @@
 
     function getActiveOrdersTab() {
       const table = document.getElementById('ordersTable');
-      return table?.getAttribute('data-active-tab') || 'expenses';
+      return normalizeOrdersUiTab(table?.getAttribute('data-active-tab') || 'expenses');
     }
 
     function getGroupRows() {

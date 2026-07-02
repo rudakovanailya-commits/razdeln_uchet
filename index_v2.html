@@ -6987,12 +6987,112 @@
       };
     }
 
+    function allocateV26MetricsToOrder(metrics26, sums, orderShipmentNoVat, memberCount) {
+      let share = 1;
+      if (memberCount > 1) {
+        if (sums.shipmentNoVat > RECONCILE_EPS) {
+          share = orderShipmentNoVat / sums.shipmentNoVat;
+        } else {
+          share = 1 / memberCount;
+        }
+      }
+      const writeOffTotal = metrics26.writeOffTotal * share;
+      const profitRub = orderShipmentNoVat - writeOffTotal;
+      const profitMarginPct =
+        orderShipmentNoVat > 0 ? (profitRub / orderShipmentNoVat) * 100 : 0;
+      return { writeOffTotal, profitRub, profitMarginPct };
+    }
+
+    function getCloudFlatRowV26MetricsFromDom(orderTr) {
+      const orderName = getOrderNameFromRow(orderTr);
+      if (!orderName) return null;
+
+      const settings = resolveGroupingSettings(orderName);
+      if (settings.enabled === false) return null;
+
+      const groupName = settings.groupName || orderName;
+      const groups = buildCalculationGroups();
+      const group = groups.find(g => g.groupName === groupName);
+      if (!group) return null;
+
+      const sums = sumGroupMetricsWithTransfers(group.rows, group.groupName);
+      const calc26 = getGroupCalc26Settings(group.groupName, group.rows);
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const orderShipmentNoVat = num(orderTr.querySelector('.shipment-no-vat')?.textContent);
+
+      return allocateV26MetricsToOrder(
+        metrics26,
+        sums,
+        orderShipmentNoVat,
+        group.rows.length
+      );
+    }
+
+    function getCloudFlatRowV26MetricsFromPeriodData(orderName, data) {
+      const orderGrouping = data.grouping && typeof data.grouping === 'object' ? data.grouping : {};
+      const settings = resolveGroupingSettingsFromData(orderName, orderGrouping);
+      if (settings.enabled === false) return null;
+
+      const groupName = settings.groupName || orderName;
+      const groups = buildCalculationGroupsFromPeriodData(data);
+      const group = groups.find(g => g.groupName === groupName);
+      if (!group) return null;
+
+      const globals = data.globals || {};
+      const totals = computePeriodTotals(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+      const gc26 =
+        data.groupCalc26 && typeof data.groupCalc26 === 'object' ? data.groupCalc26 : {};
+      const legacy = data.groupCalc && typeof data.groupCalc === 'object' ? data.groupCalc : {};
+
+      const row = group.memberRows.find(r => String(r.order || '').trim() === orderName);
+      if (!row) return null;
+
+      const sums = sumGroupMetricsFromPeriodData(
+        group.memberRows,
+        globals,
+        totals,
+        groupName,
+        transfers
+      );
+      const calc26 = getGroupCalc26SettingsFromPeriodData(
+        groupName,
+        group.memberRows,
+        gc26,
+        legacy
+      );
+      const metrics26 = computeGroupWriteoff26Metrics(sums, calc26);
+      const vatRate = num(globals.vatRate);
+      const orderShipmentNoVat = num(row.shipmentVat) / (1 + vatRate / 100);
+
+      return allocateV26MetricsToOrder(
+        metrics26,
+        sums,
+        orderShipmentNoVat,
+        group.memberRows.length
+      );
+    }
+
     function getCloudPayloadRows(period) {
+      flushPeriodStateFromDomBeforeSave();
+      calculateAll();
+
       const st = getPeriodStatus();
+      let flatRowLogged = false;
+
       return getRows()
         .map(tr => {
           const order = (tr.querySelector('.order-name').value || '').trim();
-          return {
+          if (!order) return null;
+
+          const v26 = getCloudFlatRowV26MetricsFromDom(tr);
+          const writeoff = v26 ? v26.writeOffTotal : num(tr.querySelector('.w26-writeoff-total')?.textContent);
+          const profit = v26 ? v26.profitRub : num(tr.querySelector('.w26-profit')?.textContent);
+          const profitMarginPct = v26
+            ? v26.profitMarginPct
+            : num(tr.querySelector('.w26-profit-margin')?.textContent);
+
+          const flatRow = {
             period,
             order,
             shipment: num(tr.querySelector('.shipment-vat').value),
@@ -7004,13 +7104,26 @@
             account26: num(tr.querySelector('.acc26').textContent),
             account44: num(tr.querySelector('.acc44').textContent),
             total_cost: num(tr.querySelector('.total-cost').textContent),
-            writeoff: num(tr.querySelector('.write-off').textContent),
-            profit: num(tr.querySelector('.profit-rub').textContent),
-            profit_percent: num(tr.querySelector('.profit-margin').textContent),
+            writeoff: writeoff,
+            profit: profit,
+            profit_percent: profitMarginPct,
             status: st
           };
+
+          if (!flatRowLogged) {
+            console.log('[v2 cloud flat row]', {
+              order: flatRow.order,
+              shipment: flatRow.shipment,
+              writeoff: flatRow.writeoff,
+              profit: flatRow.profit,
+              profit_percent: flatRow.profit_percent
+            });
+            flatRowLogged = true;
+          }
+
+          return flatRow;
         })
-        .filter(row => row.order);
+        .filter(Boolean);
     }
 
     const CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING =
@@ -7021,27 +7134,12 @@
       if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
         return { ok: false, error: 'invalid_period' };
       }
-      const urls =
-        typeof getCloudV2WriteUrls === 'function'
-          ? getCloudV2WriteUrls()
-          : [CLOUD_DATA_URL];
-      let last = { ok: false, error: 'not_found' };
-      for (let i = 0; i < urls.length; i++) {
-        const base = urls[i];
-        const sep = base.indexOf('?') >= 0 ? '&' : '?';
-        const url =
-          base + sep + 'action=getPeriodData&period=' + encodeURIComponent(pn);
-        try {
-          const res = await fetch(url, { method: 'GET' });
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (data && data.ok && data.json) return data;
-          last = data || last;
-        } catch (e) {
-          console.warn('getPeriodData:', base, e);
-        }
+      const url = getCloudApiUrl('getPeriodData', { period: pn });
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
       }
-      return last;
+      return await res.json();
     }
 
     function parsePeriodDataFromCloud(jsonStr) {
@@ -7121,55 +7219,32 @@
           format_version: payload.format_version
         }
       };
-      const urls = getCloudV2WriteUrls();
+      const url = CLOUD_SAVE_URL;
 
+      console.log('[v2 cloud] CLOUD_SAVE_URL', CLOUD_SAVE_URL);
+      console.log('[v2 cloud] CLOUD_DATA_URL', CLOUD_DATA_URL);
+      console.log('[v2 cloud] savePeriodData URL', url);
       console.log('[v2 cloud] savePeriodDataToCloud start', {
         period: pn,
-        jsonLength: payload && payload.json ? payload.json.length : 0,
-        urls: urls
+        jsonLength: payload && payload.json ? payload.json.length : 0
       });
 
-      let lastErr = null;
-      for (let i = 0; i < urls.length; i++) {
-        const url = urls[i];
-        try {
-          const data = await postCloudJsonRequest(url, body);
-          console.log('[v2 cloud] savePeriodDataToCloud result', { url: url, data: data });
-          if (data && data.ok) return data;
-          lastErr = new Error((data && data.error) || 'savePeriodData failed');
-        } catch (e) {
-          console.warn('[v2 cloud] savePeriodDataToCloud error', url, e);
-          lastErr = e;
-        }
+      const data = await postCloudJsonRequest(url, body);
+      console.log('[v2 cloud] savePeriodDataToCloud result', { url: url, data: data });
+      if (!data || !data.ok) {
+        throw new Error((data && data.error) || 'savePeriodData failed');
       }
-      throw lastErr || new Error('savePeriodData failed');
+      return data;
     }
 
     async function verifyPeriodDataInCloud(period) {
-      const pn = normalizePeriodStr(period);
-      const urls = getCloudV2WriteUrls();
-      let last = { ok: false };
-      for (let i = 0; i < urls.length; i++) {
-        const base = urls[i];
-        const sep = base.indexOf('?') >= 0 ? '&' : '?';
-        const url =
-          base + sep + 'action=getPeriodData&period=' + encodeURIComponent(pn);
-        try {
-          const res = await fetch(url, { method: 'GET' });
-          if (!res.ok) continue;
-          const data = await res.json();
-          console.log('[v2 cloud] fetchPeriodData verify result', {
-            url: base,
-            ok: !!(data && data.ok),
-            jsonLength: data && data.json ? data.json.length : 0
-          });
-          if (data && data.ok && data.json) return data;
-          last = data || last;
-        } catch (e) {
-          console.warn('[v2 cloud] verifyPeriodDataInCloud failed', base, e);
-        }
-      }
-      return last;
+      const data = await fetchPeriodDataFromCloud(period);
+      console.log('[v2 cloud] fetchPeriodData verify result', {
+        url: CLOUD_SAVE_URL,
+        ok: !!(data && data.ok),
+        jsonLength: data && data.json ? data.json.length : 0
+      });
+      return data || { ok: false };
     }
 
     async function loadPeriodFromCloudLegacyFlat(period, statusEl) {
@@ -7682,18 +7757,14 @@
     const CLOUD_SAVE_URL =
       'https://script.google.com/macros/s/AKfycbwsgT3sbIvxkhjmYNqVPfMpD_BdwPo_fEt755v8a_aB842AvIqqmvaV6p48tvoi_0SYAA/exec';
 
-    const CLOUD_DATA_URL =
-      'https://script.google.com/macros/s/AKfycbzevbcYIAH6-YgAthMDW58RjJEOULACRQmbHyM5h3E-pecLiTBTotlKmVYKWgtp4lNxYw/exec';
+    /** v2: один Web App URL для всех операций Google Sheets (чтение и запись). */
+    const CLOUD_DATA_URL = CLOUD_SAVE_URL;
+
+    console.log('[v2 cloud] CLOUD_SAVE_URL', CLOUD_SAVE_URL);
+    console.log('[v2 cloud] CLOUD_DATA_URL', CLOUD_DATA_URL);
 
     const CLOUD_V2_SAVE_DONE_MESSAGE =
       'Период сохранён в Google Sheets: Лист1 + полная копия period_data.';
-
-    function getCloudV2WriteUrls() {
-      const urls = [];
-      if (CLOUD_SAVE_URL) urls.push(CLOUD_SAVE_URL);
-      if (CLOUD_DATA_URL && CLOUD_DATA_URL !== CLOUD_SAVE_URL) urls.push(CLOUD_DATA_URL);
-      return urls;
-    }
 
     const UNSYNCED_CLOUD_STORAGE_KEY = 'razdelny_uchet_unsynced_cloud';
 
@@ -7792,18 +7863,25 @@
       recalculatePeriodDataInMemory(data);
       const totals = computePeriodTotals(data);
       const st = data.periodStatus === 'final' ? 'final' : 'draft';
+      let flatRowLogged = false;
 
       return data.rows
         .map(row => {
           const order = String(row.order != null ? row.order : '').trim();
           if (!order) return null;
+
           const m = computeFullRowMetrics(
             row,
             data.globals,
             totals.totalShipmentNoVat,
             totals.totalSalary
           );
-          return {
+          const v26 = getCloudFlatRowV26MetricsFromPeriodData(order, data);
+          const writeoff = v26 ? v26.writeOffTotal : num(m.writeOff);
+          const profit = v26 ? v26.profitRub : num(m.profitRub);
+          const profitMarginPct = v26 ? v26.profitMarginPct : num(m.profitMargin);
+
+          const flatRow = {
             period: pn,
             order,
             shipment: num(row.shipmentVat),
@@ -7815,11 +7893,24 @@
             account26: num(m.acc26),
             account44: num(m.acc44),
             total_cost: num(m.totalCost),
-            writeoff: num(m.writeOff),
-            profit: num(m.profitRub),
-            profit_percent: num(m.profitMargin),
+            writeoff: writeoff,
+            profit: profit,
+            profit_percent: profitMarginPct,
             status: st
           };
+
+          if (!flatRowLogged) {
+            console.log('[v2 cloud flat row]', {
+              order: flatRow.order,
+              shipment: flatRow.shipment,
+              writeoff: flatRow.writeoff,
+              profit: flatRow.profit,
+              profit_percent: flatRow.profit_percent
+            });
+            flatRowLogged = true;
+          }
+
+          return flatRow;
         })
         .filter(Boolean);
     }
@@ -8041,11 +8132,11 @@
     }
 
     function getCloudPeriodReportFetchUrl() {
-      return CLOUD_DATA_URL;
+      return CLOUD_SAVE_URL;
     }
 
     function getCloudApiUrl(action, params) {
-      const base = CLOUD_DATA_URL;
+      const base = CLOUD_SAVE_URL;
       const sep = base.indexOf('?') >= 0 ? '&' : '?';
       let url = base + sep + 'action=' + encodeURIComponent(action);
       if (params) {
@@ -8119,7 +8210,7 @@
       if (statusEl) statusEl.textContent = 'Удаление из Google Sheets…';
 
       try {
-        const res = await fetch(CLOUD_DATA_URL, {
+        const res = await fetch(CLOUD_SAVE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -8189,7 +8280,7 @@
     }
 
     async function loadData() {
-      const res = await fetch(CLOUD_DATA_URL, { method: 'GET' });
+      const res = await fetch(CLOUD_SAVE_URL, { method: 'GET' });
       const raw = await res.json();
       const arr = Array.isArray(raw) ? raw : (raw && (raw.rows || raw.data)) || [];
       return arr.map(row => {

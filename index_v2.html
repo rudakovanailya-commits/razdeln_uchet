@@ -20,6 +20,113 @@
       padding: 20px;
     }
 
+    .app-main-nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      margin: 12px 0 18px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(244, 247, 251, 0.92);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(203, 213, 225, 0.7);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .app-main-nav-title {
+      font-size: 12px;
+      color: #64748b;
+      margin-right: 6px;
+    }
+
+    .app-nav-tab {
+      appearance: none;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #14532d;
+      padding: 8px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 0;
+    }
+
+    .app-nav-tab:hover {
+      border-color: #86efac;
+      box-shadow: 0 2px 10px rgba(15, 118, 110, 0.08);
+    }
+
+    .app-nav-tab.active {
+      background: linear-gradient(135deg, #10b981 0%, #0ea5a8 100%);
+      border-color: transparent;
+      color: #f0fdf4;
+      box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
+    }
+
+    .app-screen[hidden] { display: none !important; }
+
+    .app-screen-reports .card,
+    .app-screen-reports #mgmtReportsCard {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdfc 100%);
+    }
+
+    .app-screen-analysis {
+      background: linear-gradient(180deg, #f7faff 0%, #f6f7ff 100%);
+      border-radius: 16px;
+      padding: 1px 0;
+    }
+
+    .help-toggle {
+      display: inline-block;
+      margin-left: 8px;
+      font-size: 12px;
+      color: #64748b;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px dashed rgba(100, 116, 139, 0.6);
+    }
+
+    .help-toggle:hover { color: #334155; }
+
+    .help-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #374151;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .help-panel[hidden] { display: none !important; }
+
+    .danger-zone {
+      margin-top: 10px;
+      border-radius: 10px;
+      border: 1px dashed #fecaca;
+      background: #fff7f7;
+      padding: 10px 12px;
+    }
+
+    .danger-zone summary {
+      cursor: pointer;
+      color: #991b1b;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    button.danger {
+      background: #fff1f2;
+      color: #9f1239;
+      border: 1px solid #fecdd3;
+    }
+
+    button.danger:hover { background: #ffe4e6; }
+
     h1, h2 {
       margin: 0 0 12px;
     }
@@ -2267,8 +2374,20 @@
   <div class="container">
     <h1>Раздельный учет — версия 1</h1>
 
+    <div class="app-main-nav" id="appMainNav">
+      <span class="app-main-nav-title">Раздел:</span>
+      <button type="button" class="app-nav-tab active" data-screen="accounting" id="appTabAccounting">Учёт</button>
+      <button type="button" class="app-nav-tab" data-screen="reports" id="appTabReports">Отчёты</button>
+      <button type="button" class="app-nav-tab" data-screen="analysis" id="appTabAnalysis">Анализ</button>
+    </div>
+
+    <div class="app-screen app-screen-accounting" id="appScreenAccounting">
+
     <div class="card">
-      <h2>Период и общие данные</h2>
+      <h2>Период и общие данные <span class="help-toggle" data-help-id="helpPeriod">ⓘ Что это?</span></h2>
+      <div class="help-panel" id="helpPeriod" hidden>
+        Здесь выбирается рабочий период, статус периода и выполняется сохранение/загрузка данных. Локальное сохранение хранится в этом браузере. Google Sheets — облачная копия.
+      </div>
 
       <div class="period-row">
         <div class="field" style="width: 180px;">
@@ -2289,17 +2408,51 @@
           <div id="periodStatusDisplay" class="period-status-display">В работе</div>
         </div>
 
-        <button id="closePeriodBtn" type="button" class="secondary">Закрыть период</button>
-        <button id="returnToDraftBtn" type="button" class="secondary" hidden>Вернуть в работу</button>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left: 6px;">
+          <button id="saveBtn" type="button">Сохранить локально</button>
+          <span class="help-toggle" data-help-id="helpSaveLocal">ⓘ Что это?</span>
+          <button id="saveCloudBtn" type="button" class="secondary">Сохранить в Google Sheets</button>
+          <span class="help-toggle" data-help-id="helpSaveCloud">ⓘ Что это?</span>
+        </div>
 
-        <button id="saveBtn" type="button">Сохранить локально</button>
-        <button id="saveCloudBtn" type="button" class="secondary">Сохранить в Google Sheets</button>
-        <button id="deletePeriodBtn" type="button">Удалить локальный период</button>
-        <button id="cleanupInvalidPeriodsBtn" type="button" class="secondary">Очистить некорректные периоды</button>
-        <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
-        <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
-        <button id="deleteCloudPeriodBtn" type="button" class="secondary">Удалить из Google Sheets</button>
-        <button id="saveUnsyncedCloudBtn" type="button" class="secondary" hidden>Сохранить изменённые периоды в Google Sheets</button>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <button id="loadBtn" type="button" class="secondary">Загрузить локально</button>
+          <span class="help-toggle" data-help-id="helpLoadLocal">ⓘ Что это?</span>
+          <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
+          <span class="help-toggle" data-help-id="helpLoadCloud">ⓘ Что это?</span>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <button id="closePeriodBtn" type="button" class="secondary">Закрыть период</button>
+          <span class="help-toggle" data-help-id="helpClosePeriod">ⓘ Что это?</span>
+          <button id="returnToDraftBtn" type="button" class="secondary" hidden>Вернуть в работу</button>
+        </div>
+
+        <details class="danger-zone">
+          <summary>Дополнительные действия</summary>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+            <button id="deletePeriodBtn" type="button" class="danger">Удалить локальный период</button>
+            <button id="deleteCloudPeriodBtn" type="button" class="danger secondary">Удалить из Google Sheets</button>
+            <button id="cleanupInvalidPeriodsBtn" type="button" class="danger secondary">Очистить некорректные периоды</button>
+            <button id="saveUnsyncedCloudBtn" type="button" class="secondary" hidden>Сохранить изменённые периоды в Google Sheets</button>
+          </div>
+        </details>
+      </div>
+
+      <div class="help-panel" id="helpSaveLocal" hidden>
+        Сохраняет текущий период в браузере на этом компьютере. Это основное быстрое сохранение.
+      </div>
+      <div class="help-panel" id="helpSaveCloud" hidden>
+        Отправляет текущий период в Google Sheets как облачную копию. Перед отправкой желательно проверить цепочку НЗП.
+      </div>
+      <div class="help-panel" id="helpLoadLocal" hidden>
+        Загружает выбранный период из локального хранилища браузера.
+      </div>
+      <div class="help-panel" id="helpLoadCloud" hidden>
+        Загружает период из облачной Google Sheets. Может заменить данные на экране.
+      </div>
+      <div class="help-panel" id="helpClosePeriod" hidden>
+        Фиксирует период как закрытый. Перед закрытием рекомендуется проверить цепочку НЗП. Закрытый период защищён от случайных изменений.
       </div>
 
       <div class="hint unsynced-cloud-warning" id="unsyncedCloudWarning" hidden style="margin-top: 8px;"></div>
@@ -2311,18 +2464,44 @@
 
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+    </div>
 
+    <div class="card" id="wipChainStatusCard">
+      <h2>Контроль цепочки НЗП <span class="help-toggle" data-help-id="helpWipChain">ⓘ Что это?</span></h2>
+      <div class="help-panel" id="helpWipChain" hidden>
+        Проверяет, что НЗП конец 20 предыдущего периода правильно перешёл в НЗП начало следующего периода. Рекомендуется выполнять перед закрытием периода и перед отправкой данных в Google Sheets.
+      </div>
+      <div class="hint" id="wipChainUiStatus" style="margin-top: 6px; min-height: 1.2em;">Не проверено</div>
+      <div class="hint" id="wipChainUiMeta" style="margin-top: 2px; color:#64748b;">—</div>
       <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         <button id="checkWipChainBtn" type="button" class="secondary">Проверить цепочку НЗП</button>
+        <span class="help-toggle" data-help-id="helpCheckWip">ⓘ Что это?</span>
         <button id="applyWipChainBtn" type="button" class="secondary">Применить исправления по цепочке</button>
+        <span class="help-toggle" data-help-id="helpApplyWip">ⓘ Что это?</span>
         <button id="pullWipFromPrevBtn" type="button" class="secondary">Подтянуть НЗП из предыдущего периода</button>
+        <span class="help-toggle" data-help-id="helpPullWip">ⓘ Что это?</span>
+      </div>
+      <div class="help-panel" id="helpCheckWip" hidden>
+        Проверяет переход НЗП между периодами: НЗП конец 20 прошлого периода должен совпасть с НЗП началом следующего.
+      </div>
+      <div class="help-panel" id="helpApplyWip" hidden>
+        Автоматически исправляет найденные расхождения НЗП в локальных данных. Перед применением внимательно посмотрите список расхождений.
+      </div>
+      <div class="help-panel" id="helpPullWip" hidden>
+        Подставляет НЗП начало текущего периода из НЗП конца 20 предыдущего периода.
       </div>
       <div class="hint" id="wipChainSourceHint" style="margin-top: 8px;">
         Цепочка НЗП и подтягивание из предыдущего периода используют «НЗП конец 20» с вкладки «Списание 20 сч.» (без 26 сч.). Данные берутся из localStorage; Google Sheets не изменяется автоматически.
       </div>
       <div class="hint wip-chain-auto-hint" id="wipChainAutoHint" hidden style="margin-top: 8px;"></div>
       <div id="wipChainReportPanel" hidden></div>
+    </div>
 
+    <div class="card" id="periodGlobalsCard">
+      <h2>Общие суммы периода <span class="help-toggle" data-help-id="helpGlobals">ⓘ Что это?</span></h2>
+      <div class="help-panel" id="helpGlobals" hidden>
+        Эти суммы используются для распределения общих расходов по заказам: взносы, больничные и 25 счёт распределяются по доле ЗП; 26 и 44 — по доле отгрузки без НДС.
+      </div>
       <div class="top-grid">
         <div class="field">
           <label for="vatRate">НДС, %</label>
@@ -2349,33 +2528,36 @@
           <input class="global-num" type="text" inputmode="decimal" id="total44" value="0">
         </div>
       </div>
+    </div>
 
-      <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-        <select id="orderSelect">
-          <option value="">Выбери заказ</option>
-        </select>
-        <button id="orderReportBtn" type="button">Отчет по заказу</button>
+    <div class="card" id="quickSaveCard">
+      <h2>Быстрое сохранение периода</h2>
+      <div class="hint" style="margin-top:6px;">
+        Период: <strong id="quickSavePeriod">—</strong> · Статус: <strong id="quickSaveStatus">—</strong> ·
+        <span id="quickSaveDirty">Изменений нет</span>
       </div>
-
-      <div style="margin-top: 14px;">
-        <button id="addRowBtn">Добавить заказ</button>
-        <button id="clearBtn" class="secondary">Очистить всё</button>
-        <button id="checkDataBtn" class="secondary">Проверить данные</button>
-        <button id="import1cBtn" class="secondary" type="button">Загрузить из 1С</button>
-        <button id="exportBtn" type="button">Выгрузить в Excel</button>
-        <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none;">
-      </div>
-      <div class="hint" id="import1cStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
-
-      <div class="hint">
-        В этой версии:
-        44 и 26 распределяются по % отгрузки без НДС, а взносы, больничные и 25 — по доле ЗП.
-        НЗП на начало вводится вручную, НЗП на конец считается автоматически.
+      <div style="margin-top: 12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <button type="button" id="quickRecalcBtn" class="secondary">Пересчитать</button>
+        <button type="button" id="quickSaveLocalBtn">Сохранить локально</button>
+        <button type="button" id="quickSaveCloudBtn" class="secondary">Сохранить в Google Sheets</button>
       </div>
     </div>
 
     <div class="card">
       <h2>Таблица заказов</h2>
+
+      <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <button id="addRowBtn" type="button">Добавить заказ</button>
+        <button id="clearBtn" type="button" class="secondary">Очистить всё</button>
+        <button id="checkDataBtn" type="button" class="secondary">Проверить данные</button>
+        <button id="import1cBtn" class="secondary" type="button">Загрузить из 1С</button>
+        <button id="exportBtn" type="button">Выгрузить в Excel</button>
+        <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none;">
+      </div>
+      <div class="hint" id="import1cStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
+      <div class="hint">
+        Основная рабочая таблица периода. Здесь вводятся отгрузка, НЗП, прямые расходы и проверяются расчёты списания, прибыли и НЗП.
+      </div>
 
       <div class="orders-tab-bar" id="ordersTabBar" role="tablist" aria-label="Разделы таблицы заказов">
         <button type="button" class="orders-tab-btn active" data-orders-tab="expenses" role="tab" aria-selected="true">
@@ -2660,6 +2842,10 @@
       </div>
     </div>
 
+    </div> <!-- /appScreenAccounting -->
+
+    <div class="app-screen app-screen-reports" id="appScreenReports" hidden>
+
     <div class="card" id="annualSummaryCard" style="margin-top:20px;">
       <div class="period-summary-head">
         <h2>Годовая сводка по заказам</h2>
@@ -2679,9 +2865,152 @@
       <div id="annualSummaryContent" hidden></div>
     </div>
 
+    <div class="card" style="margin-top:20px;">
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+        <div class="field" style="min-width: 320px; flex: 1 1 420px;">
+          <label for="orderSelect">Заказ для технической Excel-карточки</label>
+          <select id="orderSelect">
+            <option value="">Выбери заказ</option>
+          </select>
+        </div>
+        <button id="orderReportBtn" type="button" class="secondary">Открыть техническую карточку</button>
+      </div>
+      <p class="hint" style="margin-top:10px;">
+        Этот блок — старая техническая карточка заказа с Excel-выгрузкой. Красивый «Отчёт по заказу» и PDF находятся ниже в «Красивые управленческие отчёты».
+      </p>
+    </div>
+
+    <div class="card mgmt-reports-card" id="mgmtReportsCard">
+      <div class="mgmt-reports-head">
+        <h2>Красивые управленческие отчёты</h2>
+        <p class="mgmt-reports-subtitle">
+          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Данные читаются из текущего периода или localStorage и не изменяют учёт.
+        </p>
+      </div>
+      <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
+        <button type="button" class="mgmt-reports-tab active" data-mgmt-tab="period" role="tab" aria-selected="true" aria-controls="mgmtReportsPanelPeriod" id="mgmtReportsTabPeriod">Отчёт за период</button>
+        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="year" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelYear" id="mgmtReportsTabYear">Годовой отчёт</button>
+        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="orders" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelOrders" id="mgmtReportsTabOrders">Отчёт по заказу</button>
+      </div>
+
+      <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
+        <div class="mgmt-reports-controls">
+          <div class="mgmt-reports-period-badge">
+            <span>Период:</span>
+            <span id="mgmtReportsCurrentPeriod">—</span>
+          </div>
+          <button type="button" id="buildMgmtReportPeriodBtn" class="mgmt-reports-build-btn">Сформировать отчёт за период</button>
+        </div>
+        <p class="mgmt-reports-status" id="mgmtReportsPeriodStatus"></p>
+        <div id="mgmtReportsPeriodContent" hidden>
+          <div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi"></div>
+          <div class="mgmt-reports-two-col">
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Крупные заказы по отгрузке</h3>
+              <div id="mgmtReportsPeriodTopRevenue"></div>
+            </div>
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Заказы с наибольшей прибылью</h3>
+              <div id="mgmtReportsPeriodTopProfit"></div>
+            </div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Заказы, требующие внимания</h3>
+            <div id="mgmtReportsPeriodProblems"></div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>
+            <div id="mgmtReportsPeriodFullTable"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mgmtReportsPanelYear" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabYear" hidden>
+        <div class="mgmt-reports-controls">
+          <div class="field mgmt-reports-year-field">
+            <label for="mgmtReportsYear">Год</label>
+            <select id="mgmtReportsYear" autocomplete="off"></select>
+          </div>
+          <button type="button" id="buildMgmtReportYearBtn" class="mgmt-reports-build-btn">Сформировать годовой отчёт по заказам</button>
+          <button type="button" id="exportMgmtYearPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF-отчёт</button>
+        </div>
+        <p class="mgmt-reports-status" id="mgmtReportsYearStatus"></p>
+        <div id="mgmtReportsYearContent" hidden>
+          <div class="mgmt-reports-kpi-grid" id="mgmtReportsYearKpi"></div>
+          <div class="mgmt-reports-two-col">
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Крупные заказы по отгрузке</h3>
+              <div id="mgmtReportsYearTopRevenue"></div>
+            </div>
+            <div class="mgmt-reports-section">
+              <h3 class="mgmt-reports-section-title">Заказы с наибольшей прибылью</h3>
+              <div id="mgmtReportsYearTopProfit"></div>
+            </div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Заказы, требующие внимания</h3>
+            <div id="mgmtReportsYearProblems"></div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Динамика по месяцам</h3>
+            <div id="mgmtReportsYearMonthly"></div>
+          </div>
+          <div class="mgmt-reports-section">
+            <h3 class="mgmt-reports-section-title">Полная таблица заказов за год</h3>
+            <div id="mgmtReportsYearFullTable"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mgmtReportsPanelOrders" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabOrders" hidden>
+        <div class="mgmt-reports-controls">
+          <div class="field mgmt-reports-orders-field">
+            <label for="mgmtReportsOrdersScope">Период анализа</label>
+            <select id="mgmtReportsOrdersScope" autocomplete="off">
+              <option value="month">Текущий месяц</option>
+              <option value="year">Год</option>
+              <option value="all">Все периоды</option>
+            </select>
+          </div>
+          <div class="mgmt-reports-period-badge" id="mgmtReportsOrdersPeriodBadge">
+            <span>Период:</span>
+            <span id="mgmtReportsOrdersCurrentPeriod">—</span>
+          </div>
+          <div class="field mgmt-reports-year-field" id="mgmtReportsOrdersYearField" hidden>
+            <label for="mgmtReportsOrdersYear">Год</label>
+            <select id="mgmtReportsOrdersYear" autocomplete="off"></select>
+          </div>
+          <div class="field mgmt-reports-order-field">
+            <label for="mgmtReportsOrderInput">Заказ</label>
+            <input id="mgmtReportsOrderInput" type="text" list="mgmtReportsOrderList" placeholder="Введите номер или название договора…" autocomplete="off">
+            <datalist id="mgmtReportsOrderList"></datalist>
+          </div>
+          <button type="button" id="buildMgmtOrdersReportBtn" class="mgmt-reports-build-btn">Сформировать отчёт по заказу</button>
+          <button type="button" id="exportMgmtSingleOrderPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF по заказу</button>
+        </div>
+        <p class="mgmt-reports-status" id="mgmtReportsOrdersStatus"></p>
+        <div id="mgmtReportsOrdersContent" hidden></div>
+      </div>
+    </div>
+
+    <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
+      <div class="order-report-head">
+        <h3 id="orderReportTitle">Карточка заказа</h3>
+        <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
+      </div>
+      <div id="orderReportContent"></div>
+    </div>
+
+    </div> <!-- /appScreenReports -->
+
+    <div class="app-screen app-screen-analysis" id="appScreenAnalysis" hidden>
+
     <div class="card" id="aiAnalysisCard" style="margin-top:20px;">
       <div class="period-summary-head">
-        <h2>ИИ-анализ распределения</h2>
+        <h2>ИИ-анализ распределения <span class="help-toggle" data-help-id="helpAiAnalysis">ⓘ Что это?</span></h2>
+      </div>
+      <div class="help-panel" id="helpAiAnalysis" hidden>
+        Этот блок ничего не отправляет автоматически. Он только готовит текст для ChatGPT.
       </div>
       <p class="hint" style="margin-top:8px;">
         Подготовка текстовых данных для копирования в ChatGPT. Внешние API не используются, расчёты и localStorage не изменяются.
@@ -2710,7 +3039,10 @@
 
     <div class="card" id="salaryScenarioCard" style="margin-top:20px;">
       <div class="period-summary-head">
-        <h2>Сценарий перераспределения ЗП</h2>
+        <h2>Сценарий перераспределения ЗП <span class="help-toggle" data-help-id="helpSalaryScenario">ⓘ Что это?</span></h2>
+      </div>
+      <div class="help-panel" id="helpSalaryScenario" hidden>
+        Сценарии — черновики. Они не меняют учёт и не отправляются в Google Sheets.
       </div>
       <p class="hint" style="margin-top:8px;">
         Песочница: перераспределение ЗП между заказами без изменения общей суммы. От новой ЗП автоматически пересчитываются взносы, больничные и 25 счёт.
@@ -2779,126 +3111,8 @@
       <div id="salaryScenarioTableWrap" class="salary-scenario-scroll-wrap" hidden></div>
     </div>
 
-    <div class="card mgmt-reports-card" id="mgmtReportsCard">
-      <div class="mgmt-reports-head">
-        <h2>Красивые управленческие отчёты</h2>
-        <p class="mgmt-reports-subtitle">
-          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы. Данные читаются из текущего периода или localStorage и не изменяют учёт.
-        </p>
-      </div>
-      <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
-        <button type="button" class="mgmt-reports-tab active" data-mgmt-tab="period" role="tab" aria-selected="true" aria-controls="mgmtReportsPanelPeriod" id="mgmtReportsTabPeriod">Отчёт за период</button>
-        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="year" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelYear" id="mgmtReportsTabYear">Годовой отчёт</button>
-        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="orders" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelOrders" id="mgmtReportsTabOrders">Отчёт по заказу</button>
-      </div>
+    </div> <!-- /appScreenAnalysis -->
 
-      <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
-        <div class="mgmt-reports-controls">
-          <div class="mgmt-reports-period-badge">
-            <span>Период:</span>
-            <span id="mgmtReportsCurrentPeriod">—</span>
-          </div>
-          <button type="button" id="buildMgmtReportPeriodBtn" class="mgmt-reports-build-btn">Сформировать отчёт за период</button>
-        </div>
-        <p class="mgmt-reports-status" id="mgmtReportsPeriodStatus"></p>
-        <div id="mgmtReportsPeriodContent" hidden>
-          <div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi"></div>
-          <div class="mgmt-reports-two-col">
-            <div class="mgmt-reports-section">
-              <h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>
-              <div id="mgmtReportsPeriodTopRevenue"></div>
-            </div>
-            <div class="mgmt-reports-section">
-              <h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>
-              <div id="mgmtReportsPeriodTopProfit"></div>
-            </div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Проблемные заказы</h3>
-            <div id="mgmtReportsPeriodProblems"></div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>
-            <div id="mgmtReportsPeriodFullTable"></div>
-          </div>
-        </div>
-      </div>
-
-      <div id="mgmtReportsPanelYear" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabYear" hidden>
-        <div class="mgmt-reports-controls">
-          <div class="field mgmt-reports-year-field">
-            <label for="mgmtReportsYear">Год</label>
-            <select id="mgmtReportsYear" autocomplete="off"></select>
-          </div>
-          <button type="button" id="buildMgmtReportYearBtn" class="mgmt-reports-build-btn">Сформировать годовой отчёт</button>
-          <button type="button" id="exportMgmtYearPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF-отчёт</button>
-        </div>
-        <p class="mgmt-reports-status" id="mgmtReportsYearStatus"></p>
-        <div id="mgmtReportsYearContent" hidden>
-          <div class="mgmt-reports-kpi-grid" id="mgmtReportsYearKpi"></div>
-          <div class="mgmt-reports-two-col">
-            <div class="mgmt-reports-section">
-              <h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>
-              <div id="mgmtReportsYearTopRevenue"></div>
-            </div>
-            <div class="mgmt-reports-section">
-              <h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>
-              <div id="mgmtReportsYearTopProfit"></div>
-            </div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Проблемные заказы</h3>
-            <div id="mgmtReportsYearProblems"></div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Помесячная динамика</h3>
-            <div id="mgmtReportsYearMonthly"></div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Полная таблица заказов за год</h3>
-            <div id="mgmtReportsYearFullTable"></div>
-          </div>
-        </div>
-      </div>
-
-      <div id="mgmtReportsPanelOrders" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabOrders" hidden>
-        <div class="mgmt-reports-controls">
-          <div class="field mgmt-reports-orders-field">
-            <label for="mgmtReportsOrdersScope">Период анализа</label>
-            <select id="mgmtReportsOrdersScope" autocomplete="off">
-              <option value="month">Текущий месяц</option>
-              <option value="year">Год</option>
-              <option value="all">Все периоды</option>
-            </select>
-          </div>
-          <div class="mgmt-reports-period-badge" id="mgmtReportsOrdersPeriodBadge">
-            <span>Период:</span>
-            <span id="mgmtReportsOrdersCurrentPeriod">—</span>
-          </div>
-          <div class="field mgmt-reports-year-field" id="mgmtReportsOrdersYearField" hidden>
-            <label for="mgmtReportsOrdersYear">Год</label>
-            <select id="mgmtReportsOrdersYear" autocomplete="off"></select>
-          </div>
-          <div class="field mgmt-reports-order-field">
-            <label for="mgmtReportsOrderInput">Заказ</label>
-            <input id="mgmtReportsOrderInput" type="text" list="mgmtReportsOrderList" placeholder="Введите номер или название договора…" autocomplete="off">
-            <datalist id="mgmtReportsOrderList"></datalist>
-          </div>
-          <button type="button" id="buildMgmtOrdersReportBtn" class="mgmt-reports-build-btn">Сформировать отчёт по заказу</button>
-          <button type="button" id="exportMgmtSingleOrderPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF по заказу</button>
-        </div>
-        <p class="mgmt-reports-status" id="mgmtReportsOrdersStatus"></p>
-        <div id="mgmtReportsOrdersContent" hidden></div>
-      </div>
-    </div>
-
-    <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
-      <div class="order-report-head">
-        <h3 id="orderReportTitle">Карточка заказа</h3>
-        <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
-      </div>
-      <div id="orderReportContent"></div>
-    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -6535,8 +6749,18 @@
         return;
       }
 
+      let extraWarn = '';
+      if (!uiWipCheckedAt || !lastWipChainCheckResult || uiWipNeedsRecheck) {
+        extraWarn =
+          '\n\nВнимание: цепочка НЗП не проверена или требуется повторная проверка. Всё равно закрыть период?';
+      } else if (lastWipChainCheckResult.totalDiscrepancies > 0) {
+        extraWarn =
+          '\n\nВнимание: в цепочке НЗП есть расхождения (' +
+          lastWipChainCheckResult.totalDiscrepancies +
+          '). Всё равно закрыть период?';
+      }
       const ok = confirm(
-        'Закрыть период? После закрытия редактирование будет заблокировано.'
+        'Закрыть период? После закрытия редактирование будет заблокировано.' + extraWarn
       );
       if (!ok) return;
 
@@ -10155,6 +10379,7 @@
         alert(result.error);
         return;
       }
+      lastWipChainCheckResult = result;
       showWipChainReportPanel(result);
       updateWipChainAutoHint(normalizePeriodStr(startPeriod), result);
       const statusEl = document.getElementById('periodActionStatus');
@@ -10165,6 +10390,9 @@
           ' периодов, расхождений по заказам: ' +
           result.totalDiscrepancies;
       }
+      uiWipCheckedAt = new Date();
+      uiWipNeedsRecheck = false;
+      updateWipChainUiStatus();
     }
 
     function buildWipChainPreviewHtml(result) {
@@ -12274,22 +12502,22 @@
         '</div>' +
         '<div class="mgmt-reports-two-col">' +
         '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>' +
+        '<h3 class="mgmt-reports-section-title">Крупные заказы по отгрузке</h3>' +
         '<div id="mgmtReportsYearTopRevenue">' +
         topRevHtml +
         '</div></div>' +
         '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>' +
+        '<h3 class="mgmt-reports-section-title">Заказы с наибольшей прибылью</h3>' +
         '<div id="mgmtReportsYearTopProfit">' +
         topProfitHtml +
         '</div></div></div>' +
         '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Проблемные заказы</h3>' +
+        '<h3 class="mgmt-reports-section-title">Заказы, требующие внимания</h3>' +
         '<div id="mgmtReportsYearProblems">' +
         problemsHtml +
         '</div></div>' +
         '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Помесячная динамика</h3>' +
+        '<h3 class="mgmt-reports-section-title">Динамика по месяцам</h3>' +
         '<div id="mgmtReportsYearMonthly">' +
         monthlyHtml +
         '</div></div>' +
@@ -12840,7 +13068,7 @@
       doc.setFont('DejaVuSans', 'normal');
       doc.setFontSize(20);
       doc.setTextColor(15, 118, 110);
-      doc.text('Управленческий годовой отчёт', layout.marginLeft, y);
+      doc.text('Годовой отчёт по заказам', layout.marginLeft, y);
       y += 9;
 
       doc.setFontSize(12);
@@ -12895,71 +13123,13 @@
       });
       y = doc.lastAutoTable.finalY + 8;
 
-      const topRevenueTable = mgmtPdfSixColStyles(layout, 0.4);
-      const topRevenue = [...report.rows]
-        .sort((a, b) => b.shipmentNoVat - a.shipmentNoVat)
-        .slice(0, 5);
-      y = mgmtPdfAddSectionTable(
-        doc,
-        layout,
-        y,
-        'Топ-5 заказов по выручке',
-        [
-          'Заказ',
-          'Отгрузка без НДС',
-          'Списано всего',
-          'Прибыль',
-          'Маржа %',
-          'НЗП конец'
-        ],
-        topRevenue.map(r => [
-          mgmtPdfGroupLabel(r),
-          formatMoney(r.shipmentNoVat),
-          formatMoney(r.writeoffTotal),
-          formatMoney(r.profit),
-          mgmtFmtPdfPct(r.marginPct),
-          formatMoney(r.wipEnd20)
-        ]),
-        topRevenueTable.options
-      );
-
-      const topProfitTable = mgmtPdfSixColStyles(layout, 0.4);
-      const topProfit = [...report.rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
-      const topProfitTitle =
-        topProfit.length < 5
-          ? 'Топ заказов по прибыли (' + topProfit.length + ')'
-          : 'Топ-5 заказов по прибыли';
-      y = mgmtPdfAddSectionTable(
-        doc,
-        layout,
-        y,
-        topProfitTitle,
-        [
-          'Заказ',
-          'Прибыль',
-          'Маржа %',
-          'Отгрузка без НДС',
-          'Списано всего',
-          'НЗП конец'
-        ],
-        topProfit.map(r => [
-          mgmtPdfGroupLabel(r),
-          formatMoney(r.profit),
-          mgmtFmtPdfPct(r.marginPct),
-          formatMoney(r.shipmentNoVat),
-          formatMoney(r.writeoffTotal),
-          formatMoney(r.wipEnd20)
-        ]),
-        topProfitTable.options
-      );
-
       const problemTable = mgmtPdfProblemColStyles(layout);
       const problemRows = pickMgmtPdfProblemRows(report.rows, 15);
       const problemFillByIndex = problemRows.map(r => mgmtPdfProblemFillColor(r));
       const problemTitle =
         problemRows.length >= 15
-          ? 'Проблемные заказы (топ-15 по важности)'
-          : 'Проблемные заказы';
+          ? 'Заказы, требующие внимания (топ-15 по важности)'
+          : 'Заказы, требующие внимания';
       y = mgmtPdfAddSectionTable(
         doc,
         layout,
@@ -12999,7 +13169,7 @@
         doc,
         layout,
         y,
-        'Помесячная динамика',
+        'Динамика по месяцам',
         ['Месяц', 'Отгрузка без НДС', 'Списано всего', 'Прибыль', 'Маржа %', 'НЗП конец'],
         (report.monthlyRows || []).map(m => [
           m.monthLabel,
@@ -13010,6 +13180,64 @@
           formatMoney(m.wipEnd20)
         ]),
         monthlyTable.options
+      );
+
+      const topRevenueTable = mgmtPdfSixColStyles(layout, 0.4);
+      const topRevenue = [...report.rows]
+        .sort((a, b) => b.shipmentNoVat - a.shipmentNoVat)
+        .slice(0, 5);
+      y = mgmtPdfAddSectionTable(
+        doc,
+        layout,
+        y,
+        'Крупные заказы по отгрузке',
+        [
+          'Заказ',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'Прибыль',
+          'Маржа %',
+          'НЗП конец'
+        ],
+        topRevenue.map(r => [
+          mgmtPdfGroupLabel(r),
+          formatMoney(r.shipmentNoVat),
+          formatMoney(r.writeoffTotal),
+          formatMoney(r.profit),
+          mgmtFmtPdfPct(r.marginPct),
+          formatMoney(r.wipEnd20)
+        ]),
+        topRevenueTable.options
+      );
+
+      const topProfitTable = mgmtPdfSixColStyles(layout, 0.4);
+      const topProfit = [...report.rows].sort((a, b) => b.profit - a.profit).slice(0, 5);
+      const topProfitTitle =
+        topProfit.length < 5
+          ? 'Заказы с наибольшей прибылью (' + topProfit.length + ')'
+          : 'Заказы с наибольшей прибылью';
+      y = mgmtPdfAddSectionTable(
+        doc,
+        layout,
+        y,
+        topProfitTitle,
+        [
+          'Заказ',
+          'Прибыль',
+          'Маржа %',
+          'Отгрузка без НДС',
+          'Списано всего',
+          'НЗП конец'
+        ],
+        topProfit.map(r => [
+          mgmtPdfGroupLabel(r),
+          formatMoney(r.profit),
+          mgmtFmtPdfPct(r.marginPct),
+          formatMoney(r.shipmentNoVat),
+          formatMoney(r.writeoffTotal),
+          formatMoney(r.wipEnd20)
+        ]),
+        topProfitTable.options
       );
 
       const yearTotalWidths = mgmtPdfWidthsFromWeights(layout.contentWidth * 0.55, [0.55, 0.45]);
@@ -13043,7 +13271,7 @@
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
       doc.text(
-        'Подробная таблица всех заказов доступна в Excel-выгрузке годовой сводки.',
+        'Полная таблица заказов доступна в Excel-выгрузке годовой сводки.',
         layout.marginLeft,
         y
       );
@@ -13091,12 +13319,12 @@
 
       try {
         const doc = await buildMgmtYearPdfDocument(report);
-        doc.save('upravlencheskiy_godovoy_otchet_' + year + '.pdf');
+        doc.save('godovoy_otchet_po_zakazam_' + year + '.pdf');
         if (statusEl) {
           statusEl.textContent =
             'PDF-отчёт за ' +
             year +
-            ' скачан: upravlencheskiy_godovoy_otchet_' +
+            ' скачан: godovoy_otchet_po_zakazam_' +
             year +
             '.pdf';
         }
@@ -16650,6 +16878,12 @@
       if (inp && document.activeElement === inp) {
         inp.blur();
       }
+      if (!uiWipCheckedAt || !lastWipChainCheckResult || uiWipNeedsRecheck) {
+        const statusEl = document.getElementById('periodActionStatus');
+        const msg =
+          'Перед отправкой в Google Sheets рекомендуется проверить цепочку НЗП.';
+        if (statusEl) statusEl.textContent = msg;
+      }
       requestAnimationFrame(() => saveToCloud());
     });
 
@@ -16825,6 +17059,183 @@
       setupOrdersTableScrollSync();
       updateMgmtOrdersScopeUi();
     })();
+
+    // =====================
+    // UI-РЕКОНСТРУКЦИЯ: ЭКРАНЫ, ПОДСКАЗКИ, БЫСТРОЕ СОХРАНЕНИЕ, СТАТУС ЦЕПОЧКИ НЗП
+    // =====================
+
+    let uiActiveScreen = 'accounting';
+    let uiPeriodDirty = false;
+    let uiWipCheckedAt = null;
+    let uiWipNeedsRecheck = false;
+
+    function setUiActiveScreen(screenId) {
+      uiActiveScreen = screenId || 'accounting';
+      const acc = document.getElementById('appScreenAccounting');
+      const rep = document.getElementById('appScreenReports');
+      const ana = document.getElementById('appScreenAnalysis');
+      if (acc) acc.hidden = uiActiveScreen !== 'accounting';
+      if (rep) rep.hidden = uiActiveScreen !== 'reports';
+      if (ana) ana.hidden = uiActiveScreen !== 'analysis';
+
+      document.querySelectorAll('.app-nav-tab').forEach(btn => {
+        const active = btn.getAttribute('data-screen') === uiActiveScreen;
+        btn.classList.toggle('active', active);
+      });
+    }
+
+    function setupMainNavigationUi() {
+      const nav = document.getElementById('appMainNav');
+      if (!nav) return;
+      if (nav.dataset.bound) return;
+      nav.dataset.bound = '1';
+      nav.addEventListener('click', e => {
+        const t = e.target;
+        if (!t || !t.getAttribute) return;
+        const screen = t.getAttribute('data-screen');
+        if (!screen) return;
+        e.preventDefault();
+        setUiActiveScreen(screen);
+      });
+      setUiActiveScreen('accounting');
+    }
+
+    function setupHelpTogglesUi() {
+      if (document.body.dataset.helpBound) return;
+      document.body.dataset.helpBound = '1';
+      document.body.addEventListener('click', e => {
+        const t = e.target;
+        if (!t || !t.classList || !t.classList.contains('help-toggle')) return;
+        const id = t.getAttribute('data-help-id');
+        if (!id) return;
+        const panel = document.getElementById(id);
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+      });
+    }
+
+    function updateQuickSaveUi() {
+      const p = resolveAppWorkingPeriod();
+      const periodEl = document.getElementById('quickSavePeriod');
+      const statusEl = document.getElementById('quickSaveStatus');
+      const dirtyEl = document.getElementById('quickSaveDirty');
+      if (periodEl) periodEl.textContent = p || '—';
+      if (statusEl) statusEl.textContent = isPeriodFinal() ? 'Закрыт' : 'В работе';
+      if (dirtyEl) {
+        dirtyEl.textContent = uiPeriodDirty ? 'Есть несохранённые изменения' : 'Изменений нет';
+        dirtyEl.style.color = uiPeriodDirty ? '#b45309' : '#166534';
+        dirtyEl.style.fontWeight = uiPeriodDirty ? '700' : '600';
+      }
+    }
+
+    function setUiPeriodDirty(isDirty) {
+      uiPeriodDirty = !!isDirty;
+      if (uiPeriodDirty && uiWipCheckedAt) uiWipNeedsRecheck = true;
+      updateQuickSaveUi();
+      updateWipChainUiStatus();
+    }
+
+    function updateWipChainUiStatus() {
+      const statusEl = document.getElementById('wipChainUiStatus');
+      const metaEl = document.getElementById('wipChainUiMeta');
+      const r = lastWipChainCheckResult;
+      const checkedAt = uiWipCheckedAt ? formatMgmtPdfDateTime(uiWipCheckedAt) : '';
+
+      if (!statusEl || !metaEl) return;
+      if (!uiWipCheckedAt || !r) {
+        statusEl.textContent = 'Не проверено';
+        metaEl.textContent = 'Рекомендуется проверить перед закрытием периода и перед отправкой в Google Sheets.';
+        return;
+      }
+
+      if (uiWipNeedsRecheck) {
+        statusEl.textContent = 'Требуется повторная проверка';
+        metaEl.textContent = 'Последняя проверка: ' + checkedAt + '. Данные изменены после проверки.';
+        return;
+      }
+
+      if (r.totalDiscrepancies > 0) {
+        statusEl.textContent = 'Есть расхождения: ' + r.totalDiscrepancies;
+        metaEl.textContent =
+          'Последняя проверка: ' +
+          checkedAt +
+          '. Проверено периодов: ' +
+          (r.periodsChecked ? r.periodsChecked.length : r.periodsChecked) +
+          '.';
+        return;
+      }
+
+      statusEl.textContent = 'Проверено, расхождений нет';
+      metaEl.textContent = 'Последняя проверка: ' + checkedAt + '.';
+    }
+
+    function setupQuickActionsUi() {
+      const recalcBtn = document.getElementById('quickRecalcBtn');
+      const saveLocalBtn = document.getElementById('quickSaveLocalBtn');
+      const saveCloudBtn = document.getElementById('quickSaveCloudBtn');
+      if (recalcBtn && !recalcBtn.dataset.bound) {
+        recalcBtn.dataset.bound = '1';
+        recalcBtn.addEventListener('click', () => {
+          calculateAll();
+          setUiPeriodDirty(true);
+        });
+      }
+      if (saveLocalBtn && !saveLocalBtn.dataset.bound) {
+        saveLocalBtn.dataset.bound = '1';
+        saveLocalBtn.addEventListener('click', () => {
+          const btn = document.getElementById('saveBtn');
+          if (btn) btn.click();
+          setUiPeriodDirty(false);
+        });
+      }
+      if (saveCloudBtn && !saveCloudBtn.dataset.bound) {
+        saveCloudBtn.dataset.bound = '1';
+        saveCloudBtn.addEventListener('click', () => {
+          const btn = document.getElementById('saveCloudBtn');
+          if (btn) btn.click();
+          setUiPeriodDirty(false);
+        });
+      }
+    }
+
+    function setupDirtyTrackingUi() {
+      if (document.body.dataset.dirtyBound) return;
+      document.body.dataset.dirtyBound = '1';
+
+      document.body.addEventListener(
+        'input',
+        e => {
+          const t = e.target;
+          if (!t) return;
+          if (t.closest && (t.closest('#ordersTable') || t.closest('#periodGlobalsCard'))) {
+            setUiPeriodDirty(true);
+          }
+        },
+        true
+      );
+
+      ['saveBtn', 'saveCloudBtn', 'loadBtn', 'loadCloudBtn', 'clearBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.dataset.dirtyHooked) return;
+        el.dataset.dirtyHooked = '1';
+        el.addEventListener('click', () => {
+          if (id === 'loadBtn' || id === 'loadCloudBtn' || id === 'clearBtn') {
+            setUiPeriodDirty(false);
+          }
+          if (id === 'saveBtn' || id === 'saveCloudBtn') {
+            setUiPeriodDirty(false);
+          }
+        });
+      });
+    }
+
+    setupMainNavigationUi();
+    setupHelpTogglesUi();
+    setupQuickActionsUi();
+    setupDirtyTrackingUi();
+    updateQuickSaveUi();
+    updateWipChainUiStatus();
   </script>
 
   <div id="wipChainApplyOverlay" class="wip-chain-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="wipChainApplyTitle">

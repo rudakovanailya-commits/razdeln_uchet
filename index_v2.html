@@ -7013,6 +7013,104 @@
         .filter(row => row.order);
     }
 
+    const CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING =
+      'Загружена урезанная версия из старого формата Google Sheets. Группировка, переносы и НЗП начало могут быть не восстановлены.';
+
+    async function fetchPeriodDataFromCloud(period) {
+      const pn = normalizePeriodStr(period);
+      if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
+        return { ok: false, error: 'invalid_period' };
+      }
+      const url = getCloudApiUrl('getPeriodData', { period: pn });
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      return await res.json();
+    }
+
+    function parsePeriodDataFromCloud(jsonStr) {
+      if (jsonStr == null || jsonStr === '') return null;
+      let parsed;
+      try {
+        parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      } catch (e) {
+        return null;
+      }
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (!Array.isArray(parsed.rows)) return null;
+
+      const data = Object.assign({}, parsed);
+      if (!data.periodStatus) {
+        const st = String(data.status || '')
+          .toLowerCase()
+          .trim();
+        if (st === 'final' || st === 'draft') {
+          data.periodStatus = st;
+        }
+      }
+      if (!data.globals || typeof data.globals !== 'object') {
+        data.globals = {};
+      }
+      if (!data.grouping || typeof data.grouping !== 'object') {
+        data.grouping = {};
+      }
+      if (!data.groupCalc20 || typeof data.groupCalc20 !== 'object') {
+        data.groupCalc20 = {};
+      }
+      if (!data.groupCalc26 || typeof data.groupCalc26 !== 'object') {
+        data.groupCalc26 = {};
+      }
+      if (!Array.isArray(data.transfers)) {
+        data.transfers = [];
+      }
+      return data;
+    }
+
+    function applyPeriodDataFromCloud(data, source) {
+      if (!data) return false;
+      applyData(data);
+      if (source === 'period_data') {
+        calculateAll();
+        formatAllCalculatedFields();
+        refreshAllOrderNameTitles();
+        setupOrdersTableScrollSync();
+        populateOrderSelect();
+      }
+      return true;
+    }
+
+    async function loadPeriodFromCloudLegacyFlat(period, statusEl) {
+      const all = await fetchSheetRowsForPeriodReport();
+      const pn = normalizePeriodStr(period);
+      const filtered = all.filter(r => normalizePeriodFromSheet(r.period) === pn);
+      if (!filtered.length) {
+        if (statusEl) statusEl.textContent = '';
+        alert('Нет строк в облаке за период ' + period);
+        return false;
+      }
+      const vatRate = document.getElementById('vatRate').value;
+      const periodStatus = inferPeriodStatusFromSheetRow(normalizeSheetRecord(filtered[0]));
+      const data = {
+        globals: {
+          vatRate: document.getElementById('vatRate').value,
+          totalInsurance: document.getElementById('totalInsurance').value,
+          totalSick: document.getElementById('totalSick').value,
+          total25: document.getElementById('total25').value,
+          total26: document.getElementById('total26').value,
+          total44: document.getElementById('total44').value
+        },
+        periodStatus,
+        rows: filtered.map(r => mapSheetRowToAppRow(r, vatRate))
+      };
+      applyData(data);
+      if (statusEl) {
+        statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
+      }
+      alert(CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING);
+      return true;
+    }
+
     async function loadPeriodFromCloud() {
       const period = getCurrentPeriod();
       if (!period) {
@@ -7025,31 +7123,28 @@
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Загрузка из облака…';
       try {
-        const all = await fetchSheetRowsForPeriodReport();
-        const pn = normalizePeriodStr(period);
-        const filtered = all.filter(r => normalizePeriodFromSheet(r.period) === pn);
-        if (!filtered.length) {
-          if (statusEl) statusEl.textContent = '';
-          alert('Нет строк в облаке за период ' + period);
-          return;
+        let loadedFull = false;
+        try {
+          const cloudPeriodData = await fetchPeriodDataFromCloud(period);
+          if (cloudPeriodData && cloudPeriodData.ok && cloudPeriodData.json) {
+            const data = parsePeriodDataFromCloud(cloudPeriodData.json);
+            if (data && applyPeriodDataFromCloud(data, 'period_data')) {
+              loadedFull = true;
+              if (statusEl) {
+                statusEl.textContent =
+                  'Загружена полная копия периода ' +
+                  normalizePeriodStr(period) +
+                  ' из Google Sheets';
+              }
+              alert('Загружена полная копия периода из Google Sheets.');
+            }
+          }
+        } catch (periodDataErr) {
+          console.warn('getPeriodData:', periodDataErr);
         }
-        const vatRate = document.getElementById('vatRate').value;
-        const periodStatus = inferPeriodStatusFromSheetRow(normalizeSheetRecord(filtered[0]));
-        const data = {
-          globals: {
-            vatRate: document.getElementById('vatRate').value,
-            totalInsurance: document.getElementById('totalInsurance').value,
-            totalSick: document.getElementById('totalSick').value,
-            total25: document.getElementById('total25').value,
-            total26: document.getElementById('total26').value,
-            total44: document.getElementById('total44').value
-          },
-          periodStatus,
-          rows: filtered.map(r => mapSheetRowToAppRow(r, vatRate))
-        };
-        applyData(data);
-        if (statusEl) {
-          statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
+
+        if (!loadedFull) {
+          await loadPeriodFromCloudLegacyFlat(period, statusEl);
         }
       } catch (err) {
         if (statusEl) statusEl.textContent = '';

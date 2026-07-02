@@ -8,6 +8,7 @@
  *
  * doGet:
  *   ?action=getRows
+ *   ?action=getPeriodData&period=YYYY-MM
  *   ?action=debugLastError
  *   ?action=getLog&limit=50
  *
@@ -50,6 +51,15 @@ var DEBUG_LOG_HEADERS = [
 
 var DEBUG_LAST_ERROR_KEY = 'DEBUG_LAST_ERROR';
 
+var PERIOD_DATA_SHEET_NAME = 'period_data';
+var PERIOD_DATA_HEADERS = [
+  'period',
+  'json',
+  'updated_at',
+  'updated_by',
+  'format_version'
+];
+
 function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON
@@ -88,6 +98,85 @@ function getDataSheet() {
     throw new Error('Spreadsheet has no sheets');
   }
   return sheets[0];
+}
+
+function getPeriodDataSheet() {
+  var ss = getDataSpreadsheet();
+  var sh = ss.getSheetByName(PERIOD_DATA_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(PERIOD_DATA_SHEET_NAME);
+  }
+  ensurePeriodDataHeaders(sh);
+  return sh;
+}
+
+function ensurePeriodDataHeaders(sheet) {
+  if (!sheet) return;
+  var n = PERIOD_DATA_HEADERS.length;
+  var lastCol = Math.max(sheet.getLastColumn(), n);
+  var headerRow =
+    lastCol >= n
+      ? sheet.getRange(1, 1, 1, n).getValues()[0]
+      : [];
+  var needsHeader = sheet.getLastRow() < 1;
+  if (!needsHeader && headerRow.length >= n) {
+    for (var i = 0; i < n; i++) {
+      if (
+        String(headerRow[i] || '')
+          .trim()
+          .toLowerCase() !== PERIOD_DATA_HEADERS[i]
+      ) {
+        needsHeader = true;
+        break;
+      }
+    }
+  }
+  if (needsHeader) {
+    sheet.getRange(1, 1, 1, n).setValues([PERIOD_DATA_HEADERS]);
+  }
+}
+
+function normalizePeriodDataKey(periodParam) {
+  var p = String(periodParam || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(p)) return '';
+  return p;
+}
+
+/** Возвращает объект строки period_data или null, если период не найден. */
+function getPeriodDataRow(periodParam) {
+  var period = normalizePeriodDataKey(periodParam);
+  if (!period) return null;
+
+  var sheet = getPeriodDataSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  var n = PERIOD_DATA_HEADERS.length;
+  var values = sheet.getRange(2, 1, lastRow - 1, n).getValues();
+  var latest = null;
+  var latestAt = '';
+
+  for (var r = 0; r < values.length; r++) {
+    var rowPeriod = String(values[r][0] || '').trim();
+    if (rowPeriod !== period) continue;
+    var json = values[r][1] != null ? String(values[r][1]) : '';
+    if (!json) continue;
+    var updatedAt = values[r][2] != null ? String(values[r][2]) : '';
+    var candidate = {
+      period: rowPeriod,
+      json: json,
+      updated_at: updatedAt,
+      updated_by: values[r][3] != null ? String(values[r][3]) : '',
+      format_version:
+        values[r][4] != null && values[r][4] !== '' ? String(values[r][4]) : ''
+    };
+    if (!latest || String(updatedAt) >= String(latestAt)) {
+      latest = candidate;
+      latestAt = updatedAt;
+    }
+  }
+
+  return latest;
 }
 
 function setLastError(obj) {
@@ -348,10 +437,42 @@ function doGet(e) {
     return jsonOut(getLogEntries(limit));
   }
 
+  if (action === 'getPeriodData') {
+    var periodParam = String(e.parameter.period || '').trim();
+    if (!normalizePeriodDataKey(periodParam)) {
+      return jsonOut({ ok: false, error: 'invalid_period' });
+    }
+    try {
+      var periodRow = getPeriodDataRow(periodParam);
+      if (!periodRow) {
+        return jsonOut({ ok: false, error: 'not_found' });
+      }
+      return jsonOut({
+        ok: true,
+        period: periodRow.period,
+        json: periodRow.json,
+        updated_at: periodRow.updated_at,
+        updated_by: periodRow.updated_by,
+        format_version: periodRow.format_version
+      });
+    } catch (err) {
+      var pdMsg = String(err.message || err);
+      var pdStack = String(err.stack || '');
+      Logger.log(pdStack || pdMsg);
+      writeDebugLog('doGet getPeriodData failed', {
+        action: 'doGet',
+        period: periodParam,
+        error: pdMsg,
+        stack: pdStack
+      });
+      return jsonOut({ ok: false, error: pdMsg, stack: pdStack });
+    }
+  }
+
   if (action !== 'getRows') {
     return jsonOut({
       ok: true,
-      hint: 'Supported actions: getRows, debugLastError, getLog'
+      hint: 'Supported actions: getRows, getPeriodData, debugLastError, getLog'
     });
   }
 

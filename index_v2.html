@@ -2870,7 +2870,7 @@
         <div class="field" style="min-width: 320px; flex: 1 1 420px;">
           <label for="orderSelect">Заказ для технической Excel-карточки</label>
           <select id="orderSelect">
-            <option value="">Выбери заказ</option>
+            <option value="">Сначала сформируйте годовую сводку</option>
           </select>
         </div>
         <button id="orderReportBtn" type="button" class="secondary">Открыть техническую карточку</button>
@@ -8271,8 +8271,51 @@
       }
     }
 
+    /** Список заказов/групп для технической Excel-карточки — из итоговой годовой сводки. */
+    function populateOrderSelectFromAnnualSummary() {
+      const sel = document.getElementById('orderSelect');
+      if (!sel) return;
+
+      const prev = String(sel.value || '').trim();
+      const year = getAnnualSummaryYearInput();
+      const report = lastAnnualSummaryReport;
+
+      sel.innerHTML = '';
+
+      if (!report || report.year !== year || !Array.isArray(report.rows) || !report.rows.length) {
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = 'Сначала сформируйте годовую сводку';
+        sel.appendChild(emptyOpt);
+        sel.value = '';
+        return;
+      }
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Выбери заказ';
+      sel.appendChild(placeholder);
+
+      const names = new Set();
+      report.rows.forEach(row => {
+        const name = String(row.groupName != null ? row.groupName : row.label || '').trim();
+        if (!name || names.has(name)) return;
+        names.add(name);
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+
+      if (prev && names.has(prev)) {
+        sel.value = prev;
+      } else {
+        sel.value = '';
+      }
+    }
+
     function populateOrderSelect() {
-      populateOrderSelectFromCurrentTable();
+      populateOrderSelectFromAnnualSummary();
     }
 
     function manualWriteoffSavedHasValue(s) {
@@ -13417,6 +13460,7 @@
             ' групп/заказов'
           : 'Нет данных за ' + year + ' год в localStorage';
       }
+      populateOrderSelectFromAnnualSummary();
       return report;
     }
 
@@ -16251,6 +16295,12 @@
     const buildAnnualSummaryBtn = document.getElementById('buildAnnualSummaryBtn');
     if (buildAnnualSummaryBtn) {
       buildAnnualSummaryBtn.addEventListener('click', () => buildAnnualSummaryReport());
+    }
+    const annualSummaryYearEl = document.getElementById('annualSummaryYear');
+    if (annualSummaryYearEl) {
+      annualSummaryYearEl.addEventListener('change', () => {
+        populateOrderSelectFromAnnualSummary();
+      });
     }
     const exportAnnualSummaryBtn = document.getElementById('exportAnnualSummaryBtn');
     if (exportAnnualSummaryBtn) {

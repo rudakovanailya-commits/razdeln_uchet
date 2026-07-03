@@ -34,24 +34,46 @@
     }
 
     .sticky-period-context {
-      padding: 7px 12px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid rgba(203, 213, 225, 0.85);
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.1);
       font-size: 13px;
-      line-height: 1.4;
-      color: #334155;
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      line-height: 1.35;
+      color: #ffffff;
+      font-weight: 500;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+      letter-spacing: 0.01em;
     }
 
     .sticky-period-context-empty {
-      color: #64748b;
+      color: #e5e7eb;
     }
 
-    .sticky-period-context-dirty {
-      border-color: #fcd34d;
-      background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
-      color: #78350f;
+    .sticky-period-context-active {
+      box-shadow:
+        0 4px 14px rgba(0, 0, 0, 0.28),
+        inset 3px 0 0 #fbbf24;
+    }
+
+    .sticky-period-sep {
+      color: rgba(255, 255, 255, 0.42);
+      font-weight: 400;
+    }
+
+    .sticky-period-warn {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .sticky-period-calm {
+      color: #d1fae5;
+      font-weight: 500;
+    }
+
+    .sticky-period-muted {
+      color: #e5e7eb;
+      font-weight: 500;
     }
 
     .app-main-nav {
@@ -20582,13 +20604,42 @@
       return parts;
     }
 
+    function getStickyPeriodPartTone(partText) {
+      const t = String(partText || '').toLowerCase();
+      if (
+        t.indexOf('есть изменения') !== -1 ||
+        t.indexOf('локально не сохранено') !== -1 ||
+        t.indexOf('google не обновлён') !== -1 ||
+        t.indexOf('экран очищен') !== -1 ||
+        t.indexOf('данные не сохранены') !== -1
+      ) {
+        return 'warn';
+      }
+      if (t.indexOf('без изменений') !== -1) return 'calm';
+      return 'base';
+    }
+
+    function stickyPeriodContextSpan(text, tone) {
+      const safe = escapeHtmlForReport(text);
+      if (tone === 'warn') return '<span class="sticky-period-warn">' + safe + '</span>';
+      if (tone === 'calm') return '<span class="sticky-period-calm">' + safe + '</span>';
+      if (tone === 'muted') return '<span class="sticky-period-muted">' + safe + '</span>';
+      return '<span>' + safe + '</span>';
+    }
+
+    function renderStickyPeriodContextHtml(parts) {
+      return parts
+        .map(part => stickyPeriodContextSpan(part, getStickyPeriodPartTone(part)))
+        .join('<span class="sticky-period-sep"> · </span>');
+    }
+
     function updateStickyPeriodContext() {
       const el = document.getElementById('stickyPeriodContext');
       if (!el) return;
 
       const period = resolveAppWorkingPeriod();
       if (!period) {
-        el.textContent = 'Период не выбран';
+        el.innerHTML = stickyPeriodContextSpan('Период не выбран', 'muted');
         el.className = 'sticky-period-context sticky-period-context-empty';
         return;
       }
@@ -20619,9 +20670,9 @@
         }
       }
 
-      el.textContent = parts.join(' · ');
+      el.innerHTML = renderStickyPeriodContextHtml(parts);
       el.className =
-        'sticky-period-context' + (uiPeriodDirty ? ' sticky-period-context-dirty' : '');
+        'sticky-period-context' + (uiPeriodDirty ? ' sticky-period-context-active' : '');
     }
 
     function setUiPeriodDirty(isDirty) {

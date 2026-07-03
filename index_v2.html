@@ -6570,7 +6570,8 @@
         String(previous.action || '') === String(record.action || '') &&
         String(previous.status || '') === String(record.status || '') &&
         String(previous.user_name || '') === String(record.user_name || '') &&
-        String(previous.device_id || '') === String(record.device_id || '')
+        String(previous.device_id || '') === String(record.device_id || '') &&
+        String(previous.details || '') === String(record.details || '')
       );
     }
 
@@ -8184,6 +8185,7 @@
         statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
       }
       alert(CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING);
+      updateLastLoadedPeriodSnapshot(collectData());
       return true;
     }
 
@@ -8226,6 +8228,7 @@
 
           applyPeriodDataFromCloud(data, 'Google Sheets period_data');
           setCloudPeriodVersionMeta(normalizeCloudPeriodVersionMeta(result, period));
+          updateLastLoadedPeriodSnapshot(collectData());
           if (statusEl) {
             statusEl.textContent =
               'Загружена полная копия периода ' +
@@ -8497,6 +8500,169 @@
       };
     }
 
+    let lastLoadedPeriodSnapshot = null;
+
+    const ORDER_COMPARE_ROW_FIELDS = [
+      'order',
+      'shipmentVat',
+      'wipStart',
+      'materials',
+      'processing',
+      'other',
+      'salary',
+      'profitPercent',
+      'manualWriteoff'
+    ];
+
+    function clonePeriodDataSnapshot(data) {
+      if (!data) return null;
+      try {
+        return JSON.parse(JSON.stringify(data));
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function updateLastLoadedPeriodSnapshot(data) {
+      const snap = data != null ? data : collectData();
+      lastLoadedPeriodSnapshot = clonePeriodDataSnapshot(snap);
+    }
+
+    function isOrderRowDataNonEmpty(row) {
+      if (!row) return false;
+      if (String(row.order || '').trim()) return true;
+      for (let i = 0; i < ORDER_COMPARE_ROW_FIELDS.length; i++) {
+        const key = ORDER_COMPARE_ROW_FIELDS[i];
+        if (key === 'order') continue;
+        const v = row[key];
+        if (key === 'manualWriteoff') {
+          if (v != null && String(v).trim() !== '') return true;
+          continue;
+        }
+        if (num(v) !== 0) return true;
+      }
+      return false;
+    }
+
+    function normalizeOrderRowCompareValue(value) {
+      if (value == null) return '';
+      return String(value).trim().replace(/\s/g, '').replace(/,/g, '.');
+    }
+
+    function orderRowCompareValuesEqual(a, b) {
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      const na = num(a);
+      const nb = num(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) {
+        return Math.abs(na - nb) < 0.01;
+      }
+      return normalizeOrderRowCompareValue(a) === normalizeOrderRowCompareValue(b);
+    }
+
+    function extractOrderRowCompareFields(row) {
+      const out = {};
+      ORDER_COMPARE_ROW_FIELDS.forEach(key => {
+        out[key] = row && row[key] != null ? row[key] : '';
+      });
+      return out;
+    }
+
+    function orderRowsComparableEqual(beforeFields, afterFields) {
+      for (let i = 0; i < ORDER_COMPARE_ROW_FIELDS.length; i++) {
+        const key = ORDER_COMPARE_ROW_FIELDS[i];
+        if (key === 'order') continue;
+        if (!orderRowCompareValuesEqual(beforeFields[key], afterFields[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function buildOrderRowMapFromPeriodData(data) {
+      const rows = Array.isArray(data && data.rows) ? data.rows : [];
+      const map = new Map();
+      const nameCount = {};
+      rows.forEach((row, idx) => {
+        if (!isOrderRowDataNonEmpty(row)) return;
+        const displayName = String(row.order || '').trim() || 'строка ' + (idx + 1);
+        const baseKey = String(row.order || '').trim() || '__row_' + idx;
+        const count = (nameCount[baseKey] || 0) + 1;
+        nameCount[baseKey] = count;
+        const key = count > 1 ? baseKey + '#' + count : baseKey;
+        map.set(key, {
+          displayName,
+          fields: extractOrderRowCompareFields(row)
+        });
+      });
+      return map;
+    }
+
+    function formatOrderNamesList(names, maxShow) {
+      const limit = maxShow != null ? maxShow : 5;
+      const unique = [];
+      const seen = new Set();
+      (names || []).forEach(name => {
+        const n = String(name || '').trim();
+        if (!n || seen.has(n)) return;
+        seen.add(n);
+        unique.push(n);
+      });
+      if (!unique.length) return '';
+      if (unique.length <= limit) return unique.join('; ');
+      return unique.slice(0, limit).join('; ') + '; ещё ' + (unique.length - limit);
+    }
+
+    function buildChangedOrdersSummary(beforeData, afterData) {
+      if (!beforeData) return 'нет исходного снимка для сравнения';
+
+      const beforeMap = buildOrderRowMapFromPeriodData(beforeData);
+      const afterMap = buildOrderRowMapFromPeriodData(afterData);
+      const added = [];
+      const removed = [];
+      const changed = [];
+
+      afterMap.forEach((afterRow, key) => {
+        const beforeRow = beforeMap.get(key);
+        if (!beforeRow) {
+          added.push(afterRow.displayName);
+        } else if (!orderRowsComparableEqual(beforeRow.fields, afterRow.fields)) {
+          changed.push(afterRow.displayName);
+        }
+      });
+
+      beforeMap.forEach((beforeRow, key) => {
+        if (!afterMap.has(key)) {
+          removed.push(beforeRow.displayName);
+        }
+      });
+
+      if (!added.length && !removed.length && !changed.length) {
+        return 'изменений не обнаружено';
+      }
+
+      const parts = [];
+      if (added.length === 1) {
+        parts.push('Добавлен договор: ' + added[0]);
+      } else if (added.length > 1) {
+        parts.push('Добавлены: ' + formatOrderNamesList(added));
+      }
+
+      if (removed.length === 1) {
+        parts.push('Удалён договор: ' + removed[0]);
+      } else if (removed.length > 1) {
+        parts.push('Удалены: ' + formatOrderNamesList(removed));
+      }
+
+      if (changed.length === 1) {
+        parts.push('Изменения в договоре: ' + changed[0]);
+      } else if (changed.length > 1) {
+        parts.push('Изменения в договорах: ' + formatOrderNamesList(changed));
+      }
+
+      return parts.join('; ');
+    }
+
     function applyData(data) {
       if (!data) return;
 
@@ -8646,6 +8812,7 @@
         return false;
       }
 
+      const beforeSnapshot = lastLoadedPeriodSnapshot;
       const data = collectData();
       localStorage.setItem(getStorageKey(period), JSON.stringify(data));
       updatePeriodList();
@@ -8670,9 +8837,11 @@
           status: 'ok',
           period,
           rows_count: Array.isArray(data.rows) ? data.rows.length : '',
-          details: 'ручное сохранение'
+          details: buildChangedOrdersSummary(beforeSnapshot, data)
         });
       }
+
+      updateLastLoadedPeriodSnapshot(data);
 
       return true;
     }
@@ -8738,6 +8907,7 @@
       updatePeriodList();
       if (selectEl) selectEl.value = period;
       markLoadedPeriodOnScreen(period);
+      updateLastLoadedPeriodSnapshot(collectData());
       recordUserAction({
         action: 'load_local',
         status: 'ok',
@@ -9735,6 +9905,8 @@
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
+      const beforeSnapshot = lastLoadedPeriodSnapshot;
+
       try {
         flushPeriodStateFromDomBeforeSave();
 
@@ -9801,13 +9973,15 @@
         offerMarkPeriodsSyncedAfterCloudSend([period]);
         await fetchCloudPeriodDataList();
         updatePeriodList();
+        const afterData = collectData();
         recordUserAction({
           action: 'save_google',
           status: 'ok',
           period,
           rows_count: check.rows.length,
-          details: periodDataNote ? 'Лист1 + period_data' : 'Лист1'
+          details: buildChangedOrdersSummary(beforeSnapshot, afterData)
         });
+        updateLastLoadedPeriodSnapshot(afterData);
       } catch (err) {
         console.error('[v2 cloud] saveToCloud error:', err);
         if (statusEl) statusEl.textContent = '';

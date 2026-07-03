@@ -2734,38 +2734,6 @@
       </div>
     </div>
 
-    <div class="card" id="accountingOrderCardPanel">
-      <h2>Карточка заказа</h2>
-      <p class="hint" style="margin-top:6px;">
-        Заказ выбирается из открытого периода, карточка строится по всем найденным периодам выбранного источника.
-      </p>
-      <div class="period-report-controls" style="margin-top:10px;">
-        <div class="field" style="min-width: 280px; flex: 1 1 320px;">
-          <label for="accountingOrderCardSelect">Заказ</label>
-          <select id="accountingOrderCardSelect" autocomplete="off" disabled>
-            <option value="">Сначала загрузите период</option>
-          </select>
-        </div>
-        <div class="field" style="min-width: 220px;">
-          <label for="accountingOrderCardSource">Источник карточки</label>
-          <select id="accountingOrderCardSource" autocomplete="off">
-            <option value="screen" selected>как текущий экран</option>
-            <option value="cloud">Google Sheets / period_data</option>
-            <option value="local">localStorage / локальные периоды</option>
-          </select>
-        </div>
-        <button type="button" id="accountingOrderCardBtn" disabled>Открыть карточку заказа</button>
-      </div>
-    </div>
-
-    <div id="orderReportBox" class="card" style="margin-top:16px; display:none;">
-      <div class="order-report-head">
-        <h3 id="orderReportTitle">Карточка заказа</h3>
-        <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
-      </div>
-      <div id="orderReportContent"></div>
-    </div>
-
     <div class="card">
       <h2>Таблица заказов</h2>
 
@@ -3033,6 +3001,41 @@
       <div class="hint" id="warningBox"></div>
     </div>
 
+    <div class="card" id="accountingOrderCardPanel">
+      <h2>Карточка заказа</h2>
+      <p class="hint" style="margin-top:6px;">
+        Заказ выбирается из открытого периода, карточка строится по всем найденным периодам выбранного источника.
+      </p>
+      <div class="period-report-controls" style="margin-top:10px;">
+        <div class="field" style="min-width: 280px; flex: 1 1 320px;">
+          <label for="accountingOrderCardSelect">Заказ</label>
+          <select id="accountingOrderCardSelect" autocomplete="off" disabled>
+            <option value="">Сначала загрузите период</option>
+          </select>
+        </div>
+        <div class="field" style="min-width: 220px;">
+          <label for="accountingOrderCardSource">Источник карточки</label>
+          <select id="accountingOrderCardSource" autocomplete="off">
+            <option value="screen" selected>как текущий экран</option>
+            <option value="cloud">Google Sheets / period_data</option>
+            <option value="local">localStorage / локальные периоды</option>
+          </select>
+        </div>
+        <button type="button" id="accountingOrderCardBtn" disabled>Открыть карточку заказа</button>
+      </div>
+    </div>
+
+    <div id="orderReportBox" class="card" style="margin-top:16px; display:none;">
+      <div class="order-report-head">
+        <h3 id="orderReportTitle">Карточка заказа</h3>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <button type="button" id="collapseOrderCardBtn" class="secondary" hidden>Свернуть карточку</button>
+          <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
+        </div>
+      </div>
+      <div id="orderReportContent"></div>
+    </div>
+
     <div class="card" id="periodSummaryCard">
       <div class="period-summary-head">
         <h2>Сводка за период</h2>
@@ -3106,38 +3109,19 @@
 
     <div class="card" style="margin-top:20px;" id="techOrderCardCard">
       <div class="period-summary-head">
-        <h2>Техническая Excel-карточка заказа</h2>
+        <h2>Карточка заказа</h2>
       </div>
       <p class="hint" style="margin-top:8px;">
-        Карточка по месяцам для выбранного заказа. Режим «Текущий экран» — только открытый месяц с учётом правок до сохранения.
-        «Все периоды» — история заказа по всем найденным периодам из выбранного источника.
+        Сначала сформируйте годовую сводку. Заказ выбирается из списка сводки; карточка строится по всем найденным периодам выбранного источника (не только по году сводки).
       </p>
       <div class="period-report-controls">
-        <div class="field" style="min-width: 220px;">
-          <label for="techOrderCardMode">Режим карточки</label>
-          <select id="techOrderCardMode" autocomplete="off">
-            <option value="screen" selected>Текущий экран</option>
-            <option value="all">Все периоды / заказ в целом</option>
-          </select>
-        </div>
-        <div class="field" style="min-width: 280px;" id="techOrderCardSourceField" hidden>
-          <label for="techOrderCardSource">Источник данных</label>
-          <select id="techOrderCardSource" autocomplete="off">
-            <option value="cloud" selected>Google Sheets / period_data</option>
-            <option value="local">localStorage / локальные периоды</option>
-          </select>
-        </div>
-        <div class="field annual-summary-year-field" id="techOrderCardYearFilterField" hidden>
-          <label for="techOrderCardYearFilter">Охват периодов</label>
-          <select id="techOrderCardYearFilter" autocomplete="off"></select>
-        </div>
         <div class="field" style="min-width: 320px; flex: 1 1 420px;">
           <label for="orderSelect">Заказ</label>
-          <select id="orderSelect">
-            <option value="">Выберите заказ</option>
+          <select id="orderSelect" autocomplete="off" disabled>
+            <option value="">Сначала сформируйте годовую сводку</option>
           </select>
         </div>
-        <button id="orderReportBtn" type="button" class="secondary">Открыть техническую карточку</button>
+        <button id="orderReportBtn" type="button" class="secondary" disabled>Открыть карточку заказа</button>
       </div>
       <div id="techOrderCardContextNote" class="mgmt-reports-period-context" style="margin-top:8px;"></div>
       <p class="hint" style="margin-top:10px;">
@@ -10586,51 +10570,54 @@
       }
     }
 
-    /** Список заказов для технической Excel-карточки — из выбранного режима карточки. */
-    async function populateTechOrderSelect() {
+    /** Список заказов для карточки в «Отчётах» — из последней годовой сводки. */
+    function populateOrderSelectFromAnnualSummary() {
       const sel = document.getElementById('orderSelect');
+      const btn = document.getElementById('orderReportBtn');
       if (!sel) return;
 
-      const config = readOrderCardUiConfig('tech');
-      updateTechOrderCardContextUi(config);
       const prev = String(sel.value || '').trim();
+      const report = lastAnnualSummaryReport;
 
-      if (config.mode === 'screen') {
-        populateOrderSelectFromCurrentTable();
+      if (!report || !Array.isArray(report.rows) || !report.rows.length) {
+        sel.innerHTML = '<option value="">Сначала сформируйте годовую сводку</option>';
+        sel.disabled = true;
+        if (btn) btn.disabled = true;
+        updateTechOrderCardContextUi();
         return;
       }
 
-      sel.innerHTML = '<option value="">Загрузка списка заказов…</option>';
-      try {
-        const fetch = await fetchOrderCardPeriodSources(config);
-        if (!fetch.periods || !fetch.periods.length) {
-          sel.innerHTML = '<option value="">Периоды в выбранном источнике не найдены</option>';
-          sel.value = '';
-          return;
-        }
-        const groups = listMgmtOrderCalculationGroupsFromSources(fetch.sources);
-        sel.innerHTML = '<option value="">Выберите заказ</option>';
-        groups.forEach(g => {
-          const opt = document.createElement('option');
-          opt.value = g.groupName;
-          opt.textContent = formatMgmtOrderGroupOptionLabel(g);
-          sel.appendChild(opt);
-        });
-        if (prev && groups.some(g => g.groupName === prev)) {
-          sel.value = prev;
-        } else {
-          sel.value = '';
-        }
-      } catch (e) {
-        console.warn('[tech order card] populate list failed', e);
-        sel.innerHTML = '<option value="">Не удалось загрузить список заказов</option>';
+      const names = [];
+      const seen = new Set();
+      report.rows.forEach(r => {
+        const name = String(r.groupName != null ? r.groupName : r.label || '').trim();
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        names.push(name);
+      });
+      names.sort((a, b) => a.localeCompare(b, 'ru'));
+
+      sel.disabled = false;
+      if (btn) btn.disabled = false;
+      sel.innerHTML = '<option value="">Выберите заказ</option>';
+      names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+
+      if (prev && seen.has(prev)) {
+        sel.value = prev;
+      } else {
         sel.value = '';
       }
+      updateTechOrderCardContextUi();
     }
 
     function populateOrderSelect() {
       populateAccountingOrderCardSelect();
-      populateTechOrderSelect();
+      populateOrderSelectFromAnnualSummary();
     }
 
     function populateAccountingOrderCardSelect() {
@@ -10688,6 +10675,38 @@
       let sourceLabel = '';
       let sources = new Map();
       let screenOnly = false;
+
+      if (opts.fromAnnualSummary) {
+        const report = lastAnnualSummaryReport;
+        if (!report) {
+          warnings.push('Сначала сформируйте годовую сводку.');
+          return {
+            sources,
+            sourceLabel: '',
+            warnings,
+            screenOnly: false,
+            fromAnnualSummary: true
+          };
+        }
+        const sourceMode = report.sourceMode || getAnnualSummarySourceMode();
+        if (sourceMode === 'local') {
+          const local = listAllLocalStoragePeriodDataSources();
+          sources = local.sources instanceof Map ? new Map(local.sources) : new Map();
+          sourceLabel = 'localStorage / локальные периоды';
+        } else {
+          const fetch = await fetchCloudPeriodDataSourcesAll();
+          sources = fetch.sources instanceof Map ? new Map(fetch.sources) : new Map();
+          sourceLabel = 'Google Sheets / period_data';
+        }
+        return {
+          sources,
+          sourceLabel,
+          warnings,
+          screenOnly: false,
+          fromAnnualSummary: true,
+          annualSummaryYear: String(report.year || getAnnualSummaryYearInput() || '').trim()
+        };
+      }
 
       if (opts.techConfig) {
         const config = opts.techConfig;
@@ -10764,6 +10783,15 @@
 
     function renderOrderCardMetaHtml(report, resolved, overlay) {
       let html = '<div class="mgmt-reports-source-note" style="margin-bottom:10px;">';
+      if (resolved && resolved.fromAnnualSummary) {
+        if (resolved.annualSummaryYear) {
+          html +=
+            '<div>Заказ выбран из годовой сводки за ' +
+            escapeHtmlForReport(resolved.annualSummaryYear) +
+            '</div>';
+        }
+        html += '<div>Карточка построена по всем найденным периодам заказа</div>';
+      }
       if (resolved && resolved.sourceLabel) {
         html +=
           '<div><strong>Источник:</strong> ' + escapeHtmlForReport(resolved.sourceLabel) + '</div>';
@@ -10871,6 +10899,21 @@
       return html;
     }
 
+    function updateOrderCardCollapseBtnUi(show) {
+      const btn = document.getElementById('collapseOrderCardBtn');
+      const box = document.getElementById('orderReportBox');
+      if (!btn) return;
+      const visible =
+        show !== false && box && box.style.display !== 'none' && lastOrderCardReport;
+      btn.hidden = !visible;
+    }
+
+    function collapseOrderCardResult() {
+      const box = document.getElementById('orderReportBox');
+      if (box) box.style.display = 'none';
+      updateOrderCardCollapseBtnUi(false);
+    }
+
     async function buildOrderCardReport(orderName, options) {
       const target = String(orderName || '').trim();
       const box = document.getElementById('orderReportBox');
@@ -10880,6 +10923,7 @@
       if (!target) {
         lastOrderCardReport = null;
         if (box) box.style.display = 'none';
+        updateOrderCardCollapseBtnUi(false);
         return null;
       }
 
@@ -10887,12 +10931,16 @@
         Object.assign({}, options || {}, { orderName: target })
       );
       const sources = resolved.sources instanceof Map ? resolved.sources : new Map();
-      const overlay = applyOpenPeriodScreenOverlay(sources, target);
+      const overlay =
+        options && (options.skipScreenOverlay || options.fromAnnualSummary)
+          ? { applied: false }
+          : applyOpenPeriodScreenOverlay(sources, target);
 
       const report = collectOrderCardReportData(target, sources);
       if (!report) {
         lastOrderCardReport = null;
         if (box) box.style.display = 'none';
+        updateOrderCardCollapseBtnUi(false);
         return null;
       }
 
@@ -10917,6 +10965,7 @@
         box.style.display = 'block';
         box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
+      updateOrderCardCollapseBtnUi(true);
       if (title) title.textContent = 'Карточка заказа: ' + target;
       if (content) content.innerHTML = html;
       return report;
@@ -10954,6 +11003,11 @@
       if (btn && !btn.dataset.bound) {
         btn.dataset.bound = '1';
         btn.addEventListener('click', () => openAccountingOrderCard());
+      }
+      const collapseBtn = document.getElementById('collapseOrderCardBtn');
+      if (collapseBtn && !collapseBtn.dataset.bound) {
+        collapseBtn.dataset.bound = '1';
+        collapseBtn.addEventListener('click', () => collapseOrderCardResult());
       }
       populateAccountingOrderCardSelect();
     }
@@ -14022,43 +14076,35 @@
       return found.sort();
     }
 
-    function updateTechOrderCardContextUi(config) {
-      config = config || readOrderCardUiConfig('tech');
-      const sourceField = document.getElementById('techOrderCardSourceField');
-      const yearField = document.getElementById('techOrderCardYearFilterField');
+    function updateTechOrderCardContextUi() {
       const noteEl = document.getElementById('techOrderCardContextNote');
-      const yearEl = document.getElementById('techOrderCardYearFilter');
-      const isAll = config.mode === 'all';
-
-      if (sourceField) sourceField.hidden = !isAll;
-      if (yearField) yearField.hidden = !isAll;
-      if (isAll && yearEl) fillOrderCardYearFilterSelect(yearEl);
-
       if (!noteEl) return;
 
-      if (config.mode === 'screen') {
-        const period = normalizePeriodStr(resolveAppWorkingPeriod()) || '—';
-        let html =
-          '<div class="mgmt-reports-source-note">' +
-          '<div><strong>Источник: текущий экран</strong></div>' +
-          '<div>Период: ' +
-          escapeHtmlForReport(period) +
-          '</div>';
-        if (uiPeriodDirty) {
-          html +=
-            '<div style="margin-top:4px;color:#b45309;">Учитываются несохранённые изменения на экране.</div>';
-        }
-        html += '</div>';
-        noteEl.innerHTML = html;
-      } else {
-        const meta = buildOrderCardSourceMetaFromFetch(config, null, null);
-        const available = getOrderCardAvailablePeriodIds(config);
-        if (!available.length) {
-          meta.details = (meta.details || []).slice();
-          meta.details.push('Периоды в выбранном источнике не найдены.');
-        }
-        noteEl.innerHTML = formatReportSourceMetaHtml(meta);
+      const report = lastAnnualSummaryReport;
+      if (!report || !Array.isArray(report.rows) || !report.rows.length) {
+        noteEl.innerHTML =
+          '<div class="mgmt-reports-source-note"><div>Список заказов появится после формирования годовой сводки.</div></div>';
+        return;
       }
+
+      const year = String(report.year || getAnnualSummaryYearInput() || '').trim();
+      const sourceLabel =
+        report.sourceMode === 'local'
+          ? 'localStorage / локальные периоды'
+          : 'Google Sheets / period_data';
+      noteEl.innerHTML =
+        '<div class="mgmt-reports-source-note">' +
+        '<div><strong>Годовая сводка за ' +
+        escapeHtmlForReport(year) +
+        '</strong></div>' +
+        '<div>Источник сводки: ' +
+        escapeHtmlForReport(sourceLabel) +
+        '</div>' +
+        '<div>Заказов в списке: ' +
+        report.rows.length +
+        '</div>' +
+        '<div style="margin-top:4px;">Карточка строится по всем найденным периодам заказа в этом источнике.</div>' +
+        '</div>';
     }
 
     function updateMgmtOrderCardUi(config) {
@@ -14106,17 +14152,10 @@
     }
 
     function initOrderCardUi() {
-      fillOrderCardYearFilterSelect(document.getElementById('techOrderCardYearFilter'));
       fillOrderCardYearFilterSelect(document.getElementById('mgmtReportsOrdersYearFilter'));
       updateTechOrderCardContextUi();
       updateMgmtOrderCardUi();
 
-      const refreshTech = () => {
-        mgmtOrderSourcesCache = null;
-        mgmtOrderSourcesCacheKey = '';
-        updateTechOrderCardContextUi();
-        populateTechOrderSelect();
-      };
       const refreshMgmt = () => {
         mgmtOrderSourcesCache = null;
         mgmtOrderSourcesCacheKey = '';
@@ -14132,9 +14171,6 @@
         }
       };
 
-      bind('techOrderCardMode', refreshTech);
-      bind('techOrderCardSource', refreshTech);
-      bind('techOrderCardYearFilter', refreshTech);
       bind('mgmtReportsOrdersScope', refreshMgmt);
       bind('mgmtReportsOrdersSource', refreshMgmt);
       bind('mgmtReportsOrdersYearFilter', refreshMgmt);
@@ -14144,7 +14180,7 @@
       updateMgmtOrderCardUi();
       updateTechOrderCardContextUi();
       populateMgmtReportsOrderList();
-      populateTechOrderSelect();
+      populateOrderSelectFromAnnualSummary();
     }
 
     function formatReportSourceMetaHtml(meta) {
@@ -17107,6 +17143,7 @@
         }
         statusEl.innerHTML = statusHtml;
       }
+      populateOrderSelectFromAnnualSummary();
       return report;
     }
 
@@ -19815,12 +19852,38 @@
         lastOrderCardReport = null;
         const box = document.getElementById('orderReportBox');
         if (box) box.style.display = 'none';
+        updateOrderCardCollapseBtnUi(false);
         return;
       }
 
-      const config = readOrderCardUiConfig('tech');
-      updateTechOrderCardContextUi(config);
-      await buildOrderCardReport(String(orderName).trim(), { techConfig: config });
+      if (!lastAnnualSummaryReport) {
+        alert('Сначала сформируйте годовую сводку.');
+        return;
+      }
+
+      const btn = document.getElementById('orderReportBtn');
+      const prevBtnText = btn ? btn.textContent : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Загрузка…';
+      }
+
+      try {
+        await buildOrderCardReport(String(orderName).trim(), {
+          fromAnnualSummary: true,
+          skipScreenOverlay: true
+        });
+      } catch (e) {
+        console.error('[reports order card]', e);
+        alert(
+          'Не удалось построить карточку заказа: ' + (e && e.message ? e.message : String(e))
+        );
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = prevBtnText || 'Открыть карточку заказа';
+        }
+      }
     }
 
     function autoSave() {

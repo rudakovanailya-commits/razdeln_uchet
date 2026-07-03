@@ -7156,7 +7156,7 @@
       loadedPeriodOnScreen = normalizePeriodStr(period) || '';
       hidePeriodDataMismatchHint();
       updateMgmtReportsCurrentPeriodLabel();
-      if (typeof refreshOrderCardReportsUi === 'function') refreshOrderCardReportsUi();
+      if (typeof refreshOrderCardContextNotesOnly === 'function') refreshOrderCardContextNotesOnly();
       updateCloudPeriodVersionUi();
     }
 
@@ -9197,6 +9197,13 @@
 
     let uiCloudPeriodList = [];
 
+    let uiActiveScreen = 'accounting';
+    let uiPeriodDirty = false;
+    let uiWipCheckedAt = null;
+    let uiWipNeedsRecheck = false;
+    let uiWipCheckSourceUsed = null;
+    let uiWipCheckFallbackWarning = '';
+
     const PERIOD_SOURCE_LABELS = {
       both: 'локально + Google',
       local: 'только локально',
@@ -9254,12 +9261,19 @@
       const inputEl = getElementByIdDeep('periodInput');
       if (!select) return;
 
+      const localPeriods = getLocalPeriodIds();
+      const cloudPeriods = getCloudPeriodIds();
+      const mergedPeriods = getMergedPeriodIds();
+      console.log('[period list] local periods', localPeriods);
+      console.log('[period list] cloud periods', cloudPeriods);
+      console.log('[period list] merged periods', mergedPeriods);
+
       const fromInput = inputEl ? normalizePeriodStr(inputEl.value) : '';
       const currentValue = normalizePeriodStr(select.value) || fromInput;
 
       select.innerHTML = '<option value="">—</option>';
 
-      getMergedPeriodIds().forEach(p => {
+      mergedPeriods.forEach(p => {
         const sourceKind = getPeriodSourceKind(p);
         const option = document.createElement('option');
         option.value = p;
@@ -9754,6 +9768,10 @@
                   : ''
             }))
             .filter(item => item.period && isValidWorkingPeriod(item.period));
+          console.log(
+            '[period list] getPeriodDataList ok, count',
+            uiCloudPeriodList.length
+          );
           return true;
         }
         console.warn('[v2 cloud] getPeriodDataList unexpected payload', result);
@@ -10482,6 +10500,11 @@
       sel.innerHTML = '<option value="">Загрузка списка заказов…</option>';
       try {
         const fetch = await fetchOrderCardPeriodSources(config);
+        if (!fetch.periods || !fetch.periods.length) {
+          sel.innerHTML = '<option value="">Периоды в выбранном источнике не найдены</option>';
+          sel.value = '';
+          return;
+        }
         const groups = listMgmtOrderCalculationGroupsFromSources(fetch.sources);
         sel.innerHTML = '<option value="">Выберите заказ</option>';
         groups.forEach(g => {
@@ -13347,6 +13370,16 @@
       return { primary: 'Источник: текущий экран', details };
     }
 
+    function getOrderCardAvailablePeriodIds(config) {
+      if (!config || config.mode !== 'all') return [];
+      let ids = config.source === 'local' ? getLocalPeriodIds() : getCloudPeriodIds();
+      const yearFilter = config.yearFilter;
+      if (yearFilter && yearFilter !== 'all' && /^\d{4}$/.test(yearFilter)) {
+        ids = ids.filter(p => p.startsWith(yearFilter + '-'));
+      }
+      return ids;
+    }
+
     function buildOrderCardSourceMetaFromFetch(config, fetchResult, foundPeriods) {
       if (config.mode === 'screen') {
         const period =
@@ -13589,9 +13622,13 @@
         html += '</div>';
         noteEl.innerHTML = html;
       } else {
-        noteEl.innerHTML = formatReportSourceMetaHtml(
-          buildOrderCardSourceMetaFromFetch(config, null, null)
-        );
+        const meta = buildOrderCardSourceMetaFromFetch(config, null, null);
+        const available = getOrderCardAvailablePeriodIds(config);
+        if (!available.length) {
+          meta.details = (meta.details || []).slice();
+          meta.details.push('Периоды в выбранном источнике не найдены.');
+        }
+        noteEl.innerHTML = formatReportSourceMetaHtml(meta);
       }
     }
 
@@ -13624,10 +13661,19 @@
         html += '</div>';
         noteEl.innerHTML = html;
       } else {
-        noteEl.innerHTML = formatReportSourceMetaHtml(
-          buildOrderCardSourceMetaFromFetch(config, null, null)
-        );
+        const meta = buildOrderCardSourceMetaFromFetch(config, null, null);
+        const available = getOrderCardAvailablePeriodIds(config);
+        if (!available.length) {
+          meta.details = (meta.details || []).slice();
+          meta.details.push('Периоды в выбранном источнике не найдены.');
+        }
+        noteEl.innerHTML = formatReportSourceMetaHtml(meta);
       }
+    }
+
+    function refreshOrderCardContextNotesOnly() {
+      updateMgmtOrderCardUi();
+      updateTechOrderCardContextUi();
     }
 
     function initOrderCardUi() {
@@ -14867,6 +14913,11 @@
           );
         } else {
           const fetch = await resolveOrderCardPeriodSources(config);
+          if (!fetch.periods || !fetch.periods.length) {
+            lastMgmtOrderGroupOptions = [];
+            datalist.innerHTML = '';
+            return;
+          }
           groups = listMgmtOrderCalculationGroupsFromSources(fetch.sources);
         }
         lastMgmtOrderGroupOptions = groups;
@@ -20278,22 +20329,25 @@
         } else {
           hidePeriodDataMismatchHint();
         }
-        refreshOrderCardReportsUi();
+        if (val) {
+          loadPeriod(false);
+        }
+        refreshOrderCardContextNotesOnly();
       });
     }
     if (periodInputEl) {
       periodInputEl.addEventListener('input', () => {
         hidePeriodCompareInfo();
         updatePeriodList();
-        refreshOrderCardReportsUi();
+        refreshOrderCardContextNotesOnly();
       });
       periodInputEl.addEventListener('change', () => {
         handlePeriodFieldCommitted();
-        refreshOrderCardReportsUi();
+        refreshOrderCardContextNotesOnly();
       });
       periodInputEl.addEventListener('blur', () => {
         handlePeriodFieldCommitted();
-        refreshOrderCardReportsUi();
+        refreshOrderCardContextNotesOnly();
       });
     }
 
@@ -20327,19 +20381,12 @@
       populateOrderSelect();
       refreshAllOrderNameTitles();
       setupOrdersTableScrollSync();
-      refreshOrderCardReportsUi();
+      refreshOrderCardContextNotesOnly();
     })();
 
     // =====================
     // UI-РЕКОНСТРУКЦИЯ: ЭКРАНЫ, ПОДСКАЗКИ, БЫСТРОЕ СОХРАНЕНИЕ, СТАТУС ЦЕПОЧКИ НЗП
     // =====================
-
-    let uiActiveScreen = 'accounting';
-    let uiPeriodDirty = false;
-    let uiWipCheckedAt = null;
-    let uiWipNeedsRecheck = false;
-    let uiWipCheckSourceUsed = null;
-    let uiWipCheckFallbackWarning = '';
 
     function updateWipChainSourceDesc() {
       const el = document.getElementById('wipChainSourceDesc');

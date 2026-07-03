@@ -2734,6 +2734,38 @@
       </div>
     </div>
 
+    <div class="card" id="accountingOrderCardPanel">
+      <h2>Карточка заказа</h2>
+      <p class="hint" style="margin-top:6px;">
+        Заказ выбирается из открытого периода, карточка строится по всем найденным периодам выбранного источника.
+      </p>
+      <div class="period-report-controls" style="margin-top:10px;">
+        <div class="field" style="min-width: 280px; flex: 1 1 320px;">
+          <label for="accountingOrderCardSelect">Заказ</label>
+          <select id="accountingOrderCardSelect" autocomplete="off" disabled>
+            <option value="">Сначала загрузите период</option>
+          </select>
+        </div>
+        <div class="field" style="min-width: 220px;">
+          <label for="accountingOrderCardSource">Источник карточки</label>
+          <select id="accountingOrderCardSource" autocomplete="off">
+            <option value="screen" selected>как текущий экран</option>
+            <option value="cloud">Google Sheets / period_data</option>
+            <option value="local">localStorage / локальные периоды</option>
+          </select>
+        </div>
+        <button type="button" id="accountingOrderCardBtn" disabled>Открыть карточку заказа</button>
+      </div>
+    </div>
+
+    <div id="orderReportBox" class="card" style="margin-top:16px; display:none;">
+      <div class="order-report-head">
+        <h3 id="orderReportTitle">Карточка заказа</h3>
+        <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
+      </div>
+      <div id="orderReportContent"></div>
+    </div>
+
     <div class="card">
       <h2>Таблица заказов</h2>
 
@@ -3228,14 +3260,6 @@
         <p class="mgmt-reports-status" id="mgmtReportsOrdersStatus"></p>
         <div id="mgmtReportsOrdersContent" hidden></div>
       </div>
-    </div>
-
-    <div id="orderReportBox" class="card" style="margin-top:20px; display:none;">
-      <div class="order-report-head">
-        <h3 id="orderReportTitle">Карточка заказа</h3>
-        <button type="button" id="exportOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
-      </div>
-      <div id="orderReportContent"></div>
     </div>
 
     </div> <!-- /appScreenReports -->
@@ -10605,7 +10629,333 @@
     }
 
     function populateOrderSelect() {
+      populateAccountingOrderCardSelect();
       populateTechOrderSelect();
+    }
+
+    function populateAccountingOrderCardSelect() {
+      const sel = document.getElementById('accountingOrderCardSelect');
+      const btn = document.getElementById('accountingOrderCardBtn');
+      if (!sel) return;
+
+      const prev = String(sel.value || '').trim();
+      const names = [];
+      const seen = new Set();
+
+      if (ordersTableHasNonEmptyRows()) {
+        getRows().forEach(row => {
+          const name = String(row.querySelector('.order-name')?.value ?? '').trim();
+          if (!name || seen.has(name)) return;
+          seen.add(name);
+          names.push(name);
+        });
+      }
+
+      if (!names.length) {
+        sel.innerHTML = '<option value="">Сначала загрузите период</option>';
+        sel.disabled = true;
+        if (btn) btn.disabled = true;
+        return;
+      }
+
+      sel.disabled = false;
+      if (btn) btn.disabled = false;
+      sel.innerHTML = '<option value="">Выберите заказ</option>';
+      names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+
+      if (prev && seen.has(prev)) {
+        sel.value = prev;
+      } else {
+        sel.value = '';
+      }
+    }
+
+    function readAccountingOrderCardSourceMode() {
+      const el = document.getElementById('accountingOrderCardSource');
+      const v = el ? String(el.value || 'screen').trim() : 'screen';
+      if (v === 'cloud' || v === 'local') return v;
+      return 'screen';
+    }
+
+    async function resolveOrderCardSourcesForBuild(options) {
+      const opts = options || {};
+      const warnings = [];
+      let sourceLabel = '';
+      let sources = new Map();
+      let screenOnly = false;
+
+      if (opts.techConfig) {
+        const config = opts.techConfig;
+        const fetch =
+          config.mode === 'screen'
+            ? await fetchOrderCardPeriodSources(config)
+            : await resolveOrderCardPeriodSources(config);
+        sources = fetch.sources instanceof Map ? new Map(fetch.sources) : new Map();
+        const foundPeriods = opts.orderName
+          ? listOrderFoundPeriodsFromSources(sources, opts.orderName)
+          : [];
+        const meta = buildOrderCardSourceMetaFromFetch(
+          config,
+          fetch,
+          config.mode === 'all' ? foundPeriods : null
+        );
+        sourceLabel = meta.primary ? String(meta.primary).replace(/^Источник:\s*/i, '') : '';
+        return { sources, sourceLabel, warnings, screenOnly: false, techMeta: meta, fetchResult: fetch };
+      }
+
+      const sourceMode = opts.sourceMode || 'screen';
+
+      if (sourceMode === 'cloud') {
+        const fetch = await fetchCloudPeriodDataSourcesAll();
+        sources = fetch.sources instanceof Map ? new Map(fetch.sources) : new Map();
+        sourceLabel = 'Google Sheets / period_data';
+      } else if (sourceMode === 'local') {
+        const local = listAllLocalStoragePeriodDataSources();
+        sources = local.sources instanceof Map ? new Map(local.sources) : new Map();
+        sourceLabel = 'localStorage / локальные периоды';
+      } else if (screenPeriodDataOrigin === 'cloud') {
+        const fetch = await fetchCloudPeriodDataSourcesAll();
+        sources = fetch.sources instanceof Map ? new Map(fetch.sources) : new Map();
+        sourceLabel = 'Google Sheets / period_data';
+      } else if (screenPeriodDataOrigin === 'local') {
+        const local = listAllLocalStoragePeriodDataSources();
+        sources = local.sources instanceof Map ? new Map(local.sources) : new Map();
+        sourceLabel = 'localStorage / локальные периоды';
+      } else {
+        screenOnly = true;
+        sourceLabel = 'текущий экран';
+        const period = normalizePeriodStr(resolveAppWorkingPeriod());
+        if (period && /^\d{4}-\d{2}$/.test(period)) {
+          try {
+            sources.set(period, collectData());
+          } catch (e) {
+            /* текущий экран недоступен */
+          }
+        }
+        warnings.push(
+          'Источник экрана не связан с базой периодов, карточка построена только по текущему экрану.'
+        );
+      }
+
+      return { sources, sourceLabel, warnings, screenOnly };
+    }
+
+    function applyOpenPeriodScreenOverlay(sources, orderName) {
+      if (!(sources instanceof Map)) return { applied: false, period: '' };
+      const openPeriod = normalizePeriodStr(resolveAppWorkingPeriod());
+      if (!openPeriod || !/^\d{4}-\d{2}$/.test(openPeriod) || !uiPeriodDirty) {
+        return { applied: false, period: '' };
+      }
+      try {
+        const screenData = collectData();
+        const m = deriveGroupWriteoffMetricsForOrderFromPeriodData(screenData, orderName);
+        if (!m) return { applied: false, period: '' };
+        sources.set(openPeriod, screenData);
+        return { applied: true, period: openPeriod };
+      } catch (e) {
+        return { applied: false, period: '' };
+      }
+    }
+
+    function renderOrderCardMetaHtml(report, resolved, overlay) {
+      let html = '<div class="mgmt-reports-source-note" style="margin-bottom:10px;">';
+      if (resolved && resolved.sourceLabel) {
+        html +=
+          '<div><strong>Источник:</strong> ' + escapeHtmlForReport(resolved.sourceLabel) + '</div>';
+      }
+      if (report && report.rows && report.rows.length) {
+        html +=
+          '<div><strong>Найден в периодах:</strong> ' +
+          escapeHtmlForReport(report.rows.map(r => r.period).join(', ')) +
+          '</div>';
+      }
+      if (resolved && resolved.warnings && resolved.warnings.length) {
+        resolved.warnings.forEach(w => {
+          html += '<div class="hint" style="margin-top:6px;color:#b45309;">' + escapeHtmlForReport(w) + '</div>';
+        });
+      }
+      if (overlay && overlay.applied) {
+        html +=
+          '<div class="hint" style="margin-top:6px;color:#b45309;">Открытый период взят с текущего экрана, остальные периоды — из выбранного источника.</div>';
+      }
+      if (resolved && resolved.techMeta) {
+        html = formatReportSourceMetaHtml(resolved.techMeta) + html;
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderOrderCardTableHtml(report) {
+      const rows = report.rows || [];
+      const totals = report.totals;
+      const groupHint = report.groupHint;
+      let html = '';
+
+      if (groupHint) {
+        html += '<div class="hint" style="margin-top:8px;">' + escapeHtmlForReport(groupHint) + '</div>';
+      }
+
+      html += `
+<table id="orderReportTable">
+<tr>
+<th>Месяц</th>
+<th>Отгрузка</th>
+<th>Списано всего</th>
+<th>Списано с 26</th>
+<th>Списано с 20</th>
+<th>НЗП конец 20</th>
+<th>НЗП конец</th>
+<th>Прибыль</th>
+</tr>
+`;
+
+      rows.forEach(r => {
+        html +=
+          '<tr>' +
+          '<td>' +
+          escapeHtmlForReport(r.period) +
+          '</td>' +
+          orderCardExportNumCell(r.shipment) +
+          orderCardExportNumCell(r.writeoffTotal) +
+          orderCardExportNumCell(r.writeoff26) +
+          orderCardExportNumCell(r.writeoff20) +
+          orderCardExportNumCell(r.wipEnd20) +
+          orderCardExportNumCell(r.wipEnd26) +
+          orderCardExportNumCell(r.profit) +
+          '</tr>';
+      });
+
+      if (rows.length && totals) {
+        const balanceTitle =
+          'Остаток на конец периода' +
+          (report.endBalancePeriod ? ' (' + report.endBalancePeriod + ')' : '');
+        html +=
+          '<tr class="order-report-totals-row" style="font-weight:bold;">' +
+          '<td title="Обороты — сумма по месяцам; НЗП — остаток на конец периода">Итого</td>' +
+          orderCardExportNumCell(totals.shipment) +
+          orderCardExportNumCell(totals.writeoffTotal) +
+          orderCardExportNumCell(totals.writeoff26) +
+          orderCardExportNumCell(totals.writeoff20) +
+          '<td data-export-value="' +
+          num(totals.wipEnd20) +
+          '" title="' +
+          escapeHtmlForReport(balanceTitle) +
+          '">' +
+          fmt(totals.wipEnd20) +
+          '</td>' +
+          '<td data-export-value="' +
+          num(totals.wipEnd26) +
+          '" title="' +
+          escapeHtmlForReport(balanceTitle) +
+          '">' +
+          fmt(totals.wipEnd26) +
+          '</td>' +
+          orderCardExportNumCell(totals.profit) +
+          '</tr>';
+      }
+
+      html += '</table>';
+
+      if (rows.length) {
+        html +=
+          '<p class="hint order-report-totals-hint">По колонкам «НЗП конец 20» и «НЗП конец» в строке «Итого» показан остаток на конец периода' +
+          (report.endBalancePeriod ? ' (' + escapeHtmlForReport(report.endBalancePeriod) + ')' : '') +
+          ', а не сумма по месяцам.</p>';
+      }
+
+      return html;
+    }
+
+    async function buildOrderCardReport(orderName, options) {
+      const target = String(orderName || '').trim();
+      const box = document.getElementById('orderReportBox');
+      const title = document.getElementById('orderReportTitle');
+      const content = document.getElementById('orderReportContent');
+
+      if (!target) {
+        lastOrderCardReport = null;
+        if (box) box.style.display = 'none';
+        return null;
+      }
+
+      const resolved = await resolveOrderCardSourcesForBuild(
+        Object.assign({}, options || {}, { orderName: target })
+      );
+      const sources = resolved.sources instanceof Map ? resolved.sources : new Map();
+      const overlay = applyOpenPeriodScreenOverlay(sources, target);
+
+      const report = collectOrderCardReportData(target, sources);
+      if (!report) {
+        lastOrderCardReport = null;
+        if (box) box.style.display = 'none';
+        return null;
+      }
+
+      report.cardSourceLabel = resolved.sourceLabel || '';
+      report.cardWarnings = (resolved.warnings || []).slice();
+      report.screenOverlayPeriod = overlay.applied ? overlay.period : '';
+      lastOrderCardReport = report;
+      logOrderCardWipEnd20Diagnostics(target);
+
+      let html = renderOrderCardMetaHtml(report, resolved, overlay);
+      html += renderOrderCardTableHtml(report);
+
+      if (!report.rows.length) {
+        html +=
+          '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу в выбранном источнике.</div>';
+      }
+
+      if (box) {
+        if (typeof setUiActiveScreen === 'function') {
+          setUiActiveScreen('accounting');
+        }
+        box.style.display = 'block';
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      if (title) title.textContent = 'Карточка заказа: ' + target;
+      if (content) content.innerHTML = html;
+      return report;
+    }
+
+    async function openAccountingOrderCard() {
+      const sel = document.getElementById('accountingOrderCardSelect');
+      const btn = document.getElementById('accountingOrderCardBtn');
+      const orderName = sel ? String(sel.value || '').trim() : '';
+      if (!orderName) return;
+
+      const prevBtnText = btn ? btn.textContent : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Загрузка…';
+      }
+
+      try {
+        await buildOrderCardReport(orderName, {
+          sourceMode: readAccountingOrderCardSourceMode()
+        });
+      } catch (e) {
+        console.error('[accounting order card]', e);
+        alert(
+          'Не удалось построить карточку заказа: ' + (e && e.message ? e.message : String(e))
+        );
+      } finally {
+        populateAccountingOrderCardSelect();
+        if (btn) btn.textContent = prevBtnText || 'Открыть карточку заказа';
+      }
+    }
+
+    function initAccountingOrderCardUi() {
+      const btn = document.getElementById('accountingOrderCardBtn');
+      if (btn && !btn.dataset.bound) {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => openAccountingOrderCard());
+      }
+      populateAccountingOrderCardSelect();
     }
 
     function manualWriteoffSavedHasValue(s) {
@@ -19382,16 +19732,18 @@
 
     function exportOrderCardToExcel() {
       const box = document.getElementById('orderReportBox');
-      const selectedOrder = String(document.getElementById('orderSelect')?.value ?? '').trim();
+      const selectedOrder =
+        String(document.getElementById('accountingOrderCardSelect')?.value ?? '').trim() ||
+        String(document.getElementById('orderSelect')?.value ?? '').trim();
 
       if (!box || box.style.display === 'none' || !lastOrderCardReport) {
-        alert('Сначала откройте карточку заказа: выберите заказ и нажмите «Отчет по заказу».');
+        alert('Сначала откройте карточку заказа: выберите заказ и нажмите «Открыть карточку заказа».');
         return;
       }
 
       if (selectedOrder !== lastOrderCardReport.orderName) {
         alert(
-          'В списке выбран другой заказ. Сначала обновите карточку кнопкой «Отчет по заказу».'
+          'В списке выбран другой заказ. Сначала обновите карточку кнопкой «Открыть карточку заказа».'
         );
         return;
       }
@@ -19458,129 +19810,17 @@
     }
 
     async function buildOrderReport() {
-      const orderName = document.getElementById('orderSelect').value;
-      const box = document.getElementById('orderReportBox');
-      const title = document.getElementById('orderReportTitle');
-      const content = document.getElementById('orderReportContent');
-
+      const orderName = document.getElementById('orderSelect')?.value;
       if (!orderName || !String(orderName).trim()) {
         lastOrderCardReport = null;
+        const box = document.getElementById('orderReportBox');
         if (box) box.style.display = 'none';
         return;
       }
 
       const config = readOrderCardUiConfig('tech');
       updateTechOrderCardContextUi(config);
-
-      const target = String(orderName).trim();
-      let fetchResult = null;
-      let sourcesOverride = null;
-
-      if (config.mode === 'screen') {
-        fetchResult = await fetchOrderCardPeriodSources(config);
-        sourcesOverride = fetchResult.sources;
-      } else {
-        fetchResult = await resolveOrderCardPeriodSources(config);
-        sourcesOverride = fetchResult.sources;
-      }
-
-      const foundPeriods = listOrderFoundPeriodsFromSources(sourcesOverride, target);
-      const sourceMeta = buildOrderCardSourceMetaFromFetch(
-        config,
-        fetchResult,
-        config.mode === 'all' ? foundPeriods : null
-      );
-
-      const report = collectOrderCardReportData(target, sourcesOverride);
-      lastOrderCardReport = report;
-      logOrderCardWipEnd20Diagnostics(target);
-      const rows = report.rows;
-      const totals = report.totals;
-      const groupHint = report.groupHint;
-
-      let html = formatReportSourceMetaHtml(sourceMeta);
-      if (groupHint) {
-        html += '<div class="hint" style="margin-top:8px;">' + escapeHtmlForReport(groupHint) + '</div>';
-      }
-
-      html += `
-<table id="orderReportTable">
-<tr>
-<th>Месяц</th>
-<th>Отгрузка</th>
-<th>Списано всего</th>
-<th>Списано с 26</th>
-<th>Списано с 20</th>
-<th>НЗП конец 20</th>
-<th>НЗП конец</th>
-<th>Прибыль</th>
-</tr>
-`;
-
-      rows.forEach(r => {
-        html +=
-          '<tr>' +
-          '<td>' +
-          escapeHtmlForReport(r.period) +
-          '</td>' +
-          orderCardExportNumCell(r.shipment) +
-          orderCardExportNumCell(r.writeoffTotal) +
-          orderCardExportNumCell(r.writeoff26) +
-          orderCardExportNumCell(r.writeoff20) +
-          orderCardExportNumCell(r.wipEnd20) +
-          orderCardExportNumCell(r.wipEnd26) +
-          orderCardExportNumCell(r.profit) +
-          '</tr>';
-      });
-
-      if (rows.length) {
-        const balanceTitle =
-          'Остаток на конец периода' +
-          (report.endBalancePeriod ? ' (' + report.endBalancePeriod + ')' : '');
-        html +=
-          '<tr class="order-report-totals-row" style="font-weight:bold;">' +
-          '<td title="Обороты — сумма по месяцам; НЗП — остаток на конец периода">Итого</td>' +
-          orderCardExportNumCell(totals.shipment) +
-          orderCardExportNumCell(totals.writeoffTotal) +
-          orderCardExportNumCell(totals.writeoff26) +
-          orderCardExportNumCell(totals.writeoff20) +
-          '<td data-export-value="' +
-          num(totals.wipEnd20) +
-          '" title="' +
-          escapeHtmlForReport(balanceTitle) +
-          '">' +
-          fmt(totals.wipEnd20) +
-          '</td>' +
-          '<td data-export-value="' +
-          num(totals.wipEnd26) +
-          '" title="' +
-          escapeHtmlForReport(balanceTitle) +
-          '">' +
-          fmt(totals.wipEnd26) +
-          '</td>' +
-          orderCardExportNumCell(totals.profit) +
-          '</tr>';
-      }
-
-      html += `</table>`;
-
-      if (rows.length) {
-        html +=
-          '<p class="hint order-report-totals-hint">По колонкам «НЗП конец 20» и «НЗП конец» в строке «Итого» показан остаток на конец периода' +
-          (report.endBalancePeriod ? ' (' + escapeHtmlForReport(report.endBalancePeriod) + ')' : '') +
-          ', а не сумма по месяцам.</p>';
-      }
-
-      if (!rows.length) {
-        html +=
-          config.mode === 'screen'
-            ? '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу на текущем экране. Загрузите период в разделе Учёт или выберите другой заказ.</div>'
-            : '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу в выбранном источнике. Проверьте источник и охват периодов.</div>';
-      }
-
-      if (box) box.style.display = 'block';
-      if (title) title.textContent = 'Карточка заказа: ' + orderName;
-      if (content) content.innerHTML = html;
+      await buildOrderCardReport(String(orderName).trim(), { techConfig: config });
     }
 
     function autoSave() {
@@ -19637,6 +19877,8 @@
       });
     });
     initMgmtReportsUi();
+
+    initAccountingOrderCardUi();
 
     const aiAnalysisScopeEl = document.getElementById('aiAnalysisScope');
     if (aiAnalysisScopeEl) {
@@ -20466,6 +20708,7 @@
       setupOrdersTableScrollSync();
       refreshOrderCardContextNotesOnly();
       updateStickyPeriodContext();
+      initAccountingOrderCardUi();
     })();
 
     // =====================

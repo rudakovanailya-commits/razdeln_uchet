@@ -2478,6 +2478,7 @@
           <span class="help-toggle" data-help-id="helpLoadLocal">ⓘ Что это?</span>
           <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
           <span class="help-toggle" data-help-id="helpLoadCloud">ⓘ Что это?</span>
+          <button id="comparePeriodBtn" type="button" class="secondary">Сравнить локально и Google</button>
         </div>
 
         <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
@@ -2523,6 +2524,7 @@
       <div class="hint" id="cloudDataStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="periodActionStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div class="hint" id="cloudPeriodVersionInfo" hidden style="margin-top: 6px; color: #475569;"></div>
+      <div class="hint" id="periodCompareInfo" hidden style="margin-top: 8px; padding: 8px 10px; border-radius: 6px;"></div>
     </div>
 
     <div class="card" id="wipChainStatusCard">
@@ -7357,6 +7359,361 @@
         data.transfers = [];
       }
       return data;
+    }
+
+    const PERIOD_COMPARE_NUM_EPS = 0.01;
+
+    const PERIOD_COMPARE_METRIC_LABELS = {
+      shipmentNoVat: 'Отгрузка без НДС',
+      materials: 'Материалы',
+      processing: 'Обработка',
+      other: 'Прочее',
+      salary: 'ЗП',
+      account25: 'Счёт 25',
+      account26: 'Счёт 26',
+      account44: 'Счёт 44',
+      totalCost: 'Себестоимость (total_cost)'
+    };
+
+    function readLocalPeriodDataForCompare(period) {
+      const pn = normalizePeriodStr(period);
+      const raw = localStorage.getItem(getStorageKey(pn));
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        return { __parseError: true };
+      }
+    }
+
+    function getPeriodCompareStatus(data) {
+      return String(data.periodStatus || data.status || 'draft')
+        .toLowerCase()
+        .trim() || 'draft';
+    }
+
+    function getPeriodCompareOrderNames(data) {
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      return rows
+        .map(r => String((r && r.order) || '').trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'ru'));
+    }
+
+    function getCompareRowShipmentNoVat(row, globals) {
+      if (!row) return 0;
+      if (row.snapshot && row.snapshot.shipmentNoVat != null && row.snapshot.shipmentNoVat !== '') {
+        return num(row.snapshot.shipmentNoVat);
+      }
+      const shipmentVat = num(row.shipmentVat);
+      if (!shipmentVat) return 0;
+      const vat = num(globals && globals.vatRate);
+      const rate = vat > 0 ? vat : 22;
+      return shipmentVat / (1 + rate / 100);
+    }
+
+    function getCompareRowSnapshotNum(row, snapshotKey) {
+      if (!row || !row.snapshot) return 0;
+      const v = row.snapshot[snapshotKey];
+      if (v == null || v === '') return 0;
+      return num(v);
+    }
+
+    function sumPeriodCompareRows(rows, getter) {
+      return (rows || []).reduce((sum, row) => sum + getter(row), 0);
+    }
+
+    function buildPeriodCompareSummary(data, cloudMeta) {
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const globals = data.globals || {};
+      const summary = {
+        exists: true,
+        rowCount: rows.length,
+        orders: getPeriodCompareOrderNames(data),
+        periodStatus: getPeriodCompareStatus(data),
+        totals: {
+          shipmentNoVat: sumPeriodCompareRows(rows, r => getCompareRowShipmentNoVat(r, globals)),
+          materials: sumPeriodCompareRows(rows, r => num(r && r.materials)),
+          processing: sumPeriodCompareRows(rows, r => num(r && r.processing)),
+          other: sumPeriodCompareRows(rows, r => num(r && r.other)),
+          salary: sumPeriodCompareRows(rows, r => num(r && r.salary)),
+          account25: sumPeriodCompareRows(rows, r => getCompareRowSnapshotNum(r, 'acc25')),
+          account26: sumPeriodCompareRows(rows, r => getCompareRowSnapshotNum(r, 'acc26')),
+          account44: sumPeriodCompareRows(rows, r => getCompareRowSnapshotNum(r, 'acc44')),
+          totalCost: sumPeriodCompareRows(rows, r => getCompareRowSnapshotNum(r, 'totalCost'))
+        }
+      };
+      if (cloudMeta) {
+        summary.meta = {
+          updated_at: cloudMeta.updated_at != null ? String(cloudMeta.updated_at) : '',
+          updated_by: cloudMeta.updated_by != null ? String(cloudMeta.updated_by) : '',
+          format_version:
+            cloudMeta.format_version != null && cloudMeta.format_version !== ''
+              ? String(cloudMeta.format_version)
+              : ''
+        };
+      }
+      return summary;
+    }
+
+    function periodCompareNumbersClose(a, b) {
+      return Math.abs(num(a) - num(b)) <= PERIOD_COMPARE_NUM_EPS;
+    }
+
+    function comparePeriodSummaries(localSummary, cloudSummary) {
+      const diffs = [];
+      if (!localSummary || !localSummary.exists || !cloudSummary || !cloudSummary.exists) {
+        return diffs;
+      }
+
+      if (localSummary.rowCount !== cloudSummary.rowCount) {
+        diffs.push({
+          field: 'Количество строк',
+          local: String(localSummary.rowCount),
+          cloud: String(cloudSummary.rowCount)
+        });
+      }
+
+      const localOrdersKey = localSummary.orders.join('\n');
+      const cloudOrdersKey = cloudSummary.orders.join('\n');
+      if (localOrdersKey !== cloudOrdersKey) {
+        diffs.push({
+          field: 'Список заказов',
+          local: localSummary.orders.length ? localSummary.orders.join(', ') : '—',
+          cloud: cloudSummary.orders.length ? cloudSummary.orders.join(', ') : '—'
+        });
+      }
+
+      if (localSummary.periodStatus !== cloudSummary.periodStatus) {
+        diffs.push({
+          field: 'Статус периода',
+          local: localSummary.periodStatus,
+          cloud: cloudSummary.periodStatus
+        });
+      }
+
+      Object.keys(PERIOD_COMPARE_METRIC_LABELS).forEach(key => {
+        if (!periodCompareNumbersClose(localSummary.totals[key], cloudSummary.totals[key])) {
+          diffs.push({
+            field: PERIOD_COMPARE_METRIC_LABELS[key],
+            local: formatMoney(localSummary.totals[key]),
+            cloud: formatMoney(cloudSummary.totals[key])
+          });
+        }
+      });
+
+      return diffs;
+    }
+
+    function formatPeriodCompareSummaryBlock(summary, title) {
+      if (!summary || !summary.exists) return '';
+      const t = summary.totals;
+      let html =
+        '<div style="margin-top:8px;"><strong>' +
+        escapeHtmlForReport(title) +
+        '</strong><ul style="margin:4px 0 0; padding-left:18px;">';
+      html +=
+        '<li>Строк: ' +
+        escapeHtmlForReport(String(summary.rowCount)) +
+        '</li>';
+      html +=
+        '<li>Заказы: ' +
+        escapeHtmlForReport(summary.orders.length ? summary.orders.join(', ') : '—') +
+        '</li>';
+      html +=
+        '<li>Статус: ' + escapeHtmlForReport(summary.periodStatus) + '</li>';
+      html +=
+        '<li>Отгрузка без НДС: ' +
+        escapeHtmlForReport(formatMoney(t.shipmentNoVat)) +
+        '</li>';
+      html +=
+        '<li>Материалы: ' + escapeHtmlForReport(formatMoney(t.materials)) + '</li>';
+      html +=
+        '<li>Обработка: ' + escapeHtmlForReport(formatMoney(t.processing)) + '</li>';
+      html +=
+        '<li>Прочее: ' + escapeHtmlForReport(formatMoney(t.other)) + '</li>';
+      html +=
+        '<li>ЗП: ' + escapeHtmlForReport(formatMoney(t.salary)) + '</li>';
+      html +=
+        '<li>Счёт 25: ' + escapeHtmlForReport(formatMoney(t.account25)) + '</li>';
+      html +=
+        '<li>Счёт 26: ' + escapeHtmlForReport(formatMoney(t.account26)) + '</li>';
+      html +=
+        '<li>Счёт 44: ' + escapeHtmlForReport(formatMoney(t.account44)) + '</li>';
+      html +=
+        '<li>Себестоимость: ' + escapeHtmlForReport(formatMoney(t.totalCost)) + '</li>';
+      if (summary.meta) {
+        const when = summary.meta.updated_at
+          ? formatCloudVersionDateTime(summary.meta.updated_at)
+          : '—';
+        html +=
+          '<li>Облако: ' +
+          escapeHtmlForReport(
+            when +
+              ', ' +
+              (summary.meta.updated_by || '—') +
+              ', ' +
+              (summary.meta.format_version || '—')
+          ) +
+          '</li>';
+      }
+      html += '</ul></div>';
+      return html;
+    }
+
+    function setPeriodCompareInfoStyle(el, kind) {
+      if (!el) return;
+      if (kind === 'match') {
+        el.style.color = '#166534';
+        el.style.background = '#dcfce7';
+        el.style.border = '1px solid #86efac';
+      } else if (kind === 'diff') {
+        el.style.color = '#b45309';
+        el.style.background = '#fef3c7';
+        el.style.border = '1px solid #fcd34d';
+      } else if (kind === 'missing') {
+        el.style.color = '#b91c1c';
+        el.style.background = '#fee2e2';
+        el.style.border = '1px solid #fca5a5';
+      } else {
+        el.style.color = '#475569';
+        el.style.background = '#f8fafc';
+        el.style.border = '1px solid #e2e8f0';
+      }
+    }
+
+    function renderPeriodCompareInfo(period, localSummary, cloudSummary, diffs, options) {
+      const el = document.getElementById('periodCompareInfo');
+      if (!el) return;
+
+      const pn = normalizePeriodStr(period);
+      const localExists = !!(localSummary && localSummary.exists);
+      const cloudExists = !!(cloudSummary && cloudSummary.exists);
+      let headline = '';
+      let styleKind = 'pending';
+
+      if (options && options.localParseError) {
+        headline = 'Локальная версия повреждена и не может быть сравнена.';
+        styleKind = 'missing';
+      } else if (!localExists && !cloudExists) {
+        headline =
+          'Локальная версия не найдена. Облачная версия не найдена.';
+        styleKind = 'missing';
+      } else if (localExists && !cloudExists) {
+        headline =
+          'Есть только локальная версия периода. В Google period_data копия не найдена.';
+        styleKind = 'missing';
+      } else if (!localExists && cloudExists) {
+        headline =
+          'Есть только облачная версия периода. Локальная копия в этом браузере не найдена.';
+        styleKind = 'missing';
+      } else if (!diffs.length) {
+        headline =
+          'Локальная и облачная версии периода совпадают по контрольным показателям.';
+        styleKind = 'match';
+      } else {
+        headline = 'Есть отличия между локальной и облачной версией.';
+        styleKind = 'diff';
+      }
+
+      let html =
+        '<div><strong>Период ' +
+        escapeHtmlForReport(pn) +
+        ':</strong> ' +
+        escapeHtmlForReport(headline) +
+        '</div>';
+
+      if (!localExists && !options?.localParseError) {
+        html += '<div style="margin-top:6px;">Локальная версия не найдена.</div>';
+      }
+      if (!cloudExists) {
+        html += '<div style="margin-top:6px;">Облачная версия не найдена.</div>';
+      }
+
+      if (localExists) {
+        html += formatPeriodCompareSummaryBlock(localSummary, 'Локально');
+      }
+      if (cloudExists) {
+        html += formatPeriodCompareSummaryBlock(cloudSummary, 'Google Sheets (period_data)');
+      }
+
+      if (localExists && cloudExists && diffs.length) {
+        html +=
+          '<div style="margin-top:8px;"><strong>Отличия:</strong><ul style="margin:4px 0 0; padding-left:18px;">';
+        diffs.forEach(d => {
+          html +=
+            '<li>' +
+            escapeHtmlForReport(d.field) +
+            ': локально ' +
+            escapeHtmlForReport(d.local) +
+            ', Google ' +
+            escapeHtmlForReport(d.cloud) +
+            '</li>';
+        });
+        html += '</ul></div>';
+      }
+
+      setPeriodCompareInfoStyle(el, styleKind);
+      el.innerHTML = html;
+      el.hidden = false;
+    }
+
+    async function compareLocalAndCloudPeriod() {
+      const period = getCurrentPeriod();
+      const pn = normalizePeriodStr(period);
+      const infoEl = document.getElementById('periodCompareInfo');
+
+      if (!pn || !/^\d{4}-\d{2}$/.test(pn)) {
+        alert('Укажите период YYYY-MM');
+        return;
+      }
+      if (!requireValidWorkingPeriod(pn, true)) return;
+
+      if (infoEl) {
+        infoEl.hidden = false;
+        setPeriodCompareInfoStyle(infoEl, 'pending');
+        infoEl.textContent = 'Сравнение периода ' + pn + '…';
+      }
+
+      const localRaw = readLocalPeriodDataForCompare(pn);
+      let localSummary = { exists: false };
+      let localParseError = false;
+
+      if (localRaw && localRaw.__parseError) {
+        localParseError = true;
+      } else if (localRaw) {
+        localSummary = buildPeriodCompareSummary(localRaw);
+      }
+
+      let cloudSummary = { exists: false };
+      try {
+        const result = await fetchPeriodDataFromCloud(pn);
+        if (result && result.ok === true && result.json) {
+          const cloudData = parsePeriodDataFromCloud(result.json);
+          if (cloudData) {
+            cloudSummary = buildPeriodCompareSummary(cloudData, {
+              updated_at: result.updated_at,
+              updated_by: result.updated_by,
+              format_version: result.format_version
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[period compare] cloud fetch failed', e);
+      }
+
+      console.log('[period compare] local summary', localSummary);
+      console.log('[period compare] cloud summary', cloudSummary);
+
+      const diffs =
+        localSummary.exists && cloudSummary.exists
+          ? comparePeriodSummaries(localSummary, cloudSummary)
+          : [];
+      console.log('[period compare] diffs', diffs);
+
+      renderPeriodCompareInfo(pn, localSummary, cloudSummary, diffs, {
+        localParseError
+      });
     }
 
     function applyPeriodDataFromCloud(data, source) {
@@ -17991,6 +18348,17 @@
       }
       requestAnimationFrame(() => loadPeriod(true));
     });
+
+    const comparePeriodBtn = document.getElementById('comparePeriodBtn');
+    if (comparePeriodBtn) {
+      comparePeriodBtn.addEventListener('click', () => {
+        const inp = getElementByIdDeep('periodInput');
+        if (inp && document.activeElement === inp) {
+          inp.blur();
+        }
+        requestAnimationFrame(() => compareLocalAndCloudPeriod());
+      });
+    }
 
     const deleteCloudPeriodBtn = document.getElementById('deleteCloudPeriodBtn');
     if (deleteCloudPeriodBtn) {

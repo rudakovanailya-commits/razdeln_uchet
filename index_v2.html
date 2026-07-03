@@ -8185,7 +8185,7 @@
         statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
       }
       alert(CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING);
-      updateLastLoadedPeriodSnapshot(collectData());
+      updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
       return true;
     }
 
@@ -8228,7 +8228,7 @@
 
           applyPeriodDataFromCloud(data, 'Google Sheets period_data');
           setCloudPeriodVersionMeta(normalizeCloudPeriodVersionMeta(result, period));
-          updateLastLoadedPeriodSnapshot(collectData());
+          updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
           if (statusEl) {
             statusEl.textContent =
               'Загружена полная копия периода ' +
@@ -8523,18 +8523,73 @@
       }
     }
 
+    function deepClonePeriodData(data) {
+      return clonePeriodDataSnapshot(data);
+    }
+
     function updateLastLoadedPeriodSnapshot(data) {
       const snap = data != null ? data : collectData();
-      lastLoadedPeriodSnapshot = clonePeriodDataSnapshot(snap);
+      lastLoadedPeriodSnapshot = deepClonePeriodData(snap);
+    }
+
+    function getOrderRowDisplayName(row, idx) {
+      if (!row) return 'строка ' + (idx + 1);
+      const name = String(
+        row.order != null
+          ? row.order
+          : row.orderName != null
+            ? row.orderName
+            : row.contract != null
+              ? row.contract
+              : row.name != null
+                ? row.name
+                : ''
+      ).trim();
+      return name || 'строка ' + (idx + 1);
+    }
+
+    function extractOrderRowCompareFields(row) {
+      if (!row) {
+        const empty = {};
+        ORDER_COMPARE_ROW_FIELDS.forEach(key => {
+          empty[key] = '';
+        });
+        return empty;
+      }
+      const out = {};
+      ORDER_COMPARE_ROW_FIELDS.forEach(key => {
+        out[key] = row[key] != null ? row[key] : '';
+      });
+      if (orderRowCompareValuesEqual(out.salary, '') && row.salaryTotal != null) {
+        out.salary = row.salaryTotal;
+      }
+      if (orderRowCompareValuesEqual(out.salary, '') && row.wages != null) {
+        out.salary = row.wages;
+      }
+      if (!String(out.order || '').trim() && row.orderName != null) {
+        out.order = row.orderName;
+      }
+      return out;
+    }
+
+    function getChangedOrderRowFieldNames(beforeFields, afterFields) {
+      const changed = [];
+      ORDER_COMPARE_ROW_FIELDS.forEach(key => {
+        if (!orderRowCompareValuesEqual(beforeFields[key], afterFields[key])) {
+          changed.push(key);
+        }
+      });
+      return changed;
     }
 
     function isOrderRowDataNonEmpty(row) {
       if (!row) return false;
-      if (String(row.order || '').trim()) return true;
+      const fields = extractOrderRowCompareFields(row);
+      if (String(fields.order || '').trim()) return true;
       for (let i = 0; i < ORDER_COMPARE_ROW_FIELDS.length; i++) {
         const key = ORDER_COMPARE_ROW_FIELDS[i];
         if (key === 'order') continue;
-        const v = row[key];
+        const v = fields[key];
         if (key === 'manualWriteoff') {
           if (v != null && String(v).trim() !== '') return true;
           continue;
@@ -8560,42 +8615,8 @@
       return normalizeOrderRowCompareValue(a) === normalizeOrderRowCompareValue(b);
     }
 
-    function extractOrderRowCompareFields(row) {
-      const out = {};
-      ORDER_COMPARE_ROW_FIELDS.forEach(key => {
-        out[key] = row && row[key] != null ? row[key] : '';
-      });
-      return out;
-    }
-
     function orderRowsComparableEqual(beforeFields, afterFields) {
-      for (let i = 0; i < ORDER_COMPARE_ROW_FIELDS.length; i++) {
-        const key = ORDER_COMPARE_ROW_FIELDS[i];
-        if (key === 'order') continue;
-        if (!orderRowCompareValuesEqual(beforeFields[key], afterFields[key])) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    function buildOrderRowMapFromPeriodData(data) {
-      const rows = Array.isArray(data && data.rows) ? data.rows : [];
-      const map = new Map();
-      const nameCount = {};
-      rows.forEach((row, idx) => {
-        if (!isOrderRowDataNonEmpty(row)) return;
-        const displayName = String(row.order || '').trim() || 'строка ' + (idx + 1);
-        const baseKey = String(row.order || '').trim() || '__row_' + idx;
-        const count = (nameCount[baseKey] || 0) + 1;
-        nameCount[baseKey] = count;
-        const key = count > 1 ? baseKey + '#' + count : baseKey;
-        map.set(key, {
-          displayName,
-          fields: extractOrderRowCompareFields(row)
-        });
-      });
-      return map;
+      return getChangedOrderRowFieldNames(beforeFields, afterFields).length === 0;
     }
 
     function formatOrderNamesList(names, maxShow) {
@@ -8616,51 +8637,73 @@
     function buildChangedOrdersSummary(beforeData, afterData) {
       if (!beforeData) return 'нет исходного снимка для сравнения';
 
-      const beforeMap = buildOrderRowMapFromPeriodData(beforeData);
-      const afterMap = buildOrderRowMapFromPeriodData(afterData);
+      const beforeRows = Array.isArray(beforeData.rows) ? beforeData.rows : [];
+      const afterRows = Array.isArray(afterData.rows) ? afterData.rows : [];
+      const maxLen = Math.max(beforeRows.length, afterRows.length);
       const added = [];
       const removed = [];
       const changed = [];
 
-      afterMap.forEach((afterRow, key) => {
-        const beforeRow = beforeMap.get(key);
-        if (!beforeRow) {
-          added.push(afterRow.displayName);
-        } else if (!orderRowsComparableEqual(beforeRow.fields, afterRow.fields)) {
-          changed.push(afterRow.displayName);
-        }
-      });
+      for (let i = 0; i < maxLen; i++) {
+        const beforeRow = beforeRows[i];
+        const afterRow = afterRows[i];
+        const beforeEmpty = !isOrderRowDataNonEmpty(beforeRow);
+        const afterEmpty = !isOrderRowDataNonEmpty(afterRow);
 
-      beforeMap.forEach((beforeRow, key) => {
-        if (!afterMap.has(key)) {
-          removed.push(beforeRow.displayName);
-        }
-      });
+        if (beforeEmpty && afterEmpty) continue;
 
+        if (beforeEmpty && !afterEmpty) {
+          added.push(getOrderRowDisplayName(afterRow, i));
+          continue;
+        }
+
+        if (!beforeEmpty && afterEmpty) {
+          removed.push(getOrderRowDisplayName(beforeRow, i));
+          continue;
+        }
+
+        const beforeFields = extractOrderRowCompareFields(beforeRow);
+        const afterFields = extractOrderRowCompareFields(afterRow);
+        const changedFields = getChangedOrderRowFieldNames(beforeFields, afterFields);
+
+        if (changedFields.length) {
+          const displayName =
+            getOrderRowDisplayName(afterRow, i) || getOrderRowDisplayName(beforeRow, i);
+          changed.push(displayName);
+          console.log('[changed orders] before row', beforeRow);
+          console.log('[changed orders] after row', afterRow);
+          console.log('[changed orders] changed fields', changedFields);
+        }
+      }
+
+      let summary;
       if (!added.length && !removed.length && !changed.length) {
-        return 'изменений не обнаружено';
+        summary = 'изменений не обнаружено';
+      } else {
+        const parts = [];
+        if (added.length === 1) {
+          parts.push('Добавлен договор: ' + added[0]);
+        } else if (added.length > 1) {
+          parts.push('Добавлены: ' + formatOrderNamesList(added));
+        }
+
+        if (removed.length === 1) {
+          parts.push('Удалён договор: ' + removed[0]);
+        } else if (removed.length > 1) {
+          parts.push('Удалены: ' + formatOrderNamesList(removed));
+        }
+
+        if (changed.length === 1) {
+          parts.push('Изменения в договоре: ' + changed[0]);
+        } else if (changed.length > 1) {
+          parts.push('Изменения в договорах: ' + formatOrderNamesList(changed));
+        }
+
+        summary = parts.join('; ');
       }
 
-      const parts = [];
-      if (added.length === 1) {
-        parts.push('Добавлен договор: ' + added[0]);
-      } else if (added.length > 1) {
-        parts.push('Добавлены: ' + formatOrderNamesList(added));
-      }
-
-      if (removed.length === 1) {
-        parts.push('Удалён договор: ' + removed[0]);
-      } else if (removed.length > 1) {
-        parts.push('Удалены: ' + formatOrderNamesList(removed));
-      }
-
-      if (changed.length === 1) {
-        parts.push('Изменения в договоре: ' + changed[0]);
-      } else if (changed.length > 1) {
-        parts.push('Изменения в договорах: ' + formatOrderNamesList(changed));
-      }
-
-      return parts.join('; ');
+      console.log('[changed orders] summary', summary);
+      return summary;
     }
 
     function applyData(data) {
@@ -8813,8 +8856,12 @@
       }
 
       const beforeSnapshot = lastLoadedPeriodSnapshot;
-      const data = collectData();
-      localStorage.setItem(getStorageKey(period), JSON.stringify(data));
+      const currentData = collectData();
+      const changeDetails = logAction
+        ? buildChangedOrdersSummary(beforeSnapshot, currentData)
+        : '';
+
+      localStorage.setItem(getStorageKey(period), JSON.stringify(currentData));
       updatePeriodList();
       populateOrderSelect();
 
@@ -8836,12 +8883,11 @@
           action: 'save_local',
           status: 'ok',
           period,
-          rows_count: Array.isArray(data.rows) ? data.rows.length : '',
-          details: buildChangedOrdersSummary(beforeSnapshot, data)
+          rows_count: Array.isArray(currentData.rows) ? currentData.rows.length : '',
+          details: changeDetails
         });
+        updateLastLoadedPeriodSnapshot(currentData);
       }
-
-      updateLastLoadedPeriodSnapshot(data);
 
       return true;
     }
@@ -8907,7 +8953,7 @@
       updatePeriodList();
       if (selectEl) selectEl.value = period;
       markLoadedPeriodOnScreen(period);
-      updateLastLoadedPeriodSnapshot(collectData());
+      updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
       recordUserAction({
         action: 'load_local',
         status: 'ok',
@@ -9909,6 +9955,8 @@
 
       try {
         flushPeriodStateFromDomBeforeSave();
+        const currentData = collectData();
+        const changeDetails = buildChangedOrdersSummary(beforeSnapshot, currentData);
 
         const rows = getCloudPayloadRows(period);
         console.log('[v2 cloud] saveToCloudV2 uses getCloudPayloadRows, count:', rows.length);
@@ -9973,15 +10021,14 @@
         offerMarkPeriodsSyncedAfterCloudSend([period]);
         await fetchCloudPeriodDataList();
         updatePeriodList();
-        const afterData = collectData();
         recordUserAction({
           action: 'save_google',
           status: 'ok',
           period,
           rows_count: check.rows.length,
-          details: buildChangedOrdersSummary(beforeSnapshot, afterData)
+          details: changeDetails
         });
-        updateLastLoadedPeriodSnapshot(afterData);
+        updateLastLoadedPeriodSnapshot(currentData);
       } catch (err) {
         console.error('[v2 cloud] saveToCloud error:', err);
         if (statusEl) statusEl.textContent = '';

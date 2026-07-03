@@ -2479,6 +2479,7 @@
           <button id="loadCloudBtn" type="button" class="secondary">Загрузить из Google Sheets</button>
           <span class="help-toggle" data-help-id="helpLoadCloud">ⓘ Что это?</span>
           <button id="comparePeriodBtn" type="button" class="secondary">Сравнить локально и Google</button>
+          <button id="hidePeriodCompareBtn" type="button" class="secondary" hidden disabled>Скрыть сравнение</button>
         </div>
 
         <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
@@ -8014,6 +8015,28 @@
       }
     }
 
+    function updateHidePeriodCompareBtnUi() {
+      const btn = document.getElementById('hidePeriodCompareBtn');
+      const infoEl = document.getElementById('periodCompareInfo');
+      if (!btn) return;
+      const visible = !!(infoEl && !infoEl.hidden);
+      btn.hidden = !visible;
+      btn.disabled = !visible;
+    }
+
+    function hidePeriodCompareInfo() {
+      const el = document.getElementById('periodCompareInfo');
+      if (el) {
+        el.hidden = true;
+        el.innerHTML = '';
+        el.textContent = '';
+        el.style.color = '';
+        el.style.background = '';
+        el.style.border = '';
+      }
+      updateHidePeriodCompareBtnUi();
+    }
+
     function renderPeriodCompareInfo(period, localSummary, cloudSummary, diffs, options) {
       const el = document.getElementById('periodCompareInfo');
       if (!el) return;
@@ -8088,6 +8111,7 @@
       setPeriodCompareInfoStyle(el, styleKind);
       el.innerHTML = html;
       el.hidden = false;
+      updateHidePeriodCompareBtnUi();
     }
 
     async function compareLocalAndCloudPeriod() {
@@ -8105,6 +8129,7 @@
         infoEl.hidden = false;
         setPeriodCompareInfoStyle(infoEl, 'pending');
         infoEl.textContent = 'Сравнение периода ' + pn + '…';
+        updateHidePeriodCompareBtnUi();
       }
 
       const localRaw = readLocalPeriodDataForCompare(pn);
@@ -8273,6 +8298,7 @@
     }
 
     async function loadPeriodFromCloudV2() {
+      hidePeriodCompareInfo();
       console.log('[v2 cloud load] loadPeriodFromCloudV2() called');
 
       const period = getCurrentPeriod();
@@ -9016,6 +9042,7 @@
     }
 
     function loadPeriod(showAlert = true) {
+      hidePeriodCompareInfo();
       const period = getCurrentPeriod();
       clearCloudPeriodVersionMeta();
 
@@ -10233,6 +10260,7 @@
     }
 
     function clearAll(internalOnly) {
+      hidePeriodCompareInfo();
       if (isPeriodFinal()) {
         alert(
           'Закрытый период нельзя очистить. Сначала верните период в работу.'
@@ -19271,6 +19299,13 @@
       });
     }
 
+    const hidePeriodCompareBtn = document.getElementById('hidePeriodCompareBtn');
+    if (hidePeriodCompareBtn) {
+      hidePeriodCompareBtn.addEventListener('click', () => {
+        hidePeriodCompareInfo();
+      });
+    }
+
     const deleteCloudPeriodBtn = document.getElementById('deleteCloudPeriodBtn');
     if (deleteCloudPeriodBtn) {
       deleteCloudPeriodBtn.addEventListener('click', () => {
@@ -19380,6 +19415,7 @@
     const periodInputEl = getElementByIdDeep('periodInput');
     if (periodSelectEl) {
       periodSelectEl.addEventListener('change', e => {
+        hidePeriodCompareInfo();
         const inputEl = getElementByIdDeep('periodInput');
         const val = normalizePeriodStr(e.target.value);
         if (inputEl) inputEl.value = val;
@@ -19394,6 +19430,7 @@
     }
     if (periodInputEl) {
       periodInputEl.addEventListener('input', () => {
+        hidePeriodCompareInfo();
         updatePeriodList();
         updateMgmtOrdersScopeUi();
       });
@@ -19420,6 +19457,7 @@
     setupOrdersTableTabs();
     setupTransfersPanel();
     setupPeriodSummaryToggle();
+    updateHidePeriodCompareBtnUi();
     (async function initFromCloud() {
       updatePeriodList();
       try {

@@ -61,6 +61,22 @@ var PERIOD_DATA_HEADERS = [
   'format_version'
 ];
 
+var ACTION_LOG_SHEET_NAME = '_action_log';
+var ACTION_LOG_HEADERS = [
+  'timestamp',
+  'period',
+  'action',
+  'status',
+  'user_name',
+  'device_id',
+  'source',
+  'details',
+  'rows_count',
+  'browser',
+  'timezone',
+  'app_version'
+];
+
 function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON
@@ -178,6 +194,103 @@ function getPeriodDataRow(periodParam) {
   }
 
   return latest;
+}
+
+/** Список периодов из period_data (последняя версия по updated_at на период). */
+function getPeriodDataList() {
+  var sheet = getPeriodDataSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return { ok: true, periods: [] };
+  }
+
+  var n = PERIOD_DATA_HEADERS.length;
+  var values = sheet.getRange(2, 1, lastRow, n).getValues();
+  var byPeriod = {};
+
+  for (var r = 0; r < values.length; r++) {
+    var rowPeriod = normalizePeriodCell(values[r][0]);
+    if (!/^\d{4}-\d{2}$/.test(rowPeriod)) continue;
+    var json = values[r][1] != null ? String(values[r][1]) : '';
+    if (!json) continue;
+    var updatedAt = values[r][2] != null ? String(values[r][2]) : '';
+    var candidate = {
+      period: rowPeriod,
+      updated_at: updatedAt,
+      updated_by: values[r][3] != null ? String(values[r][3]) : '',
+      format_version:
+        values[r][4] != null && values[r][4] !== '' ? String(values[r][4]) : ''
+    };
+    var prev = byPeriod[rowPeriod];
+    if (!prev || String(updatedAt) >= String(prev.updated_at)) {
+      byPeriod[rowPeriod] = candidate;
+    }
+  }
+
+  var periods = Object.keys(byPeriod)
+    .sort()
+    .map(function (k) {
+      return byPeriod[k];
+    });
+
+  return { ok: true, periods: periods };
+}
+
+function getActionLogSheet() {
+  var ss = getDataSpreadsheet();
+  var sh = ss.getSheetByName(ACTION_LOG_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(ACTION_LOG_SHEET_NAME);
+  }
+  ensureActionLogHeaders(sh);
+  return sh;
+}
+
+function ensureActionLogHeaders(sheet) {
+  if (!sheet) return;
+  var n = ACTION_LOG_HEADERS.length;
+  var lastCol = Math.max(sheet.getLastColumn(), n);
+  var headerRow =
+    lastCol >= n
+      ? sheet.getRange(1, 1, 1, n).getValues()[0]
+      : [];
+  var needsHeader = sheet.getLastRow() < 1;
+  if (!needsHeader && headerRow.length >= n) {
+    for (var i = 0; i < n; i++) {
+      if (
+        String(headerRow[i] || '')
+          .trim()
+          .toLowerCase() !== ACTION_LOG_HEADERS[i]
+      ) {
+        needsHeader = true;
+        break;
+      }
+    }
+  }
+  if (needsHeader) {
+    sheet.getRange(1, 1, 1, n).setValues([ACTION_LOG_HEADERS]);
+  }
+}
+
+function appendActionLogEntry(logEntry) {
+  var e = logEntry || {};
+  var sheet = getActionLogSheet();
+  var row = [
+    e.timestamp != null ? String(e.timestamp) : new Date().toISOString(),
+    e.period != null ? String(e.period) : '',
+    e.action != null ? String(e.action) : '',
+    e.status != null ? String(e.status) : '',
+    e.user_name != null ? String(e.user_name) : '',
+    e.device_id != null ? String(e.device_id) : '',
+    e.source != null ? String(e.source) : '',
+    e.details != null ? String(e.details) : '',
+    e.rows_count != null && e.rows_count !== '' ? String(e.rows_count) : '',
+    e.browser != null ? String(e.browser) : '',
+    e.timezone != null ? String(e.timezone) : '',
+    e.app_version != null ? String(e.app_version) : ''
+  ];
+  sheet.appendRow(row);
+  return jsonOut({ ok: true });
 }
 
 function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
@@ -533,10 +646,27 @@ function doGet(e) {
     }
   }
 
+  if (action === 'getPeriodDataList') {
+    try {
+      return jsonOut(getPeriodDataList());
+    } catch (err) {
+      var pdlMsg = String(err.message || err);
+      var pdlStack = String(err.stack || '');
+      Logger.log(pdlStack || pdlMsg);
+      writeDebugLog('doGet getPeriodDataList failed', {
+        action: 'doGet',
+        error: pdlMsg,
+        stack: pdlStack
+      });
+      return jsonOut({ ok: false, error: pdlMsg, stack: pdlStack });
+    }
+  }
+
   if (action !== 'getRows') {
     return jsonOut({
       ok: true,
-      hint: 'Supported actions: getRows, getPeriodData, debugLastError, getLog'
+      hint:
+        'Supported actions: getRows, getPeriodData, getPeriodDataList, debugLastError, getLog'
     });
   }
 
@@ -1015,6 +1145,10 @@ function doPost(e) {
         periodData.updated_by,
         periodData.format_version
       );
+    }
+
+    if (body && body.action === 'appendActionLog') {
+      return appendActionLogEntry(body.logEntry || body);
     }
 
     if (body && body.action === 'upsert' && Array.isArray(body.rows)) {

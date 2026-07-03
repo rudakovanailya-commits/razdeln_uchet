@@ -2527,6 +2527,31 @@
       <div class="hint" id="periodCompareInfo" hidden style="margin-top: 8px; padding: 8px 10px; border-radius: 6px;"></div>
     </div>
 
+    <div class="card" id="actionLogCard">
+      <h2>Журнал действий</h2>
+      <div id="actionLogUserPanel" style="margin-bottom: 10px;"></div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+        <button id="toggleActionLogBtn" type="button" class="secondary">Показать журнал</button>
+        <button id="clearActionLogBtn" type="button" class="secondary">Очистить локальный журнал</button>
+      </div>
+      <div id="actionLogListPanel" hidden style="max-height: 280px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+        <table id="actionLogTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr style="background: #f8fafc; text-align: left;">
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Время</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Период</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Действие</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Статус</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Пользователь</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Устройство</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Детали</th>
+            </tr>
+          </thead>
+          <tbody id="actionLogTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card" id="wipChainStatusCard">
       <h2>Контроль цепочки НЗП <span class="help-toggle" data-help-id="helpWipChain">ⓘ Что это?</span></h2>
       <div class="help-panel" id="helpWipChain" hidden>
@@ -6450,6 +6475,294 @@
     const WORKING_PERIOD_MAX = '2035-12';
     const BLOCKED_PERIOD_IDS = ['TEST-9999', '9999-01'];
     const LOCAL_PERIOD_STORAGE_PREFIX = 'razdelny_uchet_';
+    const ACTION_LOG_USER_NAME_KEY = 'razdelny_uchet_v2_user_name';
+    const ACTION_LOG_DEVICE_ID_KEY = 'razdelny_uchet_v2_device_id';
+    const ACTION_LOG_STORAGE_KEY = 'razdelny_uchet_v2_action_log';
+    const ACTION_LOG_MAX_ENTRIES = 50;
+    const ACTION_LOG_APP_VERSION = 'v2';
+
+    const CLOUD_ACTION_LOG_ACTIONS = new Set([
+      'load_google',
+      'save_google',
+      'compare_local_google',
+      'delete_cloud',
+      'google_error'
+    ]);
+
+    function ensureActionLogDeviceId() {
+      let id = localStorage.getItem(ACTION_LOG_DEVICE_ID_KEY);
+      if (!id) {
+        const suffix = Math.random().toString(36).slice(2, 10);
+        id = 'device_' + suffix;
+        localStorage.setItem(ACTION_LOG_DEVICE_ID_KEY, id);
+      }
+      return id;
+    }
+
+    function getActionLogUserName() {
+      const name = localStorage.getItem(ACTION_LOG_USER_NAME_KEY);
+      return name ? String(name).trim() : '';
+    }
+
+    function setActionLogUserName(name) {
+      const trimmed = String(name || '').trim();
+      if (!trimmed) return false;
+      localStorage.setItem(ACTION_LOG_USER_NAME_KEY, trimmed);
+      updateActionLogUserUi();
+      return true;
+    }
+
+    function getClientIdentity() {
+      return {
+        user_name: getActionLogUserName(),
+        device_id: ensureActionLogDeviceId(),
+        browser: navigator.userAgent || '',
+        timezone:
+          (typeof Intl !== 'undefined' &&
+            Intl.DateTimeFormat &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+          '',
+        app_version: ACTION_LOG_APP_VERSION
+      };
+    }
+
+    function loadLocalActionLogEntries() {
+      try {
+        const raw = localStorage.getItem(ACTION_LOG_STORAGE_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLocalActionLogEntries(entries) {
+      const list = Array.isArray(entries) ? entries.slice(0, ACTION_LOG_MAX_ENTRIES) : [];
+      localStorage.setItem(ACTION_LOG_STORAGE_KEY, JSON.stringify(list));
+    }
+
+    function formatActionLogTimestamp(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return String(ts);
+      return d.toLocaleString('ru-RU');
+    }
+
+    function buildActionLogEntry(partial) {
+      const identity = getClientIdentity();
+      const period =
+        partial && partial.period != null
+          ? normalizePeriodStr(partial.period)
+          : normalizePeriodStr(getCurrentPeriod());
+      return Object.assign({}, identity, partial || {}, {
+        timestamp: new Date().toISOString(),
+        period: period || '',
+        action: partial && partial.action ? String(partial.action) : '',
+        status: partial && partial.status ? String(partial.status) : 'ok',
+        source:
+          partial && partial.source ? String(partial.source) : 'index_v2',
+        details: partial && partial.details != null ? String(partial.details) : '',
+        rows_count:
+          partial && partial.rows_count != null && partial.rows_count !== ''
+            ? partial.rows_count
+            : ''
+      });
+    }
+
+    function addLocalActionLog(entry) {
+      try {
+        const record = buildActionLogEntry(entry);
+        const entries = loadLocalActionLogEntries();
+        entries.unshift(record);
+        saveLocalActionLogEntries(entries);
+        updateActionLogListUi();
+        return record;
+      } catch (e) {
+        console.warn('[action log] local log failed', e);
+        return null;
+      }
+    }
+
+    function clearLocalActionLog() {
+      localStorage.removeItem(ACTION_LOG_STORAGE_KEY);
+      updateActionLogListUi();
+    }
+
+    function updateActionLogUserUi() {
+      const panel = document.getElementById('actionLogUserPanel');
+      if (!panel) return;
+
+      const userName = getActionLogUserName();
+      const deviceId = ensureActionLogDeviceId();
+
+      if (!userName) {
+        panel.innerHTML =
+          '<div class="field" style="max-width: 420px;">' +
+          '<label for="actionLogUserNameInput">Пользователь журнала</label>' +
+          '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:4px;">' +
+          '<input id="actionLogUserNameInput" type="text" placeholder="Ваше имя" style="flex:1; min-width:180px;">' +
+          '<button id="saveActionLogUserNameBtn" type="button">Сохранить имя</button>' +
+          '</div>' +
+          '<div class="hint" style="margin-top:4px;">Устройство: ' +
+          escapeHtmlForReport(deviceId) +
+          '</div>' +
+          '</div>';
+        const saveBtn = document.getElementById('saveActionLogUserNameBtn');
+        const input = document.getElementById('actionLogUserNameInput');
+        if (saveBtn && input && !saveBtn.dataset.bound) {
+          saveBtn.dataset.bound = '1';
+          saveBtn.addEventListener('click', () => {
+            if (!setActionLogUserName(input.value)) {
+              alert('Введите имя пользователя журнала');
+              return;
+            }
+          });
+          input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') saveBtn.click();
+          });
+        }
+        return;
+      }
+
+      panel.innerHTML =
+        '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">' +
+        '<span>Пользователь журнала: <strong>' +
+        escapeHtmlForReport(userName) +
+        '</strong> | устройство: ' +
+        escapeHtmlForReport(deviceId) +
+        '</span>' +
+        '<button id="changeActionLogUserNameBtn" type="button" class="secondary">Изменить имя</button>' +
+        '</div>' +
+        '<div id="actionLogUserNameEditWrap" hidden style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">' +
+        '<input id="actionLogUserNameEditInput" type="text" value="' +
+        escapeHtmlForReport(userName) +
+        '" style="min-width:180px;">' +
+        '<button id="saveActionLogUserNameEditBtn" type="button">Сохранить имя</button>' +
+        '<button id="cancelActionLogUserNameEditBtn" type="button" class="secondary">Отмена</button>' +
+        '</div>';
+
+      const changeBtn = document.getElementById('changeActionLogUserNameBtn');
+      const editWrap = document.getElementById('actionLogUserNameEditWrap');
+      const editInput = document.getElementById('actionLogUserNameEditInput');
+      const saveEditBtn = document.getElementById('saveActionLogUserNameEditBtn');
+      const cancelEditBtn = document.getElementById('cancelActionLogUserNameEditBtn');
+
+      if (changeBtn && !changeBtn.dataset.bound) {
+        changeBtn.dataset.bound = '1';
+        changeBtn.addEventListener('click', () => {
+          if (editWrap) editWrap.hidden = false;
+          if (editInput) editInput.focus();
+        });
+      }
+      if (saveEditBtn && !saveEditBtn.dataset.bound) {
+        saveEditBtn.dataset.bound = '1';
+        saveEditBtn.addEventListener('click', () => {
+          if (!setActionLogUserName(editInput ? editInput.value : '')) {
+            alert('Введите имя пользователя журнала');
+            return;
+          }
+        });
+      }
+      if (cancelEditBtn && !cancelEditBtn.dataset.bound) {
+        cancelEditBtn.dataset.bound = '1';
+        cancelEditBtn.addEventListener('click', () => {
+          if (editWrap) editWrap.hidden = true;
+          if (editInput) editInput.value = getActionLogUserName();
+        });
+      }
+    }
+
+    function updateActionLogListUi() {
+      const body = document.getElementById('actionLogTableBody');
+      if (!body) return;
+
+      const entries = loadLocalActionLogEntries();
+      if (!entries.length) {
+        body.innerHTML =
+          '<tr><td colspan="7" style="padding:8px; color:#64748b;">Записей пока нет</td></tr>';
+        return;
+      }
+
+      body.innerHTML = entries
+        .map(entry => {
+          return (
+            '<tr>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9; white-space:nowrap;">' +
+            escapeHtmlForReport(formatActionLogTimestamp(entry.timestamp)) +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">' +
+            escapeHtmlForReport(entry.period || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">' +
+            escapeHtmlForReport(entry.action || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">' +
+            escapeHtmlForReport(entry.status || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">' +
+            escapeHtmlForReport(entry.user_name || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">' +
+            escapeHtmlForReport(entry.device_id || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;">' +
+            escapeHtmlForReport(entry.details || '—') +
+            '</td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+    }
+
+    function setupActionLogUi() {
+      ensureActionLogDeviceId();
+      updateActionLogUserUi();
+      updateActionLogListUi();
+
+      const toggleBtn = document.getElementById('toggleActionLogBtn');
+      const listPanel = document.getElementById('actionLogListPanel');
+      if (toggleBtn && listPanel && !toggleBtn.dataset.bound) {
+        toggleBtn.dataset.bound = '1';
+        toggleBtn.addEventListener('click', () => {
+          const show = listPanel.hidden;
+          listPanel.hidden = !show;
+          toggleBtn.textContent = show ? 'Скрыть журнал' : 'Показать журнал';
+        });
+      }
+
+      const clearBtn = document.getElementById('clearActionLogBtn');
+      if (clearBtn && !clearBtn.dataset.bound) {
+        clearBtn.dataset.bound = '1';
+        clearBtn.addEventListener('click', () => {
+          const ok = confirm('Очистить локальный журнал действий?');
+          if (!ok) return;
+          clearLocalActionLog();
+        });
+      }
+    }
+
+    function recordUserAction(partial) {
+      const entry = addLocalActionLog(partial);
+      if (entry && CLOUD_ACTION_LOG_ACTIONS.has(entry.action)) {
+        appendCloudActionLog(entry);
+      }
+      return entry;
+    }
+
+    function parsePeriodDataRowsCount(data) {
+      if (!data) return '';
+      try {
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        return Array.isArray(parsed.rows) ? parsed.rows.length : '';
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function parsePeriodDataRowsCountFromObject(data) {
+      return data && Array.isArray(data.rows) ? data.rows.length : '';
+    }
 
     function parsePeriodYm(period) {
       const p = normalizePeriodStr(period);
@@ -6856,6 +7169,13 @@
       alert(msg);
 
       autoCheckWipChainAfterPeriodChange(period, { showAlert: true });
+      recordUserAction({
+        action: 'close_period',
+        status: 'ok',
+        period,
+        rows_count: getRows().length,
+        details: 'Период закрыт локально'
+      });
     }
 
     function collectRowData(tr) {
@@ -7714,6 +8034,29 @@
       renderPeriodCompareInfo(pn, localSummary, cloudSummary, diffs, {
         localParseError
       });
+
+      const diffDetails = localParseError
+        ? 'локальные данные повреждены'
+        : !localSummary.exists && !cloudSummary.exists
+          ? 'обе версии отсутствуют'
+          : !localSummary.exists
+            ? 'только облачная версия'
+            : !cloudSummary.exists
+              ? 'только локальная версия'
+              : diffs.length
+                ? 'отличий: ' + diffs.length
+                : 'совпадают';
+      recordUserAction({
+        action: 'compare_local_google',
+        status: localParseError || (!localSummary.exists && !cloudSummary.exists) ? 'error' : diffs.length ? 'warn' : 'ok',
+        period: pn,
+        rows_count: localSummary.exists
+          ? localSummary.rowCount
+          : cloudSummary.exists
+            ? cloudSummary.rowCount
+            : '',
+        details: diffDetails
+      });
     }
 
     function applyPeriodDataFromCloud(data, source) {
@@ -7843,6 +8186,12 @@
             alert(
               'В period_data найден JSON, но его не удалось разобрать. Проверьте Console.'
             );
+            recordUserAction({
+              action: 'google_error',
+              status: 'error',
+              period,
+              details: 'parsePeriodDataFromCloud failed'
+            });
             return;
           }
 
@@ -7855,6 +8204,13 @@
               ' из Google Sheets';
           }
           alert('Загружена полная копия периода из Google Sheets.');
+          recordUserAction({
+            action: 'load_google',
+            status: 'ok',
+            period,
+            rows_count: parsePeriodDataRowsCountFromObject(data),
+            details: 'period_data'
+          });
           return;
         }
 
@@ -7862,13 +8218,35 @@
           console.warn('[v2 cloud load] getPeriodData error', result.error || 'not_found');
         }
 
-        await loadPeriodFromCloudLegacyFlat(period, statusEl);
+        const legacyLoaded = await loadPeriodFromCloudLegacyFlat(period, statusEl);
+        if (legacyLoaded) {
+          recordUserAction({
+            action: 'load_google',
+            status: 'ok',
+            period,
+            rows_count: getRows().length,
+            details: 'legacy flat Лист1'
+          });
+        } else {
+          recordUserAction({
+            action: 'load_google',
+            status: 'error',
+            period,
+            details: 'облачная копия не найдена'
+          });
+        }
       } catch (err) {
         console.error('[v2 cloud load] failed', err);
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось загрузить из облака: ' + (err && err.message ? err.message : String(err))
         );
+        recordUserAction({
+          action: 'google_error',
+          status: 'error',
+          period,
+          details: err && err.message ? err.message : String(err)
+        });
       }
     }
 
@@ -8229,6 +8607,12 @@
             'Вы пытаетесь сохранить пустой период поверх существующих данных. Это может удалить все строки периода. Сохранение отменено.'
           );
         }
+        recordUserAction({
+          action: 'warning',
+          status: 'warn',
+          period,
+          details: 'blocked saving empty period over existing local data'
+        });
         return false;
       }
 
@@ -8249,6 +8633,14 @@
           showAlert: options.wipChainShowAlert !== false
         });
       }
+
+      recordUserAction({
+        action: 'save_local',
+        status: 'ok',
+        period,
+        rows_count: Array.isArray(data.rows) ? data.rows.length : '',
+        details: showAlert ? 'ручное сохранение' : allowFinal ? 'закрытие периода' : 'автосохранение'
+      });
 
       return true;
     }
@@ -8278,6 +8670,14 @@
             alert('Нет данных за этот период');
           }
         }
+        recordUserAction({
+          action: 'load_local',
+          status: 'error',
+          period,
+          details: getPeriodSourceKind(period) === 'cloud'
+            ? 'локальная версия не найдена'
+            : 'нет данных за период'
+        });
         setPeriodStatus('draft');
         applyPeriodEditMode();
         markLoadedPeriodOnScreen(period);
@@ -8289,6 +8689,12 @@
         data = JSON.parse(raw);
       } catch (e) {
         if (showAlert) alert('Повреждённые данные в хранилище за период ' + period);
+        recordUserAction({
+          action: 'error',
+          status: 'error',
+          period,
+          details: 'повреждённые локальные данные'
+        });
         return;
       }
 
@@ -8300,6 +8706,13 @@
       updatePeriodList();
       if (selectEl) selectEl.value = period;
       markLoadedPeriodOnScreen(period);
+      recordUserAction({
+        action: 'load_local',
+        status: 'ok',
+        period,
+        rows_count: parsePeriodDataRowsCountFromObject(data),
+        details: 'загружено из localStorage'
+      });
     }
 
     let uiCloudPeriodList = [];
@@ -8636,6 +9049,34 @@
       return data;
     }
 
+    async function appendCloudActionLog(entry) {
+      try {
+        const logEntry = Object.assign({}, entry || {}, {
+          timestamp: (entry && entry.timestamp) || new Date().toISOString(),
+          source: (entry && entry.source) || 'index_v2'
+        });
+        const data = await postCloudJsonRequest(CLOUD_SAVE_URL, {
+          action: 'appendActionLog',
+          logEntry: logEntry
+        });
+        if (!data || !data.ok) {
+          throw new Error((data && data.error) || 'appendActionLog failed');
+        }
+        return true;
+      } catch (e) {
+        console.warn('[action log] cloud log failed', e);
+        addLocalActionLog({
+          action: 'warning',
+          status: 'warn',
+          period: entry && entry.period ? entry.period : getCurrentPeriod(),
+          details:
+            'Не удалось отправить запись в облачный журнал: ' +
+            (e && e.message ? e.message : String(e))
+        });
+        return false;
+      }
+    }
+
     function formatCloudSaveSentMessage(period) {
       return (
         'Запрос на сохранение периода ' +
@@ -8966,12 +9407,25 @@
           statusEl.textContent = 'Из Google Sheets удалено строк: ' + deleted;
         }
         alert('Из Google Sheets удалено строк: ' + deleted);
+        recordUserAction({
+          action: 'delete_cloud',
+          status: 'ok',
+          period: pn,
+          rows_count: deleted,
+          details: 'удалено из Google Sheets'
+        });
       } catch (err) {
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось удалить из Google Sheets: ' +
             (err && err.message ? err.message : String(err))
         );
+        recordUserAction({
+          action: 'google_error',
+          status: 'error',
+          period,
+          details: 'delete_cloud: ' + (err && err.message ? err.message : String(err))
+        });
       }
     }
 
@@ -9315,6 +9769,13 @@
         offerMarkPeriodsSyncedAfterCloudSend([period]);
         await fetchCloudPeriodDataList();
         updatePeriodList();
+        recordUserAction({
+          action: 'save_google',
+          status: 'ok',
+          period,
+          rows_count: check.rows.length,
+          details: periodDataNote ? 'Лист1 + period_data' : 'Лист1'
+        });
       } catch (err) {
         console.error('[v2 cloud] saveToCloud error:', err);
         if (statusEl) statusEl.textContent = '';
@@ -9322,6 +9783,12 @@
           'Не удалось сохранить в Google Sheets: ' +
             (err && err.message ? err.message : String(err))
         );
+        recordUserAction({
+          action: 'google_error',
+          status: 'error',
+          period,
+          details: 'save_google: ' + (err && err.message ? err.message : String(err))
+        });
       }
     }
 
@@ -9367,6 +9834,12 @@
         alert(
           'Экран очищен. Сохранённый локальный период не изменён. Чтобы удалить период, используйте отдельную кнопку удаления.'
         );
+        recordUserAction({
+          action: 'clear_screen',
+          status: 'ok',
+          period: getCurrentPeriod(),
+          details: 'экран очищен, localStorage не изменён'
+        });
       }
     }
 
@@ -18502,6 +18975,7 @@
 
     refreshAllGlobalNums();
     setupPeriodMonthInputs();
+    setupActionLogUi();
     updateUnsyncedCloudWarningUI();
     updatePeriodStatusUI();
     setupOrderNameTooltipHandlers();

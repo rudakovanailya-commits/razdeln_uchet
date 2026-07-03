@@ -10906,13 +10906,14 @@
 <div class="order-card-compact-wrap"><table class="order-card-compact" id="orderReportTable">
 <tr>
 <th>Месяц</th>
-<th>Отгрузка</th>
+<th>Отгрузка с НДС</th>
+<th>Отгрузка без НДС</th>
 <th>Списано всего</th>
 <th>Списано с 26</th>
 <th>Списано с 20</th>
 <th>НЗП конец 20</th>
-<th>НЗП конец</th>
 <th>Прибыль</th>
+<th>Маржа %</th>
 </tr>
 `;
 
@@ -10922,24 +10923,26 @@
           '<td>' +
           escapeHtmlForReport(r.period) +
           '</td>' +
-          orderCardExportNumCell(r.shipment) +
+          orderCardExportNumCell(r.shipmentVat) +
+          orderCardExportNumCell(r.shipmentNoVat) +
           orderCardExportNumCell(r.writeoffTotal) +
           orderCardExportNumCell(r.writeoff26) +
           orderCardExportNumCell(r.writeoff20) +
           orderCardExportNumCell(r.wipEnd20) +
-          orderCardExportNumCell(r.wipEnd26) +
           orderCardExportNumCell(r.profit) +
+          annualSummaryMarginCell(r.marginPct) +
           '</tr>';
       });
 
       if (rows.length && totals) {
         const balanceTitle =
-          'Остаток на конец периода' +
+          'Остаток НЗП конец 20 на последний найденный месяц' +
           (report.endBalancePeriod ? ' (' + report.endBalancePeriod + ')' : '');
         html +=
           '<tr class="order-report-totals-row" style="font-weight:bold;">' +
-          '<td title="Обороты — сумма по месяцам; НЗП — остаток на конец периода">Итого</td>' +
-          orderCardExportNumCell(totals.shipment) +
+          '<td title="Обороты — сумма по месяцам; НЗП конец 20 — остаток на последний месяц">Итого</td>' +
+          orderCardExportNumCell(totals.shipmentVat) +
+          orderCardExportNumCell(totals.shipmentNoVat) +
           orderCardExportNumCell(totals.writeoffTotal) +
           orderCardExportNumCell(totals.writeoff26) +
           orderCardExportNumCell(totals.writeoff20) +
@@ -10950,14 +10953,8 @@
           '">' +
           fmt(totals.wipEnd20) +
           '</td>' +
-          '<td data-export-value="' +
-          num(totals.wipEnd26) +
-          '" title="' +
-          escapeHtmlForReport(balanceTitle) +
-          '">' +
-          fmt(totals.wipEnd26) +
-          '</td>' +
           orderCardExportNumCell(totals.profit) +
+          annualSummaryMarginCell(totals.marginPct) +
           '</tr>';
       }
 
@@ -10965,9 +10962,7 @@
 
       if (rows.length) {
         html +=
-          '<p class="hint order-report-totals-hint">По колонкам «НЗП конец 20» и «НЗП конец» в строке «Итого» показан остаток на конец периода' +
-          (report.endBalancePeriod ? ' (' + escapeHtmlForReport(report.endBalancePeriod) + ')' : '') +
-          ', а не сумма по месяцам.</p>';
+          '<p class="hint order-report-totals-hint">НЗП конец 20 — остаток по 20 счёту на конец периода. В строке «Итого» показан остаток на последний найденный месяц, а не сумма по месяцам.</p>';
       }
 
       return html;
@@ -14504,7 +14499,7 @@
         '</p>';
       html += '<div class="year-summary-table-wrap"><table class="year-summary-table annual-summary-table" id="annualSummaryTable">';
       html +=
-        '<thead><tr><th class="year-summary-col-order">Заказ / расчётная группа</th><th>Отгрузка с НДС</th><th>Отгрузка без НДС</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>НЗП конец</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
+        '<thead><tr><th class="year-summary-col-order">Заказ / расчётная группа</th><th>Отгрузка с НДС</th><th>Отгрузка без НДС</th><th>Списано всего</th><th>Списано с 26</th><th>Списано с 20</th><th>НЗП конец 20</th><th>Прибыль</th><th>Маржа %</th></tr></thead><tbody>';
 
       report.rows.forEach(r => {
         let nameCell = escapeHtmlForReport(r.label);
@@ -14526,7 +14521,6 @@
           orderCardExportNumCell(r.writeoff26) +
           orderCardExportNumCell(r.writeoff20) +
           orderCardExportNumCell(r.wipEnd20) +
-          orderCardExportNumCell(r.wipEnd26) +
           orderCardExportNumCell(r.profit) +
           annualSummaryMarginCell(r.marginPct) +
           '</tr>';
@@ -14541,13 +14535,12 @@
         orderCardExportNumCell(t.writeoff26) +
         orderCardExportNumCell(t.writeoff20) +
         orderCardExportNumCell(t.wipEnd20) +
-        orderCardExportNumCell(t.wipEnd26) +
         orderCardExportNumCell(t.profit) +
         annualSummaryMarginCell(t.marginPct) +
         '</tr>';
       html += '</tbody></table></div>';
       html +=
-        '<p class="hint">НЗП конец 20 и НЗП конец — сумма остатков на конец года по каждой группе (последний месяц присутствия в данных), не сумма по месяцам.</p>';
+        '<p class="hint">НЗП конец 20 — остаток на конец года по каждой группе, не сумма по месяцам.</p>';
       return html;
     }
 
@@ -19681,7 +19674,8 @@
       const periods = Array.from(periodSources.keys()).sort();
 
       const rows = [];
-      let totalShipment = 0;
+      let totalShipmentVat = 0;
+      let totalShipmentNoVat = 0;
       let totalWriteoff = 0;
       let totalWriteoff26 = 0;
       let totalWriteoff20 = 0;
@@ -19704,17 +19698,19 @@
 
         rows.push({
           period,
-          shipment: m.shipmentVat,
+          shipmentVat: m.shipmentVat,
+          shipmentNoVat: m.shipmentNoVat,
           writeoffTotal: m.writeoffTotal,
           writeoff26: m.writeoff26,
           writeoff20: m.writeoff20,
           wipEnd20: m.wipEnd20,
-          wipEnd26: m.wipEnd26,
           profit: m.profit,
+          marginPct: computeAnnualMarginPct(m.profit, m.shipmentNoVat),
           groupName: m.groupName
         });
 
-        totalShipment += m.shipmentVat;
+        totalShipmentVat += m.shipmentVat;
+        totalShipmentNoVat += m.shipmentNoVat;
         totalWriteoff += m.writeoffTotal;
         totalWriteoff26 += m.writeoff26;
         totalWriteoff20 += m.writeoff20;
@@ -19735,13 +19731,14 @@
         endBalancePeriod,
         reportPeriod,
         totals: {
-          shipment: totalShipment,
+          shipmentVat: totalShipmentVat,
+          shipmentNoVat: totalShipmentNoVat,
           writeoffTotal: totalWriteoff,
           writeoff26: totalWriteoff26,
           writeoff20: totalWriteoff20,
           wipEnd20: pickOrderCardEndBalance(rows, 'wipEnd20'),
-          wipEnd26: pickOrderCardEndBalance(rows, 'wipEnd26'),
-          profit: totalProfit
+          profit: totalProfit,
+          marginPct: computeAnnualMarginPct(totalProfit, totalShipmentNoVat)
         }
       };
     }

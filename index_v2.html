@@ -6546,7 +6546,32 @@
       if (!ts) return '—';
       const d = new Date(ts);
       if (isNaN(d.getTime())) return String(ts);
-      return d.toLocaleString('ru-RU');
+      const pad = n => String(n).padStart(2, '0');
+      return (
+        pad(d.getDate()) +
+        '.' +
+        pad(d.getMonth() + 1) +
+        '.' +
+        d.getFullYear() +
+        ' ' +
+        pad(d.getHours()) +
+        ':' +
+        pad(d.getMinutes())
+      );
+    }
+
+    function isDuplicateActionLogEntry(record, previous) {
+      if (!record || !previous) return false;
+      const prevTime = new Date(previous.timestamp).getTime();
+      const now = new Date(record.timestamp).getTime();
+      if (isNaN(prevTime) || isNaN(now) || now - prevTime >= 30000) return false;
+      return (
+        String(previous.period || '') === String(record.period || '') &&
+        String(previous.action || '') === String(record.action || '') &&
+        String(previous.status || '') === String(record.status || '') &&
+        String(previous.user_name || '') === String(record.user_name || '') &&
+        String(previous.device_id || '') === String(record.device_id || '')
+      );
     }
 
     function buildActionLogEntry(partial) {
@@ -6574,6 +6599,10 @@
       try {
         const record = buildActionLogEntry(entry);
         const entries = loadLocalActionLogEntries();
+        if (entries.length && isDuplicateActionLogEntry(record, entries[0])) {
+          console.log('[action log] skipped duplicate action');
+          return null;
+        }
         entries.unshift(record);
         saveLocalActionLogEntries(entries);
         updateActionLogListUi();
@@ -7122,7 +7151,7 @@
 
       const period = getCurrentPeriod();
       if (period) {
-        savePeriod(false);
+        savePeriod(false, { logAction: false });
       }
 
       const statusEl = document.getElementById('periodActionStatus');
@@ -7160,7 +7189,7 @@
       calculateAll();
       setPeriodStatus('final');
       applyPeriodEditMode();
-      savePeriod(false, { allowFinal: true });
+      savePeriod(false, { allowFinal: true, logAction: false });
 
       const msg =
         'Период закрыт и сохранён локально. Чтобы статус закрытия попал в Google Sheets, нажмите «Сохранить в Google Sheets».';
@@ -8569,6 +8598,7 @@
     function savePeriod(showAlert = true, options = {}) {
       const period = getCurrentPeriod();
       const allowFinal = options && options.allowFinal;
+      const logAction = options && options.logAction === true;
 
       if (!period) {
         if (showAlert) {
@@ -8634,13 +8664,15 @@
         });
       }
 
-      recordUserAction({
-        action: 'save_local',
-        status: 'ok',
-        period,
-        rows_count: Array.isArray(data.rows) ? data.rows.length : '',
-        details: showAlert ? 'ручное сохранение' : allowFinal ? 'закрытие периода' : 'автосохранение'
-      });
+      if (logAction) {
+        recordUserAction({
+          action: 'save_local',
+          status: 'ok',
+          period,
+          rows_count: Array.isArray(data.rows) ? data.rows.length : '',
+          details: 'ручное сохранение'
+        });
+      }
 
       return true;
     }
@@ -11127,7 +11159,7 @@
       }
 
       if (confirm('Сохранить период локально?')) {
-        savePeriod(true);
+        savePeriod(true, { logAction: true });
       }
     }
 
@@ -18137,7 +18169,7 @@
       const period = getCurrentPeriod();
       if (!period) return;
       if (isPeriodFinal()) return;
-      savePeriod(false);
+      savePeriod(false, { logAction: false });
     }
 
     // =====================
@@ -18793,7 +18825,7 @@
         inp.blur();
       }
       requestAnimationFrame(() => {
-        const ok = savePeriod(true);
+        const ok = savePeriod(true, { logAction: true });
         if (ok) setUiPeriodDirty(false);
       });
     });

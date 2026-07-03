@@ -4594,6 +4594,85 @@
       return Array.from(ordersBody.querySelectorAll('tr.order-item'));
     }
 
+    let changedOrdersSet = new Set();
+
+    function getOrderNameFromTableRow(tr) {
+      if (!tr) return '';
+      const nameEl = tr.querySelector(
+        'input.order-name, textarea.order-name, select.order-name'
+      );
+      if (nameEl) {
+        const fromOrderField = String(nameEl.value || '').trim();
+        if (fromOrderField) return fromOrderField;
+      }
+      const firstText = tr.querySelector('input[type="text"], textarea');
+      if (firstText) {
+        const fromFirst = String(firstText.value || '').trim();
+        if (fromFirst) return fromFirst;
+      }
+      const rows = getRows();
+      const idx = rows.indexOf(tr);
+      return 'строка №' + (idx >= 0 ? idx + 1 : '?');
+    }
+
+    function logChangedOrdersSet() {
+      console.log('[changed orders set]', Array.from(changedOrdersSet));
+    }
+
+    function clearChangedOrdersSet() {
+      changedOrdersSet.clear();
+      logChangedOrdersSet();
+    }
+
+    function markOrderAsChangedFromElement(el) {
+      if (!el || isPeriodFinal()) return;
+      const tr = el.closest ? el.closest('tr.order-item, tr') : null;
+      if (!tr || !ordersBody.contains(tr)) return;
+      const name = getOrderNameFromTableRow(tr);
+      if (!name) return;
+      changedOrdersSet.add(name);
+      logChangedOrdersSet();
+    }
+
+    function formatChangedOrdersSetDetails() {
+      const names = Array.from(changedOrdersSet)
+        .map(n => String(n || '').trim())
+        .filter(Boolean);
+      if (!names.length) {
+        return 'ручное сохранение, изменений в строках не отмечено';
+      }
+      if (names.length === 1) {
+        return 'Изменения в договоре: ' + names[0];
+      }
+      const maxShow = 5;
+      if (names.length <= maxShow) {
+        return 'Изменения в договорах: ' + names.join('; ');
+      }
+      return (
+        'Изменения в договорах: ' +
+        names.slice(0, maxShow).join('; ') +
+        '; ещё ' +
+        (names.length - maxShow)
+      );
+    }
+
+    function setupChangedOrdersTracking() {
+      if (!ordersBody || ordersBody.dataset.changedOrdersBound) return;
+      ordersBody.dataset.changedOrdersBound = '1';
+
+      function onOrdersTableEdit(e) {
+        const t = e.target;
+        if (!t || !t.matches) return;
+        if (!t.matches('input, textarea, select')) return;
+        const tr = t.closest('tr.order-item, tr');
+        if (!tr || !ordersBody.contains(tr)) return;
+        markOrderAsChangedFromElement(t);
+      }
+
+      ordersBody.addEventListener('input', onOrdersTableEdit);
+      ordersBody.addEventListener('change', onOrdersTableEdit);
+    }
+
     function syncOrderNameTitle(input) {
       if (!input) return;
       const v = String(input.value ?? '');
@@ -5010,9 +5089,12 @@
       const after = vis.slice(end).replace(/\s/g, '');
       t.value = before + clean + after;
       sanitizeTableNumInput(t);
+      markOrderAsChangedFromElement(t);
       calculateAll();
       autoSave();
     });
+
+    setupChangedOrdersTracking();
 
     const ordersGroupBody = document.getElementById('ordersGroupBody');
 
@@ -8185,6 +8267,7 @@
         statusEl.textContent = 'Загружено из облака (' + filtered.length + ' строк)';
       }
       alert(CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING);
+      clearChangedOrdersSet();
       updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
       return true;
     }
@@ -8228,6 +8311,7 @@
 
           applyPeriodDataFromCloud(data, 'Google Sheets period_data');
           setCloudPeriodVersionMeta(normalizeCloudPeriodVersionMeta(result, period));
+          clearChangedOrdersSet();
           updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
           if (statusEl) {
             statusEl.textContent =
@@ -8855,11 +8939,8 @@
         return false;
       }
 
-      const beforeSnapshot = lastLoadedPeriodSnapshot;
       const currentData = collectData();
-      const changeDetails = logAction
-        ? buildChangedOrdersSummary(beforeSnapshot, currentData)
-        : '';
+      const changeDetails = logAction ? formatChangedOrdersSetDetails() : '';
 
       localStorage.setItem(getStorageKey(period), JSON.stringify(currentData));
       updatePeriodList();
@@ -8886,6 +8967,7 @@
           rows_count: Array.isArray(currentData.rows) ? currentData.rows.length : '',
           details: changeDetails
         });
+        clearChangedOrdersSet();
         updateLastLoadedPeriodSnapshot(currentData);
       }
 
@@ -8953,6 +9035,7 @@
       updatePeriodList();
       if (selectEl) selectEl.value = period;
       markLoadedPeriodOnScreen(period);
+      clearChangedOrdersSet();
       updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
       recordUserAction({
         action: 'load_local',
@@ -9951,12 +10034,9 @@
       const statusEl = document.getElementById('periodActionStatus');
       if (statusEl) statusEl.textContent = 'Отправка в облако…';
 
-      const beforeSnapshot = lastLoadedPeriodSnapshot;
-
       try {
         flushPeriodStateFromDomBeforeSave();
         const currentData = collectData();
-        const changeDetails = buildChangedOrdersSummary(beforeSnapshot, currentData);
 
         const rows = getCloudPayloadRows(period);
         console.log('[v2 cloud] saveToCloudV2 uses getCloudPayloadRows, count:', rows.length);
@@ -10026,8 +10106,9 @@
           status: 'ok',
           period,
           rows_count: check.rows.length,
-          details: changeDetails
+          details: formatChangedOrdersSetDetails()
         });
+        clearChangedOrdersSet();
         updateLastLoadedPeriodSnapshot(currentData);
       } catch (err) {
         console.error('[v2 cloud] saveToCloud error:', err);
@@ -10081,6 +10162,7 @@
       createRow();
       calculateAll();
       populateOrderSelect();
+      clearChangedOrdersSet();
 
       if (!internalOnly) {
         setUiPeriodDirty(true);

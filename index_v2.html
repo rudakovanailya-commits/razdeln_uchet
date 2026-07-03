@@ -8268,6 +8268,7 @@
       }
       alert(CLOUD_PERIOD_DATA_LEGACY_LOAD_WARNING);
       clearChangedOrdersSet();
+      freezeAutoSaveLocalStorageForPeriod(period);
       updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
       return true;
     }
@@ -8312,6 +8313,7 @@
           applyPeriodDataFromCloud(data, 'Google Sheets period_data');
           setCloudPeriodVersionMeta(normalizeCloudPeriodVersionMeta(result, period));
           clearChangedOrdersSet();
+          freezeAutoSaveLocalStorageForPeriod(period);
           updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
           if (statusEl) {
             statusEl.textContent =
@@ -8465,6 +8467,45 @@
 
     function getStorageKey(period) {
       return 'razdelny_uchet_' + period;
+    }
+
+    let autoSaveLocalStorageFrozenPeriod = null;
+
+    function freezeAutoSaveLocalStorageForPeriod(period) {
+      const pn = normalizePeriodStr(period);
+      autoSaveLocalStorageFrozenPeriod = pn || null;
+      console.log(
+        '[v2 local] autoSave localStorage frozen for period',
+        autoSaveLocalStorageFrozenPeriod
+      );
+    }
+
+    function unfreezeAutoSaveLocalStorage() {
+      if (autoSaveLocalStorageFrozenPeriod) {
+        console.log(
+          '[v2 local] autoSave localStorage unfrozen, was',
+          autoSaveLocalStorageFrozenPeriod
+        );
+      }
+      autoSaveLocalStorageFrozenPeriod = null;
+    }
+
+    function isAutoSaveLocalStorageFrozenForPeriod(period) {
+      const pn = normalizePeriodStr(period || getCurrentPeriod());
+      return !!(
+        pn &&
+        autoSaveLocalStorageFrozenPeriod &&
+        autoSaveLocalStorageFrozenPeriod === pn
+      );
+    }
+
+    function restoreLocalPeriodStorageSnapshot(period, snapshot) {
+      const key = getStorageKey(normalizePeriodStr(period));
+      if (snapshot === null || snapshot === undefined) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, snapshot);
+      }
     }
 
     function applyLoadedGroupCalcData(data) {
@@ -8960,6 +9001,7 @@
       }
 
       if (logAction) {
+        unfreezeAutoSaveLocalStorage();
         recordUserAction({
           action: 'save_local',
           status: 'ok',
@@ -9036,6 +9078,7 @@
       if (selectEl) selectEl.value = period;
       markLoadedPeriodOnScreen(period);
       clearChangedOrdersSet();
+      unfreezeAutoSaveLocalStorage();
       updateLastLoadedPeriodSnapshot(deepClonePeriodData(collectData()));
       recordUserAction({
         action: 'load_local',
@@ -10032,11 +10075,35 @@
       if (!confirmed) return;
 
       const statusEl = document.getElementById('periodActionStatus');
-      if (statusEl) statusEl.textContent = 'Отправка в облако…';
+      const storageKey = getStorageKey(period);
+      const localStorageBeforeSave = localStorage.getItem(storageKey);
+
+      const resetPeriodActionStatusStyle = () => {
+        if (!statusEl) return;
+        statusEl.style.color = '';
+        statusEl.style.fontWeight = '';
+      };
+      const setPeriodActionStatusError = msg => {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.style.color = '#b91c1c';
+        statusEl.style.fontWeight = '600';
+      };
+      const setPeriodActionStatusSuccess = msg => {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.style.color = '#15803d';
+        statusEl.style.fontWeight = '';
+      };
+
+      if (statusEl) {
+        resetPeriodActionStatusStyle();
+        statusEl.textContent = 'Отправка в облако…';
+      }
 
       try {
         flushPeriodStateFromDomBeforeSave();
-        const currentData = collectData();
+        collectData();
 
         const rows = getCloudPayloadRows(period);
         console.log('[v2 cloud] saveToCloudV2 uses getCloudPayloadRows, count:', rows.length);
@@ -10060,10 +10127,12 @@
           );
         }
 
-        await replacePeriodInCloud(period, check.rows);
-        console.log('[v2 cloud] flat rows sent');
+        const flatResult = await replacePeriodInCloud(period, check.rows);
+        console.log('[save google] flat Лист1 result', flatResult);
 
-        let periodDataNote = '';
+        let periodDataResult = null;
+        let periodDataOk = false;
+        let savedMeta = null;
         try {
           const payload = buildCloudPeriodDataPayload(period);
           console.log(
@@ -10073,31 +10142,61 @@
             payload && payload.period
           );
 
-          const saveResult = await savePeriodDataToCloud(period, payload);
-          let savedMeta = normalizeCloudPeriodVersionMeta(saveResult, period);
+          periodDataResult = await savePeriodDataToCloud(period, payload);
+          savedMeta = normalizeCloudPeriodVersionMeta(periodDataResult, period);
           const verify = await verifyPeriodDataInCloud(period);
           if (!savedMeta || !savedMeta.updated_at) {
             savedMeta = normalizeCloudPeriodVersionMeta(verify, period);
           }
-          if (savedMeta && savedMeta.updated_at) {
-            setCloudPeriodVersionMeta(savedMeta);
-          }
-          if (verify && verify.ok && verify.json) {
-            periodDataNote =
-              '\n\nПолная копия периода сохранена в period_data.';
-          }
+          periodDataOk = !!(
+            periodDataResult &&
+            periodDataResult.ok &&
+            verify &&
+            verify.ok &&
+            verify.json
+          );
+          console.log('[save google] period_data result', periodDataResult);
         } catch (periodDataErr) {
-          console.error('[v2 cloud] savePeriodData:', periodDataErr);
-          periodDataNote =
-            '\n\nНе удалось сохранить полную копию в period_data: ' +
-            (periodDataErr && periodDataErr.message
-              ? periodDataErr.message
-              : String(periodDataErr));
+          console.error('[save google] period_data failed', periodDataErr);
+          periodDataResult = {
+            ok: false,
+            error:
+              periodDataErr && periodDataErr.message
+                ? periodDataErr.message
+                : String(periodDataErr)
+          };
+          periodDataOk = false;
         }
 
-        const msg = CLOUD_V2_SAVE_DONE_MESSAGE + periodDataNote;
-        if (statusEl) statusEl.textContent = msg.replace(/\n\n/g, ' ');
-        alert(msg);
+        restoreLocalPeriodStorageSnapshot(period, localStorageBeforeSave);
+        console.log('[save google] localStorage should remain unchanged');
+
+        if (!periodDataOk) {
+          const errMsg =
+            'Ошибка: Лист1 обновлён, но полная копия period_data не сохранилась. Облачная версия v2 не обновлена.';
+          setPeriodActionStatusError(errMsg);
+          alert(errMsg);
+          recordUserAction({
+            action: 'google_error',
+            status: 'warn',
+            period,
+            rows_count: check.rows.length,
+            details:
+              'Лист1 ok, period_data fail: ' +
+              (periodDataResult && periodDataResult.error
+                ? periodDataResult.error
+                : 'verify failed')
+          });
+          return;
+        }
+
+        const successMsg =
+          'Сохранено в Google Sheets: Лист1 и period_data обновлены. Локальная копия не изменена.';
+        setPeriodActionStatusSuccess(successMsg);
+        alert(successMsg);
+        if (savedMeta && savedMeta.updated_at) {
+          setCloudPeriodVersionMeta(savedMeta);
+        }
         offerMarkPeriodsSyncedAfterCloudSend([period]);
         await fetchCloudPeriodDataList();
         updatePeriodList();
@@ -10109,9 +10208,11 @@
           details: formatChangedOrdersSetDetails()
         });
         clearChangedOrdersSet();
-        updateLastLoadedPeriodSnapshot(currentData);
       } catch (err) {
+        restoreLocalPeriodStorageSnapshot(period, localStorageBeforeSave);
+        console.log('[save google] localStorage should remain unchanged');
         console.error('[v2 cloud] saveToCloud error:', err);
+        resetPeriodActionStatusStyle();
         if (statusEl) statusEl.textContent = '';
         alert(
           'Не удалось сохранить в Google Sheets: ' +
@@ -18472,6 +18573,7 @@
       const period = getCurrentPeriod();
       if (!period) return;
       if (isPeriodFinal()) return;
+      if (isAutoSaveLocalStorageFrozenForPeriod(period)) return;
       savePeriod(false, { logAction: false });
     }
 

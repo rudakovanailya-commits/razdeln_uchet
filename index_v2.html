@@ -3004,18 +3004,44 @@
       <div id="annualSummaryContent" hidden></div>
     </div>
 
-    <div class="card" style="margin-top:20px;">
-      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+    <div class="card" style="margin-top:20px;" id="techOrderCardCard">
+      <div class="period-summary-head">
+        <h2>Техническая Excel-карточка заказа</h2>
+      </div>
+      <p class="hint" style="margin-top:8px;">
+        Карточка по месяцам для выбранного заказа. Режим «Текущий экран» — только открытый месяц с учётом правок до сохранения.
+        «Все периоды» — история заказа по всем найденным периодам из выбранного источника.
+      </p>
+      <div class="period-report-controls">
+        <div class="field" style="min-width: 220px;">
+          <label for="techOrderCardMode">Режим карточки</label>
+          <select id="techOrderCardMode" autocomplete="off">
+            <option value="screen" selected>Текущий экран</option>
+            <option value="all">Все периоды / заказ в целом</option>
+          </select>
+        </div>
+        <div class="field" style="min-width: 280px;" id="techOrderCardSourceField" hidden>
+          <label for="techOrderCardSource">Источник данных</label>
+          <select id="techOrderCardSource" autocomplete="off">
+            <option value="cloud" selected>Google Sheets / period_data</option>
+            <option value="local">localStorage / локальные периоды</option>
+          </select>
+        </div>
+        <div class="field annual-summary-year-field" id="techOrderCardYearFilterField" hidden>
+          <label for="techOrderCardYearFilter">Охват периодов</label>
+          <select id="techOrderCardYearFilter" autocomplete="off"></select>
+        </div>
         <div class="field" style="min-width: 320px; flex: 1 1 420px;">
-          <label for="orderSelect">Заказ для технической Excel-карточки</label>
+          <label for="orderSelect">Заказ</label>
           <select id="orderSelect">
-            <option value="">Сначала сформируйте годовую сводку</option>
+            <option value="">Выберите заказ</option>
           </select>
         </div>
         <button id="orderReportBtn" type="button" class="secondary">Открыть техническую карточку</button>
       </div>
+      <div id="techOrderCardContextNote" class="mgmt-reports-period-context" style="margin-top:8px;"></div>
       <p class="hint" style="margin-top:10px;">
-        Этот блок — старая техническая карточка заказа с Excel-выгрузкой. Красивый «Отчёт по заказу» и PDF находятся ниже в «Красивые управленческие отчёты».
+        Красивый «Отчёт по заказу» с PDF находится ниже в «Красивые управленческие отчёты».
       </p>
     </div>
 
@@ -3030,7 +3056,7 @@
       <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
         <button type="button" class="mgmt-reports-tab active" data-mgmt-tab="period" role="tab" aria-selected="true" aria-controls="mgmtReportsPanelPeriod" id="mgmtReportsTabPeriod">Отчёт за период</button>
         <button type="button" class="mgmt-reports-tab" data-mgmt-tab="year" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelYear" id="mgmtReportsTabYear">Годовой отчёт</button>
-        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="orders" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelOrders" id="mgmtReportsTabOrders">Отчёт по заказу</button>
+        <button type="button" class="mgmt-reports-tab" data-mgmt-tab="orders" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelOrders" id="mgmtReportsTabOrders">Карточка по заказу</button>
       </div>
 
       <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
@@ -3105,29 +3131,32 @@
       <div id="mgmtReportsPanelOrders" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabOrders" hidden>
         <div class="mgmt-reports-controls">
           <div class="field mgmt-reports-orders-field">
-            <label for="mgmtReportsOrdersScope">Период анализа</label>
+            <label for="mgmtReportsOrdersScope">Режим карточки</label>
             <select id="mgmtReportsOrdersScope" autocomplete="off">
-              <option value="month">Текущий месяц</option>
-              <option value="year">Год</option>
-              <option value="all">Все периоды</option>
+              <option value="screen" selected>Текущий экран</option>
+              <option value="all">Все периоды / заказ в целом</option>
             </select>
           </div>
-          <div class="mgmt-reports-period-badge" id="mgmtReportsOrdersPeriodBadge">
-            <span>Период:</span>
-            <span id="mgmtReportsOrdersCurrentPeriod">—</span>
+          <div class="field mgmt-reports-orders-field" id="mgmtReportsOrdersSourceField" hidden>
+            <label for="mgmtReportsOrdersSource">Источник данных</label>
+            <select id="mgmtReportsOrdersSource" autocomplete="off">
+              <option value="cloud" selected>Google Sheets / period_data</option>
+              <option value="local">localStorage / локальные периоды</option>
+            </select>
           </div>
-          <div class="field mgmt-reports-year-field" id="mgmtReportsOrdersYearField" hidden>
-            <label for="mgmtReportsOrdersYear">Год</label>
-            <select id="mgmtReportsOrdersYear" autocomplete="off"></select>
+          <div class="field mgmt-reports-year-field" id="mgmtReportsOrdersYearFilterField" hidden>
+            <label for="mgmtReportsOrdersYearFilter">Охват периодов</label>
+            <select id="mgmtReportsOrdersYearFilter" autocomplete="off"></select>
           </div>
           <div class="field mgmt-reports-order-field">
             <label for="mgmtReportsOrderInput">Заказ</label>
             <input id="mgmtReportsOrderInput" type="text" list="mgmtReportsOrderList" placeholder="Введите номер или название договора…" autocomplete="off">
             <datalist id="mgmtReportsOrderList"></datalist>
           </div>
-          <button type="button" id="buildMgmtOrdersReportBtn" class="mgmt-reports-build-btn">Сформировать отчёт по заказу</button>
+          <button type="button" id="buildMgmtOrdersReportBtn" class="mgmt-reports-build-btn">Сформировать карточку по заказу</button>
           <button type="button" id="exportMgmtSingleOrderPdfBtn" class="mgmt-reports-build-btn mgmt-reports-pdf-btn">Скачать PDF по заказу</button>
         </div>
+        <div id="mgmtReportsOrdersContextNote" class="mgmt-reports-period-context"></div>
         <p class="mgmt-reports-status" id="mgmtReportsOrdersStatus"></p>
         <div id="mgmtReportsOrdersContent" hidden></div>
       </div>
@@ -7127,7 +7156,7 @@
       loadedPeriodOnScreen = normalizePeriodStr(period) || '';
       hidePeriodDataMismatchHint();
       updateMgmtReportsCurrentPeriodLabel();
-      if (typeof updateMgmtOrdersScopeUi === 'function') updateMgmtOrdersScopeUi();
+      if (typeof refreshOrderCardReportsUi === 'function') refreshOrderCardReportsUi();
       updateCloudPeriodVersionUi();
     }
 
@@ -10436,51 +10465,45 @@
       }
     }
 
-    /** Список заказов/групп для технической Excel-карточки — из итоговой годовой сводки. */
-    function populateOrderSelectFromAnnualSummary() {
+    /** Список заказов для технической Excel-карточки — из выбранного режима карточки. */
+    async function populateTechOrderSelect() {
       const sel = document.getElementById('orderSelect');
       if (!sel) return;
 
+      const config = readOrderCardUiConfig('tech');
+      updateTechOrderCardContextUi(config);
       const prev = String(sel.value || '').trim();
-      const year = getAnnualSummaryYearInput();
-      const report = lastAnnualSummaryReport;
 
-      sel.innerHTML = '';
-
-      if (!report || report.year !== year || !Array.isArray(report.rows) || !report.rows.length) {
-        const emptyOpt = document.createElement('option');
-        emptyOpt.value = '';
-        emptyOpt.textContent = 'Сначала сформируйте годовую сводку';
-        sel.appendChild(emptyOpt);
-        sel.value = '';
+      if (config.mode === 'screen') {
+        populateOrderSelectFromCurrentTable();
         return;
       }
 
-      const placeholder = document.createElement('option');
-      placeholder.value = '';
-      placeholder.textContent = 'Выбери заказ';
-      sel.appendChild(placeholder);
-
-      const names = new Set();
-      report.rows.forEach(row => {
-        const name = String(row.groupName != null ? row.groupName : row.label || '').trim();
-        if (!name || names.has(name)) return;
-        names.add(name);
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-      });
-
-      if (prev && names.has(prev)) {
-        sel.value = prev;
-      } else {
+      sel.innerHTML = '<option value="">Загрузка списка заказов…</option>';
+      try {
+        const fetch = await fetchOrderCardPeriodSources(config);
+        const groups = listMgmtOrderCalculationGroupsFromSources(fetch.sources);
+        sel.innerHTML = '<option value="">Выберите заказ</option>';
+        groups.forEach(g => {
+          const opt = document.createElement('option');
+          opt.value = g.groupName;
+          opt.textContent = formatMgmtOrderGroupOptionLabel(g);
+          sel.appendChild(opt);
+        });
+        if (prev && groups.some(g => g.groupName === prev)) {
+          sel.value = prev;
+        } else {
+          sel.value = '';
+        }
+      } catch (e) {
+        console.warn('[tech order card] populate list failed', e);
+        sel.innerHTML = '<option value="">Не удалось загрузить список заказов</option>';
         sel.value = '';
       }
     }
 
     function populateOrderSelect() {
-      populateOrderSelectFromAnnualSummary();
+      populateTechOrderSelect();
     }
 
     function manualWriteoffSavedHasValue(s) {
@@ -13296,6 +13319,359 @@
       return v === 'local' ? 'local' : 'cloud';
     }
 
+    let mgmtOrderSourcesCache = null;
+    let mgmtOrderSourcesCacheKey = '';
+
+    function readOrderCardUiConfig(kind) {
+      const isTech = kind === 'tech';
+      const modeEl = document.getElementById(isTech ? 'techOrderCardMode' : 'mgmtReportsOrdersScope');
+      const mode = modeEl && String(modeEl.value || '') === 'all' ? 'all' : 'screen';
+      const sourceEl = document.getElementById(isTech ? 'techOrderCardSource' : 'mgmtReportsOrdersSource');
+      const source = sourceEl && String(sourceEl.value || '') === 'local' ? 'local' : 'cloud';
+      const yearEl = document.getElementById(
+        isTech ? 'techOrderCardYearFilter' : 'mgmtReportsOrdersYearFilter'
+      );
+      const yearFilter = yearEl ? String(yearEl.value || 'all').trim() || 'all' : 'all';
+      return { mode, source, yearFilter, kind: isTech ? 'tech' : 'mgmt' };
+    }
+
+    function buildOrderCardSourcesCacheKey(config) {
+      return [config.mode, config.source, config.yearFilter].join('|');
+    }
+
+    function buildScreenOrderCardMeta(period) {
+      const details = ['Период: ' + (period || '—')];
+      if (uiPeriodDirty) {
+        details.push('есть изменения на экране');
+      }
+      return { primary: 'Источник: текущий экран', details };
+    }
+
+    function buildOrderCardSourceMetaFromFetch(config, fetchResult, foundPeriods) {
+      if (config.mode === 'screen') {
+        const period =
+          (fetchResult && fetchResult.periods && fetchResult.periods[0]) ||
+          normalizePeriodStr(resolveAppWorkingPeriod()) ||
+          '—';
+        return buildScreenOrderCardMeta(period);
+      }
+
+      const details = [];
+      if (config.yearFilter && config.yearFilter !== 'all') {
+        details.push('Год: ' + config.yearFilter);
+      }
+      if (fetchResult && fetchResult.periods && fetchResult.periods.length) {
+        details.push('Доступные периоды: ' + fetchResult.periods.join(', '));
+      }
+      if (
+        config.source === 'local' &&
+        fetchResult &&
+        fetchResult.missing &&
+        fetchResult.missing.length &&
+        config.yearFilter !== 'all'
+      ) {
+        details.push('Не найдены локальные периоды: ' + fetchResult.missing.join(', '));
+      }
+      if (
+        config.source === 'cloud' &&
+        fetchResult &&
+        fetchResult.missing &&
+        fetchResult.missing.length &&
+        config.yearFilter !== 'all'
+      ) {
+        details.push('Не найдены периоды: ' + fetchResult.missing.join(', '));
+      }
+      if (foundPeriods && foundPeriods.length) {
+        details.push('Найден в периодах: ' + foundPeriods.join(', '));
+      }
+
+      return {
+        primary:
+          config.source === 'local'
+            ? 'Источник: localStorage / локальные периоды этого браузера'
+            : 'Источник: Google Sheets / period_data',
+        details
+      };
+    }
+
+    function fillOrderCardYearFilterSelect(el) {
+      if (!el || el.tagName !== 'SELECT') return;
+      const prev = String(el.value || 'all');
+      el.innerHTML = '';
+      const allOpt = document.createElement('option');
+      allOpt.value = 'all';
+      allOpt.textContent = 'Все доступные периоды';
+      el.appendChild(allOpt);
+      const minYear = parseInt(WORKING_PERIOD_MIN.slice(0, 4), 10);
+      const maxYear = parseInt(WORKING_PERIOD_MAX.slice(0, 4), 10);
+      for (let y = maxYear; y >= minYear; y--) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        el.appendChild(opt);
+      }
+      el.value =
+        prev === 'all' || (/^\d{4}$/.test(prev) && Number(prev) >= minYear && Number(prev) <= maxYear)
+          ? prev
+          : 'all';
+    }
+
+    function listAllLocalStoragePeriodDataSources() {
+      const sources = new Map();
+      getLocalPeriodIds().forEach(period => {
+        const raw = localStorage.getItem(getStorageKey(period));
+        if (!raw) return;
+        try {
+          const data = JSON.parse(raw);
+          if (data && Array.isArray(data.rows)) {
+            sources.set(period, data);
+          }
+        } catch (e) {
+          /* пропуск повреждённых записей */
+        }
+      });
+      const periods = Array.from(sources.keys()).sort();
+      return {
+        year: 'all',
+        sources,
+        periods,
+        missing: [],
+        allMonths: [],
+        yearFilter: 'all'
+      };
+    }
+
+    async function fetchCloudPeriodDataSourcesAll() {
+      await fetchCloudPeriodDataList();
+      const periodIds = getCloudPeriodIds();
+      const sources = new Map();
+      for (let i = 0; i < periodIds.length; i++) {
+        const period = periodIds[i];
+        try {
+          const result = await fetchPeriodDataFromCloud(period);
+          if (result && result.ok === true && result.json) {
+            const data = parsePeriodDataFromCloud(result.json);
+            if (data && Array.isArray(data.rows)) {
+              sources.set(period, data);
+            }
+          }
+        } catch (e) {
+          console.warn('[order card] cloud fetch failed', period, e);
+        }
+      }
+      return {
+        year: 'all',
+        sources,
+        periods: Array.from(sources.keys()).sort(),
+        missing: [],
+        allMonths: [],
+        yearFilter: 'all'
+      };
+    }
+
+    async function fetchOrderCardPeriodSources(config) {
+      const mode = config && config.mode === 'all' ? 'all' : 'screen';
+      const source = config && config.source === 'local' ? 'local' : 'cloud';
+      const yearFilter =
+        config && config.yearFilter && config.yearFilter !== '' ? config.yearFilter : 'all';
+
+      if (mode === 'screen') {
+        const period = normalizePeriodStr(resolveAppWorkingPeriod());
+        const sources = new Map();
+        if (period && /^\d{4}-\d{2}$/.test(period)) {
+          try {
+            const data = collectData();
+            if (data && Array.isArray(data.rows)) {
+              sources.set(period, data);
+            }
+          } catch (e) {
+            /* текущий экран недоступен */
+          }
+        }
+        return {
+          mode: 'screen',
+          source: 'screen',
+          yearFilter: period || '',
+          sources,
+          periods: Array.from(sources.keys()).sort(),
+          missing: []
+        };
+      }
+
+      if (source === 'local') {
+        if (yearFilter !== 'all' && /^\d{4}$/.test(yearFilter)) {
+          const localFetch = listLocalStoragePeriodDataSourcesForYear(yearFilter);
+          return Object.assign({ mode: 'all', source, yearFilter }, localFetch);
+        }
+        return Object.assign({ mode: 'all', source, yearFilter: 'all' }, listAllLocalStoragePeriodDataSources());
+      }
+
+      if (yearFilter !== 'all' && /^\d{4}$/.test(yearFilter)) {
+        const cloudFetch = await fetchCloudPeriodDataSourcesForYear(yearFilter);
+        return Object.assign({ mode: 'all', source, yearFilter }, cloudFetch);
+      }
+      const cloudAll = await fetchCloudPeriodDataSourcesAll();
+      return Object.assign({ mode: 'all', source, yearFilter: 'all' }, cloudAll);
+    }
+
+    async function resolveOrderCardPeriodSources(config, options) {
+      const opts = options || {};
+      const key = buildOrderCardSourcesCacheKey(config);
+      if (!opts.forceRefresh && mgmtOrderSourcesCache && mgmtOrderSourcesCacheKey === key) {
+        return mgmtOrderSourcesCache;
+      }
+      const result = await fetchOrderCardPeriodSources(config);
+      mgmtOrderSourcesCache = result;
+      mgmtOrderSourcesCacheKey = key;
+      return result;
+    }
+
+    function listMgmtOrderCalculationGroupsFromSources(sources) {
+      const groupMap = new Map();
+      if (!(sources instanceof Map)) return [];
+      sources.forEach(data => {
+        buildCalculationGroupsFromPeriodData(data).forEach(group => {
+          const existing = groupMap.get(group.groupName);
+          if (!existing) {
+            groupMap.set(group.groupName, {
+              groupName: group.groupName,
+              memberCount: group.memberRows.length,
+              isMultiMember: group.memberRows.length > 1
+            });
+          } else if (group.memberRows.length > existing.memberCount) {
+            existing.memberCount = group.memberRows.length;
+            existing.isMultiMember = existing.memberCount > 1;
+          }
+        });
+      });
+      return Array.from(groupMap.values()).sort((a, b) =>
+        a.groupName.localeCompare(b.groupName, 'ru')
+      );
+    }
+
+    function listOrderFoundPeriodsFromSources(sources, groupName) {
+      const gn = String(groupName || '').trim();
+      if (!gn || !(sources instanceof Map)) return [];
+      const found = [];
+      sources.forEach((data, period) => {
+        const groups = buildCalculationGroupsFromPeriodData(data);
+        if (groups.some(g => g.groupName === gn)) found.push(period);
+      });
+      return found.sort();
+    }
+
+    function updateTechOrderCardContextUi(config) {
+      config = config || readOrderCardUiConfig('tech');
+      const sourceField = document.getElementById('techOrderCardSourceField');
+      const yearField = document.getElementById('techOrderCardYearFilterField');
+      const noteEl = document.getElementById('techOrderCardContextNote');
+      const yearEl = document.getElementById('techOrderCardYearFilter');
+      const isAll = config.mode === 'all';
+
+      if (sourceField) sourceField.hidden = !isAll;
+      if (yearField) yearField.hidden = !isAll;
+      if (isAll && yearEl) fillOrderCardYearFilterSelect(yearEl);
+
+      if (!noteEl) return;
+
+      if (config.mode === 'screen') {
+        const period = normalizePeriodStr(resolveAppWorkingPeriod()) || '—';
+        let html =
+          '<div class="mgmt-reports-source-note">' +
+          '<div><strong>Источник: текущий экран</strong></div>' +
+          '<div>Период: ' +
+          escapeHtmlForReport(period) +
+          '</div>';
+        if (uiPeriodDirty) {
+          html +=
+            '<div style="margin-top:4px;color:#b45309;">Учитываются несохранённые изменения на экране.</div>';
+        }
+        html += '</div>';
+        noteEl.innerHTML = html;
+      } else {
+        noteEl.innerHTML = formatReportSourceMetaHtml(
+          buildOrderCardSourceMetaFromFetch(config, null, null)
+        );
+      }
+    }
+
+    function updateMgmtOrderCardUi(config) {
+      config = config || readOrderCardUiConfig('mgmt');
+      const sourceField = document.getElementById('mgmtReportsOrdersSourceField');
+      const yearField = document.getElementById('mgmtReportsOrdersYearFilterField');
+      const noteEl = document.getElementById('mgmtReportsOrdersContextNote');
+      const yearEl = document.getElementById('mgmtReportsOrdersYearFilter');
+      const isAll = config.mode === 'all';
+
+      if (sourceField) sourceField.hidden = !isAll;
+      if (yearField) yearField.hidden = !isAll;
+      if (isAll && yearEl) fillOrderCardYearFilterSelect(yearEl);
+
+      if (!noteEl) return;
+
+      if (config.mode === 'screen') {
+        const period = normalizePeriodStr(resolveAppWorkingPeriod()) || '—';
+        let html =
+          '<div class="mgmt-reports-source-note">' +
+          '<div><strong>Источник: текущий экран</strong></div>' +
+          '<div>Период: ' +
+          escapeHtmlForReport(period) +
+          '</div>';
+        if (uiPeriodDirty) {
+          html +=
+            '<div style="margin-top:4px;color:#b45309;">Учитываются несохранённые изменения на экране.</div>';
+        }
+        html += '</div>';
+        noteEl.innerHTML = html;
+      } else {
+        noteEl.innerHTML = formatReportSourceMetaHtml(
+          buildOrderCardSourceMetaFromFetch(config, null, null)
+        );
+      }
+    }
+
+    function initOrderCardUi() {
+      fillOrderCardYearFilterSelect(document.getElementById('techOrderCardYearFilter'));
+      fillOrderCardYearFilterSelect(document.getElementById('mgmtReportsOrdersYearFilter'));
+      updateTechOrderCardContextUi();
+      updateMgmtOrderCardUi();
+
+      const refreshTech = () => {
+        mgmtOrderSourcesCache = null;
+        mgmtOrderSourcesCacheKey = '';
+        updateTechOrderCardContextUi();
+        populateTechOrderSelect();
+      };
+      const refreshMgmt = () => {
+        mgmtOrderSourcesCache = null;
+        mgmtOrderSourcesCacheKey = '';
+        updateMgmtOrderCardUi();
+        populateMgmtReportsOrderList();
+      };
+
+      const bind = (id, handler) => {
+        const el = document.getElementById(id);
+        if (el && !el.dataset.orderCardBound) {
+          el.dataset.orderCardBound = '1';
+          el.addEventListener('change', handler);
+        }
+      };
+
+      bind('techOrderCardMode', refreshTech);
+      bind('techOrderCardSource', refreshTech);
+      bind('techOrderCardYearFilter', refreshTech);
+      bind('mgmtReportsOrdersScope', refreshMgmt);
+      bind('mgmtReportsOrdersSource', refreshMgmt);
+      bind('mgmtReportsOrdersYearFilter', refreshMgmt);
+    }
+
+    function refreshOrderCardReportsUi() {
+      updateMgmtOrderCardUi();
+      updateTechOrderCardContextUi();
+      populateMgmtReportsOrderList();
+      populateTechOrderSelect();
+    }
+
     function formatReportSourceMetaHtml(meta) {
       if (!meta) return '';
       let html =
@@ -13628,7 +14004,7 @@
     }
 
     function populateMgmtReportsOrdersYearSelect() {
-      fillMgmtReportsYearSelect(document.getElementById('mgmtReportsOrdersYear'));
+      fillOrderCardYearFilterSelect(document.getElementById('mgmtReportsOrdersYearFilter'));
     }
 
     function fillMgmtReportsYearSelect(el) {
@@ -14398,7 +14774,8 @@
     let lastMgmtSingleOrderReport = null;
 
     function listMgmtOrderReportPeriodSources(scope, periodOrYear) {
-      if (scope === 'month') {
+      const s = scope === 'month' ? 'screen' : scope;
+      if (s === 'screen') {
         const p = resolveAppWorkingPeriod();
         const sources = new Map();
         if (p && /^\d{4}-\d{2}$/.test(p)) {
@@ -14411,7 +14788,7 @@
         }
         return sources;
       }
-      if (scope === 'year') {
+      if (s === 'year') {
         return listPeriodDataSourcesForYear(periodOrYear);
       }
       return listPeriodDataSourcesForOrderReport();
@@ -14476,38 +14853,57 @@
       return v;
     }
 
-    function populateMgmtReportsOrderList() {
+    async function populateMgmtReportsOrderList() {
       const datalist = document.getElementById('mgmtReportsOrderList');
       if (!datalist) return;
 
-      const scopeEl = document.getElementById('mgmtReportsOrdersScope');
-      const scope = scopeEl ? String(scopeEl.value || 'month') : 'month';
-      let periodOrYear = '';
-      if (scope === 'month') {
-        periodOrYear = resolveAppWorkingPeriod();
-      } else if (scope === 'year') {
-        const yearEl = document.getElementById('mgmtReportsOrdersYear');
-        periodOrYear = yearEl ? String(yearEl.value || '').trim() : '';
-      }
+      const config = readOrderCardUiConfig('mgmt');
 
-      const groups = listMgmtOrderCalculationGroups(scope, periodOrYear);
-      lastMgmtOrderGroupOptions = groups;
-      datalist.innerHTML = groups
-        .map(g => {
-          const label = formatMgmtOrderGroupOptionLabel(g);
-          return '<option value="' + escapeHtmlForReport(label) + '"></option>';
-        })
-        .join('');
+      try {
+        let groups = [];
+        if (config.mode === 'screen') {
+          groups = listMgmtOrderCalculationGroupsFromSources(
+            listMgmtOrderReportPeriodSources('screen')
+          );
+        } else {
+          const fetch = await resolveOrderCardPeriodSources(config);
+          groups = listMgmtOrderCalculationGroupsFromSources(fetch.sources);
+        }
+        lastMgmtOrderGroupOptions = groups;
+        datalist.innerHTML = groups
+          .map(g => {
+            const label = formatMgmtOrderGroupOptionLabel(g);
+            return '<option value="' + escapeHtmlForReport(label) + '"></option>';
+          })
+          .join('');
+      } catch (e) {
+        console.warn('[mgmt order card] populate list failed', e);
+        lastMgmtOrderGroupOptions = [];
+        datalist.innerHTML = '';
+      }
     }
 
     function buildMgmtSingleOrderScopeLabel(scope, periodOrYear) {
-      if (scope === 'month') return 'Период анализа: ' + periodOrYear;
+      if (scope === 'screen' || scope === 'month') {
+        const p = periodOrYear || resolveAppWorkingPeriod() || '—';
+        return 'Период анализа: ' + p + ' (текущий экран)';
+      }
       if (scope === 'year') {
         return (
           'Период анализа: ' +
           periodOrYear +
           ' год. Обороты суммированы за год, НЗП конец — остаток на последний месяц.'
         );
+      }
+      if (scope === 'all') {
+        if (periodOrYear && periodOrYear !== 'all' && /^\d{4}$/.test(periodOrYear)) {
+          return (
+            'Период анализа: ' +
+            periodOrYear +
+            ' год — все месяцы с заказом в выбранном источнике. НЗП конец — последний актуальный остаток.'
+          );
+        }
+        return 'Период анализа: все найденные периоды с заказом в выбранном источнике. НЗП конец — последний актуальный остаток.';
       }
       return 'Период анализа: все сохранённые периоды. НЗП конец — последний актуальный остаток.';
     }
@@ -14594,11 +14990,13 @@
         scope,
         periodOrYear: periodOrYear || '',
         periodLabel:
-          scope === 'month'
-            ? periodOrYear
+          scope === 'screen' || scope === 'month'
+            ? periodOrYear || resolveAppWorkingPeriod() || ''
             : scope === 'year'
               ? String(periodOrYear || '')
-              : 'все периоды',
+              : scope === 'all' && periodOrYear && periodOrYear !== 'all'
+                ? String(periodOrYear)
+                : 'все периоды',
         scopeHint: buildMgmtSingleOrderScopeLabel(scope, periodOrYear),
         groupName: gn,
         isMultiMember: monthlyRows[0].isMultiMember,
@@ -14777,7 +15175,7 @@
     function buildMgmtSingleOrderPdfFilename(report) {
       const slug = extractShortOrderSlugForPdf(report.groupName);
       let periodPart = 'period';
-      if (report.scope === 'month') {
+      if (report.scope === 'screen' || report.scope === 'month') {
         periodPart = report.periodOrYear || report.periodFrom || 'month';
       } else if (report.scope === 'year') {
         periodPart =
@@ -15094,7 +15492,6 @@
 
     async function exportMgmtSingleOrderToPdf() {
       switchMgmtReportsTab('orders');
-      updateMgmtOrdersScopeUi();
 
       const statusEl = document.getElementById('mgmtReportsOrdersStatus');
       const btn = document.getElementById('exportMgmtSingleOrderPdfBtn');
@@ -15106,7 +15503,11 @@
         return;
       }
 
-      const report = getMgmtSingleOrderReportForExport();
+      let report = getMgmtSingleOrderReportForExport();
+      if (!report || !report.monthlyRows.length || !report.totals) {
+        report = await buildMgmtOrdersReport();
+      }
+
       if (!report || !report.monthlyRows.length || !report.totals) {
         if (statusEl) {
           statusEl.textContent = 'Нет данных по выбранному заказу для PDF-отчёта.';
@@ -15140,30 +15541,15 @@
     }
     window.exportMgmtSingleOrderToPdf = exportMgmtSingleOrderToPdf;
 
-    function updateMgmtOrdersScopeUi() {
-      const scopeEl = document.getElementById('mgmtReportsOrdersScope');
-      const scope = scopeEl ? String(scopeEl.value || 'month') : 'month';
-      const periodBadge = document.getElementById('mgmtReportsOrdersPeriodBadge');
-      const yearField = document.getElementById('mgmtReportsOrdersYearField');
-      const periodLabel = document.getElementById('mgmtReportsOrdersCurrentPeriod');
-      if (periodBadge) periodBadge.hidden = scope !== 'month';
-      if (yearField) yearField.hidden = scope !== 'year';
-      if (scope === 'month' && periodLabel) {
-        const period = resolveAppWorkingPeriod();
-        periodLabel.textContent = period || 'не выбран';
-      }
-      if (scope === 'year') populateMgmtReportsOrdersYearSelect();
-      populateMgmtReportsOrderList();
-    }
-
     async function buildMgmtOrdersReport() {
       try {
         switchMgmtReportsTab('orders');
-        updateMgmtOrdersScopeUi();
+        const config = readOrderCardUiConfig('mgmt');
+        updateMgmtOrderCardUi(config);
+        await populateMgmtReportsOrderList();
 
-        const scopeEl = document.getElementById('mgmtReportsOrdersScope');
         const orderInputEl = document.getElementById('mgmtReportsOrderInput');
-        const scope = scopeEl ? String(scopeEl.value || 'month') : 'month';
+        const scope = config.mode;
         const orderInput = orderInputEl ? String(orderInputEl.value || '').trim() : '';
 
         const statusEl = document.getElementById('mgmtReportsOrdersStatus');
@@ -15182,32 +15568,38 @@
         let periodOrYear = '';
         let sourcesOverride = null;
         let sourceMeta = null;
+        let fetchResult = null;
 
-        if (scope === 'year') {
-          const yearEl = document.getElementById('mgmtReportsOrdersYear');
-          periodOrYear = yearEl ? String(yearEl.value || '').trim() : '';
-          if (!/^\d{4}$/.test(periodOrYear)) {
-            if (statusEl) statusEl.textContent = 'Укажите год.';
-            if (contentEl) contentEl.hidden = true;
-            return null;
-          }
-          if (statusEl) {
-            statusEl.textContent = 'Загрузка period_data из Google для ' + periodOrYear + '…';
-          }
-          const cloudFetch = await fetchCloudPeriodDataSourcesForYear(periodOrYear);
-          sourcesOverride = cloudFetch.sources;
-          sourceMeta = buildYearReportSourceMeta(cloudFetch);
-        } else if (scope === 'month') {
+        if (scope === 'screen') {
           periodOrYear = resolveAppWorkingPeriod();
           if (!periodOrYear) {
             if (statusEl) statusEl.textContent = 'Период не выбран';
             if (contentEl) contentEl.hidden = true;
             return null;
           }
-          sourceMeta = buildPeriodReportSourceMeta();
+          fetchResult = await fetchOrderCardPeriodSources(config);
+          sourcesOverride = fetchResult.sources;
+        } else {
+          if (statusEl) {
+            const srcLabel =
+              config.source === 'local'
+                ? 'localStorage / локальных периодов'
+                : 'Google Sheets / period_data';
+            statusEl.textContent = 'Загрузка ' + srcLabel + '…';
+          }
+          fetchResult = await resolveOrderCardPeriodSources(config);
+          sourcesOverride = fetchResult.sources;
+          periodOrYear = config.yearFilter;
         }
 
         const groupName = resolveMgmtOrderGroupSelection(orderInput, lastMgmtOrderGroupOptions);
+        const foundPeriods = listOrderFoundPeriodsFromSources(sourcesOverride, groupName);
+        sourceMeta = buildOrderCardSourceMetaFromFetch(
+          config,
+          fetchResult,
+          scope === 'all' ? foundPeriods : null
+        );
+
         const report = collectMgmtSingleOrderReportData(
           scope,
           periodOrYear,
@@ -15219,9 +15611,10 @@
 
         console.log('[mgmt single order report]', {
           mode: scope,
-          resolvedPeriod: scope === 'month' ? periodOrYear : '',
-          resolvedYear: scope === 'year' ? periodOrYear : '',
+          resolvedPeriod: scope === 'screen' ? periodOrYear : '',
+          resolvedYear: scope === 'all' ? periodOrYear : '',
           selectedOrder: groupName,
+          foundPeriods,
           rowsCount: report.monthlyRows ? report.monthlyRows.length : 0
         });
 
@@ -16146,19 +16539,10 @@
 
     function initMgmtReportsUi() {
       populateMgmtReportsYearSelect();
-      populateMgmtReportsOrdersYearSelect();
+      initOrderCardUi();
       updateMgmtReportsCurrentPeriodLabel();
-      updateMgmtOrdersScopeUi();
+      populateMgmtReportsOrderList();
       switchMgmtReportsTab('period');
-
-      const ordersScopeEl = document.getElementById('mgmtReportsOrdersScope');
-      if (ordersScopeEl) {
-        ordersScopeEl.addEventListener('change', () => updateMgmtOrdersScopeUi());
-      }
-      const ordersYearEl = document.getElementById('mgmtReportsOrdersYear');
-      if (ordersYearEl) {
-        ordersYearEl.addEventListener('change', () => populateMgmtReportsOrderList());
-      }
 
       const card = document.getElementById('mgmtReportsCard');
       if (card && !card.dataset.mgmtReportsClickBound) {
@@ -16243,7 +16627,6 @@
         }
         statusEl.innerHTML = statusHtml;
       }
-      populateOrderSelectFromAnnualSummary();
       return report;
     }
 
@@ -18681,11 +19064,14 @@
       renderSalaryScenarioPanel();
     }
 
-    function collectOrderCardReportData(orderName) {
+    function collectOrderCardReportData(orderName, sourcesOverride) {
       const target = String(orderName || '').trim();
       if (!target) return null;
 
-      const periodSources = listPeriodDataSourcesForOrderReport();
+      const periodSources =
+        sourcesOverride instanceof Map
+          ? sourcesOverride
+          : listPeriodDataSourcesForOrderReport();
       const periods = Array.from(periodSources.keys()).sort();
 
       const rows = [];
@@ -18941,7 +19327,7 @@
       XLSX.writeFile(wb, buildOrderCardExportFilename(report), { cellStyles: true });
     }
 
-    function buildOrderReport() {
+    async function buildOrderReport() {
       const orderName = document.getElementById('orderSelect').value;
       const box = document.getElementById('orderReportBox');
       const title = document.getElementById('orderReportTitle');
@@ -18953,15 +19339,36 @@
         return;
       }
 
+      const config = readOrderCardUiConfig('tech');
+      updateTechOrderCardContextUi(config);
+
       const target = String(orderName).trim();
-      const report = collectOrderCardReportData(target);
+      let fetchResult = null;
+      let sourcesOverride = null;
+
+      if (config.mode === 'screen') {
+        fetchResult = await fetchOrderCardPeriodSources(config);
+        sourcesOverride = fetchResult.sources;
+      } else {
+        fetchResult = await resolveOrderCardPeriodSources(config);
+        sourcesOverride = fetchResult.sources;
+      }
+
+      const foundPeriods = listOrderFoundPeriodsFromSources(sourcesOverride, target);
+      const sourceMeta = buildOrderCardSourceMetaFromFetch(
+        config,
+        fetchResult,
+        config.mode === 'all' ? foundPeriods : null
+      );
+
+      const report = collectOrderCardReportData(target, sourcesOverride);
       lastOrderCardReport = report;
       logOrderCardWipEnd20Diagnostics(target);
       const rows = report.rows;
       const totals = report.totals;
       const groupHint = report.groupHint;
 
-      let html = '';
+      let html = formatReportSourceMetaHtml(sourceMeta);
       if (groupHint) {
         html += '<div class="hint" style="margin-top:8px;">' + escapeHtmlForReport(groupHint) + '</div>';
       }
@@ -19036,7 +19443,9 @@
 
       if (!rows.length) {
         html +=
-          '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу в сохранённых периодах. Загрузите период и сохраните локально, либо выберите заказ из текущей таблицы.</div>';
+          config.mode === 'screen'
+            ? '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу на текущем экране. Загрузите период в разделе Учёт или выберите другой заказ.</div>'
+            : '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу в выбранном источнике. Проверьте источник и охват периодов.</div>';
       }
 
       if (box) box.style.display = 'block';
@@ -19082,9 +19491,7 @@
     }
     const annualSummaryYearEl = document.getElementById('annualSummaryYear');
     if (annualSummaryYearEl) {
-      annualSummaryYearEl.addEventListener('change', () => {
-        populateOrderSelectFromAnnualSummary();
-      });
+      annualSummaryYearEl.addEventListener('change', () => ensureAnnualSummaryControlsEditable());
     }
     const exportAnnualSummaryBtn = document.getElementById('exportAnnualSummaryBtn');
     if (exportAnnualSummaryBtn) {
@@ -19096,7 +19503,7 @@
       btn.addEventListener('click', () => {
         const tabId = btn.getAttribute('data-mgmt-tab') || 'period';
         switchMgmtReportsTab(tabId);
-        if (tabId === 'orders') updateMgmtOrdersScopeUi();
+        if (tabId === 'orders') refreshOrderCardReportsUi();
       });
     });
     initMgmtReportsUi();
@@ -19871,22 +20278,22 @@
         } else {
           hidePeriodDataMismatchHint();
         }
-        updateMgmtOrdersScopeUi();
+        refreshOrderCardReportsUi();
       });
     }
     if (periodInputEl) {
       periodInputEl.addEventListener('input', () => {
         hidePeriodCompareInfo();
         updatePeriodList();
-        updateMgmtOrdersScopeUi();
+        refreshOrderCardReportsUi();
       });
       periodInputEl.addEventListener('change', () => {
         handlePeriodFieldCommitted();
-        updateMgmtOrdersScopeUi();
+        refreshOrderCardReportsUi();
       });
       periodInputEl.addEventListener('blur', () => {
         handlePeriodFieldCommitted();
-        updateMgmtOrdersScopeUi();
+        refreshOrderCardReportsUi();
       });
     }
 
@@ -19920,7 +20327,7 @@
       populateOrderSelect();
       refreshAllOrderNameTitles();
       setupOrdersTableScrollSync();
-      updateMgmtOrdersScopeUi();
+      refreshOrderCardReportsUi();
     })();
 
     // =====================
@@ -19976,8 +20383,9 @@
         btn.classList.toggle('active', active);
       });
 
-      if (uiActiveScreen === 'reports' && typeof updateMgmtReportsPeriodContextUi === 'function') {
+      if (uiActiveScreen === 'reports') {
         updateMgmtReportsPeriodContextUi();
+        refreshOrderCardReportsUi();
       }
     }
 

@@ -1422,40 +1422,80 @@
       background: #fffbeb !important;
     }
 
-    #orderReportBox {
+    .order-card-box,
+    #orderReportBox,
+    #annualOrderCardResult {
       border: 1px solid #c5e4cf;
       border-radius: 12px;
-      padding: 16px;
+      padding: 12px 14px;
       background: #f5fbf7;
     }
 
-    #orderReportBox .order-report-head {
+    .order-card-box .order-report-head,
+    #orderReportBox .order-report-head,
+    #annualOrderCardResult .order-report-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
     }
 
-    #orderReportBox .order-report-head h3 {
+    .order-card-box .order-report-head h3,
+    #orderReportBox .order-report-head h3,
+    #annualOrderCardResult .order-report-head h3 {
       margin: 0;
+      font-size: 1.05rem;
     }
 
-    #orderReportBox table {
-      width: 100%;
+    .order-card-meta {
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .order-card-compact-wrap {
+      overflow-x: auto;
+      max-width: 100%;
+      margin-top: 6px;
+    }
+
+    .order-card-compact {
+      width: max-content;
+      min-width: 0;
+      max-width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.25;
     }
 
-    #orderReportBox th, #orderReportBox td {
+    .order-card-compact th,
+    .order-card-compact td {
       border-bottom: 1px solid #d1f0db;
-      padding: 8px;
+      padding: 4px 6px;
       text-align: right;
+      white-space: nowrap;
+      vertical-align: middle;
     }
 
-    #orderReportBox th:first-child,
-    #orderReportBox td:first-child {
+    .order-card-compact th:first-child,
+    .order-card-compact td:first-child {
       text-align: left;
+      width: 1%;
+      min-width: 72px;
+      max-width: 88px;
+      padding-right: 8px;
+    }
+
+    .order-card-compact thead th {
+      color: #14532d;
+      font-weight: 600;
+      background: #e8f5ef;
+    }
+
+    .order-card-box .order-report-totals-hint {
+      margin: 6px 0 0;
+      font-size: 12px;
+      line-height: 1.35;
     }
 
     .order-total {
@@ -3025,7 +3065,7 @@
       </div>
     </div>
 
-    <div id="orderReportBox" class="card" style="margin-top:16px; display:none;">
+    <div id="orderReportBox" class="card order-card-box" style="margin-top:16px; display:none;">
       <div class="order-report-head">
         <h3 id="orderReportTitle">Карточка заказа</h3>
         <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
@@ -3127,6 +3167,17 @@
       <p class="hint" style="margin-top:10px;">
         Красивый «Отчёт по заказу» с PDF находится ниже в «Красивые управленческие отчёты».
       </p>
+    </div>
+
+    <div id="annualOrderCardResult" class="card order-card-box" style="margin-top:16px; display:none;">
+      <div class="order-report-head">
+        <h3 id="annualOrderCardTitle">Карточка заказа</h3>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <button type="button" id="collapseAnnualOrderCardBtn" class="secondary" hidden>Свернуть карточку</button>
+          <button type="button" id="exportAnnualOrderCardBtn" class="secondary">Выгрузить карточку в Excel</button>
+        </div>
+      </div>
+      <div id="annualOrderCardContent"></div>
     </div>
 
     <div class="card mgmt-reports-card" id="mgmtReportsCard">
@@ -10781,8 +10832,31 @@
       }
     }
 
+    function getOrderCardContextUi(context) {
+      if (context === 'reports') {
+        return {
+          context: 'reports',
+          box: document.getElementById('annualOrderCardResult'),
+          title: document.getElementById('annualOrderCardTitle'),
+          content: document.getElementById('annualOrderCardContent'),
+          collapseBtn: document.getElementById('collapseAnnualOrderCardBtn'),
+          exportBtn: document.getElementById('exportAnnualOrderCardBtn'),
+          selectEl: () => document.getElementById('orderSelect')
+        };
+      }
+      return {
+        context: 'accounting',
+        box: document.getElementById('orderReportBox'),
+        title: document.getElementById('orderReportTitle'),
+        content: document.getElementById('orderReportContent'),
+        collapseBtn: document.getElementById('collapseOrderCardBtn'),
+        exportBtn: document.getElementById('exportOrderCardBtn'),
+        selectEl: () => document.getElementById('accountingOrderCardSelect')
+      };
+    }
+
     function renderOrderCardMetaHtml(report, resolved, overlay) {
-      let html = '<div class="mgmt-reports-source-note" style="margin-bottom:10px;">';
+      let html = '<div class="mgmt-reports-source-note order-card-meta" style="margin-bottom:6px;">';
       if (resolved && resolved.fromAnnualSummary) {
         if (resolved.annualSummaryYear) {
           html +=
@@ -10829,7 +10903,7 @@
       }
 
       html += `
-<table id="orderReportTable">
+<div class="order-card-compact-wrap"><table class="order-card-compact" id="orderReportTable">
 <tr>
 <th>Месяц</th>
 <th>Отгрузка</th>
@@ -10887,7 +10961,7 @@
           '</tr>';
       }
 
-      html += '</table>';
+      html += '</table></div>';
 
       if (rows.length) {
         html +=
@@ -10899,55 +10973,61 @@
       return html;
     }
 
-    function updateOrderCardCollapseBtnUi(show) {
-      const btn = document.getElementById('collapseOrderCardBtn');
-      const box = document.getElementById('orderReportBox');
+    function updateOrderCardCollapseBtnUi(show, context) {
+      const ui = getOrderCardContextUi(context || lastOrderCardReportContext || 'accounting');
+      const btn = ui.collapseBtn;
+      const box = ui.box;
       if (!btn) return;
       const visible =
-        show !== false && box && box.style.display !== 'none' && lastOrderCardReport;
+        show !== false && box && box.style.display !== 'none' && lastOrderCardReport &&
+        lastOrderCardReportContext === ui.context;
       btn.hidden = !visible;
     }
 
-    function collapseOrderCardResult() {
-      const box = document.getElementById('orderReportBox');
-      if (box) box.style.display = 'none';
-      updateOrderCardCollapseBtnUi(false);
+    function collapseOrderCardResult(context) {
+      const ui = getOrderCardContextUi(context || 'accounting');
+      if (ui.box) ui.box.style.display = 'none';
+      updateOrderCardCollapseBtnUi(false, ui.context);
     }
 
     async function buildOrderCardReport(orderName, options) {
+      const opts = options || {};
+      const context = opts.fromAnnualSummary ? 'reports' : 'accounting';
+      const ui = getOrderCardContextUi(context);
       const target = String(orderName || '').trim();
-      const box = document.getElementById('orderReportBox');
-      const title = document.getElementById('orderReportTitle');
-      const content = document.getElementById('orderReportContent');
 
       if (!target) {
         lastOrderCardReport = null;
-        if (box) box.style.display = 'none';
-        updateOrderCardCollapseBtnUi(false);
+        lastOrderCardReportContext = context;
+        if (ui.box) ui.box.style.display = 'none';
+        updateOrderCardCollapseBtnUi(false, context);
         return null;
       }
 
       const resolved = await resolveOrderCardSourcesForBuild(
-        Object.assign({}, options || {}, { orderName: target })
+        Object.assign({}, opts, { orderName: target })
       );
       const sources = resolved.sources instanceof Map ? resolved.sources : new Map();
       const overlay =
-        options && (options.skipScreenOverlay || options.fromAnnualSummary)
+        opts.skipScreenOverlay || opts.fromAnnualSummary
           ? { applied: false }
           : applyOpenPeriodScreenOverlay(sources, target);
 
       const report = collectOrderCardReportData(target, sources);
       if (!report) {
         lastOrderCardReport = null;
-        if (box) box.style.display = 'none';
-        updateOrderCardCollapseBtnUi(false);
+        lastOrderCardReportContext = context;
+        if (ui.box) ui.box.style.display = 'none';
+        updateOrderCardCollapseBtnUi(false, context);
         return null;
       }
 
       report.cardSourceLabel = resolved.sourceLabel || '';
       report.cardWarnings = (resolved.warnings || []).slice();
       report.screenOverlayPeriod = overlay.applied ? overlay.period : '';
+      report.cardContext = context;
       lastOrderCardReport = report;
+      lastOrderCardReportContext = context;
       logOrderCardWipEnd20Diagnostics(target);
 
       let html = renderOrderCardMetaHtml(report, resolved, overlay);
@@ -10955,19 +11035,16 @@
 
       if (!report.rows.length) {
         html +=
-          '<div class="hint" style="margin-top:12px;">Нет данных по этому заказу в выбранном источнике.</div>';
+          '<div class="hint" style="margin-top:8px;">Нет данных по этому заказу в выбранном источнике.</div>';
       }
 
-      if (box) {
-        if (typeof setUiActiveScreen === 'function') {
-          setUiActiveScreen('accounting');
-        }
-        box.style.display = 'block';
-        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (ui.box) {
+        ui.box.style.display = 'block';
+        ui.box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
-      updateOrderCardCollapseBtnUi(true);
-      if (title) title.textContent = 'Карточка заказа: ' + target;
-      if (content) content.innerHTML = html;
+      updateOrderCardCollapseBtnUi(true, context);
+      if (ui.title) ui.title.textContent = 'Карточка заказа: ' + target;
+      if (ui.content) ui.content.innerHTML = html;
       return report;
     }
 
@@ -11007,9 +11084,22 @@
       const collapseBtn = document.getElementById('collapseOrderCardBtn');
       if (collapseBtn && !collapseBtn.dataset.bound) {
         collapseBtn.dataset.bound = '1';
-        collapseBtn.addEventListener('click', () => collapseOrderCardResult());
+        collapseBtn.addEventListener('click', () => collapseOrderCardResult('accounting'));
       }
       populateAccountingOrderCardSelect();
+    }
+
+    function initReportsOrderCardUi() {
+      const collapseBtn = document.getElementById('collapseAnnualOrderCardBtn');
+      if (collapseBtn && !collapseBtn.dataset.bound) {
+        collapseBtn.dataset.bound = '1';
+        collapseBtn.addEventListener('click', () => collapseOrderCardResult('reports'));
+      }
+      const exportBtn = document.getElementById('exportAnnualOrderCardBtn');
+      if (exportBtn && !exportBtn.dataset.bound) {
+        exportBtn.dataset.bound = '1';
+        exportBtn.addEventListener('click', () => exportOrderCardToExcel('reports'));
+      }
     }
 
     function manualWriteoffSavedHasValue(s) {
@@ -13669,6 +13759,7 @@
     }
 
     let lastOrderCardReport = null;
+    let lastOrderCardReportContext = 'accounting';
 
     function pickOrderCardEndBalance(rows, field) {
       if (!rows || !rows.length) return 0;
@@ -14399,13 +14490,11 @@
           escapeHtmlForReport(report.year) +
           ' год в ' +
           emptySource +
-          '.</p>' +
-          (report.sourceMeta ? formatReportSourceMetaHtml(report.sourceMeta) : '')
+          '.</p>'
         );
       }
 
-      let html = report.sourceMeta ? formatReportSourceMetaHtml(report.sourceMeta) : '';
-      html +=
+      let html =
         '<p>Месяцы: <strong>' +
         escapeHtmlForReport(report.periodFrom) +
         '</strong> — <strong>' +
@@ -19714,8 +19803,13 @@
       return num(text);
     }
 
-    function readOrderCardTableForExport() {
-      const table = document.querySelector('#orderReportContent table');
+    function readOrderCardTableForExport(contentRoot) {
+      const root =
+        contentRoot ||
+        getOrderCardContextUi(lastOrderCardReportContext || 'accounting').content;
+      const table = root
+        ? root.querySelector('table.order-card-compact, table#orderReportTable, table')
+        : null;
       if (!table) return null;
 
       const allRows = Array.from(table.querySelectorAll('tr'));
@@ -19767,14 +19861,17 @@
       });
     }
 
-    function exportOrderCardToExcel() {
-      const box = document.getElementById('orderReportBox');
-      const selectedOrder =
-        String(document.getElementById('accountingOrderCardSelect')?.value ?? '').trim() ||
-        String(document.getElementById('orderSelect')?.value ?? '').trim();
+    function exportOrderCardToExcel(context) {
+      const ui = getOrderCardContextUi(context || lastOrderCardReportContext || 'accounting');
+      const selectedOrder = String(ui.selectEl()?.value ?? '').trim();
 
-      if (!box || box.style.display === 'none' || !lastOrderCardReport) {
+      if (!ui.box || ui.box.style.display === 'none' || !lastOrderCardReport) {
         alert('Сначала откройте карточку заказа: выберите заказ и нажмите «Открыть карточку заказа».');
+        return;
+      }
+
+      if (lastOrderCardReportContext !== ui.context) {
+        alert('Сначала откройте карточку заказа в этом разделе.');
         return;
       }
 
@@ -19785,7 +19882,7 @@
         return;
       }
 
-      const tableData = readOrderCardTableForExport();
+      const tableData = readOrderCardTableForExport(ui.content);
       if (!tableData || !tableData.dataRows.length) {
         alert('В карточке заказа нет данных для выгрузки.');
         return;
@@ -19848,11 +19945,12 @@
 
     async function buildOrderReport() {
       const orderName = document.getElementById('orderSelect')?.value;
+      const reportsUi = getOrderCardContextUi('reports');
       if (!orderName || !String(orderName).trim()) {
         lastOrderCardReport = null;
-        const box = document.getElementById('orderReportBox');
-        if (box) box.style.display = 'none';
-        updateOrderCardCollapseBtnUi(false);
+        lastOrderCardReportContext = 'reports';
+        if (reportsUi.box) reportsUi.box.style.display = 'none';
+        updateOrderCardCollapseBtnUi(false, 'reports');
         return;
       }
 
@@ -19915,8 +20013,10 @@
 
     const exportOrderCardBtn = document.getElementById('exportOrderCardBtn');
     if (exportOrderCardBtn) {
-      exportOrderCardBtn.addEventListener('click', () => exportOrderCardToExcel());
+      exportOrderCardBtn.addEventListener('click', () => exportOrderCardToExcel('accounting'));
     }
+
+    initReportsOrderCardUi();
 
     const buildAnnualSummaryBtn = document.getElementById('buildAnnualSummaryBtn');
     if (buildAnnualSummaryBtn) {

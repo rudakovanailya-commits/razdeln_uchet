@@ -8191,24 +8191,21 @@
       data.meta = data.meta || {};
       data.meta.updatedAt = new Date().toISOString();
       data.meta.updatedBy = 'v2';
-      return {
-        period: normalizePeriodStr(period),
-        json: JSON.stringify(data),
-        updated_by: 'v2',
-        format_version: 2
-      };
+      return data;
     }
 
-    async function savePeriodDataToCloud(period, payload) {
+    async function savePeriodDataToCloud(period, periodData) {
       const pn = normalizePeriodStr(period);
+      if (!periodData || typeof periodData !== 'object' || Array.isArray(periodData)) {
+        throw new Error('periodData must be a full period object, not sheet rows');
+      }
+      if (!Array.isArray(periodData.rows)) {
+        throw new Error('periodData.rows must be an array (full period copy, not Лист1 rows)');
+      }
       const body = {
         action: 'savePeriodData',
         period: pn,
-        periodData: {
-          json: payload.json,
-          updated_by: payload.updated_by,
-          format_version: payload.format_version
-        }
+        periodData: periodData
       };
       const url = CLOUD_SAVE_URL;
 
@@ -8217,7 +8214,9 @@
       console.log('[v2 cloud] savePeriodData URL', url);
       console.log('[v2 cloud] savePeriodDataToCloud start', {
         period: pn,
-        jsonLength: payload && payload.json ? payload.json.length : 0
+        rowsCount: periodData.rows.length,
+        format_version: periodData.format_version,
+        payloadShape: 'full period object'
       });
 
       const data = await postCloudJsonRequest(url, body);
@@ -10134,15 +10133,17 @@
         let periodDataOk = false;
         let savedMeta = null;
         try {
-          const payload = buildCloudPeriodDataPayload(period);
+          const periodDataPayload = buildCloudPeriodDataPayload(period);
           console.log(
-            '[v2 cloud] periodData payload json length',
-            payload && payload.json ? payload.json.length : 0,
+            '[v2 cloud] periodData payload rows',
+            periodDataPayload && periodDataPayload.rows
+              ? periodDataPayload.rows.length
+              : 0,
             'period',
-            payload && payload.period
+            normalizePeriodStr(period)
           );
 
-          periodDataResult = await savePeriodDataToCloud(period, payload);
+          periodDataResult = await savePeriodDataToCloud(period, periodDataPayload);
           savedMeta = normalizeCloudPeriodVersionMeta(periodDataResult, period);
           const verify = await verifyPeriodDataInCloud(period);
           if (!savedMeta || !savedMeta.updated_at) {

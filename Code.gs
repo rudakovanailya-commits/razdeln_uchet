@@ -14,7 +14,9 @@
  *
  * doPost:
  *   { "action": "replacePeriod", "period": "YYYY-MM", "rows": [...] }
- *   { "action": "savePeriodData", "period": "YYYY-MM", "periodData": { "json": "...", "updated_by": "v2", "format_version": 2 } }
+ *   { "action": "savePeriodData", "period": "YYYY-MM", "periodData": { ...полный объект периода v2... } }
+ *   (legacy: periodData: { "json": "...", "updated_by": "v2", "format_version": 2 })
+ *   { "action": "appendActionLog", "logEntry": { ... } }
  *   { "action": "upsert", "rows": [...] }
  *   { "action": "deletePeriod", "period": "YYYY-MM", "token": "..." }
  */
@@ -293,6 +295,64 @@ function appendActionLogEntry(logEntry) {
   return jsonOut({ ok: true });
 }
 
+/** Извлекает json и метаданные из periodData (полный объект v2 или legacy-обёртка). */
+function parseSavePeriodDataPayload(periodData) {
+  if (periodData == null) {
+    return { ok: false, error: 'periodData_required' };
+  }
+
+  var updatedBy = 'v2';
+  var formatVersion = '2';
+  var jsonStr = '';
+
+  if (typeof periodData === 'string') {
+    jsonStr = periodData;
+  } else if (typeof periodData === 'object' && !Array.isArray(periodData)) {
+    if (
+      periodData.json != null &&
+      typeof periodData.json === 'string' &&
+      !periodData.rows &&
+      !periodData.globals
+    ) {
+      jsonStr = String(periodData.json);
+      if (periodData.updated_by != null && String(periodData.updated_by).trim() !== '') {
+        updatedBy = String(periodData.updated_by).trim();
+      }
+      if (
+        periodData.format_version != null &&
+        String(periodData.format_version).trim() !== ''
+      ) {
+        formatVersion = String(periodData.format_version).trim();
+      }
+    } else if (periodData.rows != null || periodData.globals != null) {
+      if (periodData.meta && periodData.meta.updatedBy) {
+        updatedBy = String(periodData.meta.updatedBy);
+      } else if (periodData.updated_by) {
+        updatedBy = String(periodData.updated_by);
+      }
+      if (periodData.format_version != null) {
+        formatVersion = String(periodData.format_version);
+      }
+      jsonStr = JSON.stringify(periodData);
+    } else {
+      jsonStr = JSON.stringify(periodData);
+    }
+  } else {
+    return { ok: false, error: 'invalid_periodData' };
+  }
+
+  if (!jsonStr || String(jsonStr).trim() === '') {
+    return { ok: false, error: 'json_required' };
+  }
+
+  return {
+    ok: true,
+    jsonStr: String(jsonStr),
+    updatedBy: updatedBy,
+    formatVersion: formatVersion
+  };
+}
+
 function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
   var period = normalizePeriodDataKey(periodParam);
   if (!period) {
@@ -303,6 +363,7 @@ function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
   }
 
   var sheet = getPeriodDataSheet();
+  ensurePeriodDataHeaders(sheet);
   var updatedAt = new Date().toISOString();
   var by =
     updatedBy != null && String(updatedBy).trim() !== ''
@@ -315,7 +376,6 @@ function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
   var json = String(jsonStr);
 
   var lastRow = sheet.getLastRow();
-  var n = PERIOD_DATA_HEADERS.length;
   var targetRow = -1;
 
   if (lastRow >= 2) {
@@ -328,11 +388,13 @@ function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
     }
   }
 
-  var rowArr = [period, json, updatedAt, by, fv];
+  var rowValues = [period, json, updatedAt, by, fv];
   if (targetRow > 0) {
-    sheet.getRange(targetRow, 1, targetRow, n).setValues([rowArr]);
+    sheet
+      .getRange(targetRow, 1, 1, rowValues.length)
+      .setValues([rowValues]);
   } else {
-    sheet.appendRow(rowArr);
+    sheet.appendRow(rowValues);
   }
 
   writeDebugLog('savePeriodData: upserted', {
@@ -1127,23 +1189,29 @@ function doPost(e) {
     }
 
     if (body && body.action === 'savePeriodData') {
-      var periodData = body.periodData || {};
+      var periodData = body.periodData;
+      var parsedPd = parseSavePeriodDataPayload(periodData);
       writeDebugLog('savePeriodData: doPost received', {
         action: 'savePeriodData',
         period: body.period,
         data: {
           rawBodyLength: rawBodyLength,
-          updated_by: periodData.updated_by || '',
-          format_version: periodData.format_version || '',
-          jsonLength:
-            periodData.json != null ? String(periodData.json).length : 0
+          periodDataType: periodData != null ? typeof periodData : 'null',
+          isArray: Array.isArray(periodData),
+          hasRows: !!(periodData && periodData.rows),
+          updated_by: parsedPd.ok ? parsedPd.updatedBy : '',
+          format_version: parsedPd.ok ? parsedPd.formatVersion : '',
+          jsonLength: parsedPd.ok ? String(parsedPd.jsonStr).length : 0
         }
       });
+      if (!parsedPd.ok) {
+        return jsonOut({ ok: false, error: parsedPd.error || 'invalid_periodData' });
+      }
       return upsertPeriodData(
         body.period,
-        periodData.json,
-        periodData.updated_by,
-        periodData.format_version
+        parsedPd.jsonStr,
+        parsedPd.updatedBy,
+        parsedPd.formatVersion
       );
     }
 

@@ -1916,6 +1916,10 @@
       line-height: 1.5;
     }
 
+    .mgmt-reports-period-context {
+      margin-bottom: 12px;
+    }
+
     #mgmtReportsCard .mgmt-reports-kpi-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -2966,8 +2970,8 @@
     <div class="app-screen app-screen-reports" id="appScreenReports" hidden>
 
     <p class="hint reports-data-sources-hint">
-      Отчёты по текущему периоду строятся по текущему экрану.
-      Годовые отчёты строятся по Google Sheets / period_data.
+      Отчёты по текущему периоду строятся по текущему экрану (месяц выбирается в разделе Учёт).
+      Годовые отчёты и годовая сводка по умолчанию — из Google Sheets / period_data; доступен проверочный вариант по localStorage.
     </p>
 
     <div class="card" id="annualSummaryCard" style="margin-top:20px;">
@@ -2975,9 +2979,16 @@
         <h2>Годовая сводка по заказам</h2>
       </div>
       <p class="hint" style="margin-top:8px;">
-        Источник: Google Sheets / period_data. Обороты суммируются за год; НЗП конец — остаток на последний месяц года по каждой группе.
+        Обороты суммируются за год; НЗП конец — остаток на последний месяц года по каждой группе.
       </p>
       <div class="period-report-controls">
+        <div class="field" style="min-width: 280px;">
+          <label for="annualSummarySource">Источник годовой сводки</label>
+          <select id="annualSummarySource" autocomplete="off">
+            <option value="cloud" selected>Google Sheets / period_data</option>
+            <option value="local">localStorage / локальные периоды</option>
+          </select>
+        </div>
         <div class="field annual-summary-year-field">
           <label for="annualSummaryYear">Год</label>
           <select id="annualSummaryYear" autocomplete="off"></select>
@@ -2985,6 +2996,10 @@
         <button type="button" id="buildAnnualSummaryBtn" class="secondary">Сформировать годовую сводку</button>
         <button type="button" id="exportAnnualSummaryBtn" class="secondary">Выгрузить годовую сводку в Excel</button>
       </div>
+      <p class="hint" id="annualSummarySourceHint" style="margin-top:8px;">
+        Google Sheets / period_data — основной облачный источник.
+        localStorage — проверочный отчёт по данным этого браузера.
+      </p>
       <div class="hint" id="annualSummaryStatus" style="margin-top: 8px; min-height: 1.2em;"></div>
       <div id="annualSummaryContent" hidden></div>
     </div>
@@ -3019,11 +3034,11 @@
       </div>
 
       <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
+        <p class="hint" style="margin-bottom: 10px;">
+          Отчёт за текущий период строится по месяцу, открытому на экране Учёт.
+        </p>
+        <div id="mgmtReportsPeriodContextNote" class="mgmt-reports-period-context"></div>
         <div class="mgmt-reports-controls">
-          <div class="mgmt-reports-period-badge">
-            <span>Период:</span>
-            <span id="mgmtReportsCurrentPeriod">—</span>
-          </div>
           <button type="button" id="buildMgmtReportPeriodBtn" class="mgmt-reports-build-btn">Сформировать отчёт за период</button>
         </div>
         <p class="mgmt-reports-status" id="mgmtReportsPeriodStatus"></p>
@@ -13223,6 +13238,64 @@
       };
     }
 
+    function listLocalStoragePeriodDataSourcesForYear(year) {
+      const y = String(year || '').trim();
+      const allMonths = listYearMonthPeriodKeys(y);
+      const sources = new Map();
+      const missing = [];
+
+      if (!/^\d{4}$/.test(y)) {
+        return { year: y, sources, periods: [], missing: allMonths, allMonths };
+      }
+
+      allMonths.forEach(period => {
+        const raw = localStorage.getItem(getStorageKey(period));
+        if (!raw) {
+          missing.push(period);
+          return;
+        }
+        try {
+          const data = JSON.parse(raw);
+          if (data && Array.isArray(data.rows)) {
+            sources.set(period, data);
+          } else {
+            missing.push(period);
+          }
+        } catch (e) {
+          missing.push(period);
+        }
+      });
+
+      return {
+        year: y,
+        sources,
+        periods: Array.from(sources.keys()).sort(),
+        missing,
+        allMonths
+      };
+    }
+
+    function buildLocalYearReportSourceMeta(localFetch) {
+      const lf = localFetch || { year: '', periods: [], missing: [] };
+      const details = ['Год: ' + (lf.year || '—')];
+      details.push(
+        'Включены периоды: ' + (lf.periods && lf.periods.length ? lf.periods.join(', ') : '—')
+      );
+      if (lf.missing && lf.missing.length) {
+        details.push('Не найдены локальные периоды: ' + lf.missing.join(', '));
+      }
+      return {
+        primary: 'Источник: localStorage / локальные периоды этого браузера',
+        details
+      };
+    }
+
+    function getAnnualSummarySourceMode() {
+      const el = document.getElementById('annualSummarySource');
+      const v = el ? String(el.value || '').trim() : 'cloud';
+      return v === 'local' ? 'local' : 'cloud';
+    }
+
     function formatReportSourceMetaHtml(meta) {
       if (!meta) return '';
       let html =
@@ -13430,10 +13503,16 @@
 
     function renderAnnualSummaryHtml(report) {
       if (!report.rows.length) {
+        const emptySource =
+          report.sourceMode === 'local'
+            ? 'localStorage / локальных периодов'
+            : 'Google Sheets / period_data';
         return (
-          '<p>Нет периодов за ' +
+          '<p>Нет данных за ' +
           escapeHtmlForReport(report.year) +
-          ' год в Google Sheets / period_data.</p>' +
+          ' год в ' +
+          emptySource +
+          '.</p>' +
           (report.sourceMeta ? formatReportSourceMetaHtml(report.sourceMeta) : '')
         );
       }
@@ -13531,6 +13610,8 @@
       populateAnnualSummaryYearSelect();
       const yearEl = document.getElementById('annualSummaryYear');
       if (yearEl) yearEl.disabled = false;
+      const sourceEl = document.getElementById('annualSummarySource');
+      if (sourceEl) sourceEl.disabled = false;
       setButtonDisabled('buildAnnualSummaryBtn', false);
       setButtonDisabled('exportAnnualSummaryBtn', false);
     }
@@ -13570,11 +13651,43 @@
       el.value = pick;
     }
 
-    function updateMgmtReportsCurrentPeriodLabel() {
-      const el = document.getElementById('mgmtReportsCurrentPeriod');
-      if (!el) return;
+    function updateMgmtReportsPeriodContextUi() {
+      const periodLabelEl = document.getElementById('mgmtReportsCurrentPeriod');
+      const noteEl = document.getElementById('mgmtReportsPeriodContextNote');
       const period = normalizePeriodStr(getCurrentPeriod());
-      el.textContent = period || 'не выбран';
+      const hasPeriod = !!(period && /^\d{4}-\d{2}$/.test(period));
+      const hasScreenData = hasPeriod && ordersTableHasNonEmptyRows();
+
+      if (periodLabelEl) {
+        periodLabelEl.textContent = hasPeriod ? period : 'не выбран';
+      }
+
+      if (!noteEl) return;
+
+      if (!hasPeriod) {
+        noteEl.innerHTML =
+          '<div class="mgmt-reports-source-note" style="border-color:#fca5a5;background:#fee2e2;color:#b91c1c;">' +
+          '<strong>Сначала выберите и загрузите период в разделе Учёт.</strong>' +
+          '</div>';
+        return;
+      }
+
+      let html =
+        '<div class="mgmt-reports-source-note">' +
+        '<div><strong>Текущий период для отчёта: ' +
+        escapeHtmlForReport(period) +
+        '</strong></div>' +
+        '<div>Источник: текущий экран</div>';
+      if (!hasScreenData) {
+        html +=
+          '<div style="margin-top:6px;color:#b45309;">На экране нет загруженных данных за этот период. Сначала загрузите период в разделе Учёт.</div>';
+      }
+      html += '</div>';
+      noteEl.innerHTML = html;
+    }
+
+    function updateMgmtReportsCurrentPeriodLabel() {
+      updateMgmtReportsPeriodContextUi();
     }
 
     function switchMgmtReportsTab(tabId) {
@@ -14231,13 +14344,18 @@
         const contentEl = document.getElementById('mgmtReportsPeriodContent');
 
         if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+          updateMgmtReportsPeriodContextUi();
           if (statusEl) {
-            statusEl.textContent = 'Выберите период вверху страницы (формат YYYY-MM).';
+            statusEl.innerHTML =
+              '<div class="mgmt-reports-source-note" style="border-color:#fca5a5;background:#fee2e2;color:#b91c1c;">' +
+              '<strong>Сначала выберите и загрузите период в разделе Учёт.</strong>' +
+              '</div>';
           }
           if (contentEl) contentEl.hidden = true;
           return null;
         }
 
+        updateMgmtReportsPeriodContextUi();
         const report = collectMgmtPeriodReportData(period);
         lastMgmtPeriodReport = report;
 
@@ -16071,6 +16189,7 @@
     async function buildAnnualSummaryReport() {
       ensureAnnualSummaryControlsEditable();
       const year = getAnnualSummaryYearInput();
+      const sourceMode = getAnnualSummarySourceMode();
 
       const statusEl = document.getElementById('annualSummaryStatus');
       const contentEl = document.getElementById('annualSummaryContent');
@@ -16080,13 +16199,25 @@
         return null;
       }
 
-      if (statusEl) {
-        statusEl.textContent = 'Загрузка period_data из Google для ' + year + '…';
+      let report;
+      if (sourceMode === 'local') {
+        if (statusEl) {
+          statusEl.textContent = 'Чтение локальных периодов за ' + year + '…';
+        }
+        const localFetch = listLocalStoragePeriodDataSourcesForYear(year);
+        const sourceMeta = buildLocalYearReportSourceMeta(localFetch);
+        report = collectAnnualSummaryData(year, localFetch.sources, sourceMeta);
+        report.sourceMode = 'local';
+      } else {
+        if (statusEl) {
+          statusEl.textContent = 'Загрузка period_data из Google для ' + year + '…';
+        }
+        const cloudFetch = await fetchCloudPeriodDataSourcesForYear(year);
+        const sourceMeta = buildYearReportSourceMeta(cloudFetch);
+        report = collectAnnualSummaryData(year, cloudFetch.sources, sourceMeta);
+        report.sourceMode = 'cloud';
       }
 
-      const cloudFetch = await fetchCloudPeriodDataSourcesForYear(year);
-      const sourceMeta = buildYearReportSourceMeta(cloudFetch);
-      const report = collectAnnualSummaryData(year, cloudFetch.sources, sourceMeta);
       lastAnnualSummaryReport = report;
 
       if (contentEl) {
@@ -16094,6 +16225,10 @@
         contentEl.innerHTML = renderAnnualSummaryHtml(report);
       }
       if (statusEl) {
+        const emptyLabel =
+          sourceMode === 'local'
+            ? 'localStorage / локальных периодов'
+            : 'Google Sheets / period_data';
         let statusHtml = report.rows.length
           ? 'Сводка за ' +
             escapeHtmlForReport(year) +
@@ -16102,7 +16237,7 @@
             ' мес., ' +
             report.rows.length +
             ' групп/заказов'
-          : 'Нет данных за ' + escapeHtmlForReport(year) + ' год в Google Sheets / period_data';
+          : 'Нет данных за ' + escapeHtmlForReport(year) + ' год в ' + emptyLabel;
         if (report.sourceMeta) {
           statusHtml += formatReportSourceMetaHtml(report.sourceMeta);
         }
@@ -19840,6 +19975,10 @@
         const active = btn.getAttribute('data-screen') === uiActiveScreen;
         btn.classList.toggle('active', active);
       });
+
+      if (uiActiveScreen === 'reports' && typeof updateMgmtReportsPeriodContextUi === 'function') {
+        updateMgmtReportsPeriodContextUi();
+      }
     }
 
     function setupMainNavigationUi() {

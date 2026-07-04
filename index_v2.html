@@ -59,6 +59,39 @@
       margin: 0;
     }
 
+    .app-global-period-panel {
+      margin: 0;
+      border-radius: 0;
+      border: none;
+      border-bottom: 1px solid rgba(203, 213, 225, 0.55);
+      box-shadow: none;
+      padding: 12px 14px 10px;
+      background: #ffffff;
+    }
+
+    .app-global-period-panel h2 {
+      margin: 0 0 10px;
+      font-size: 1.05rem;
+    }
+
+    .app-global-period-panel .period-row {
+      margin-bottom: 8px;
+    }
+
+    .app-global-period-panel .hint {
+      margin-top: 6px;
+    }
+
+    .analysis-period-context-hint {
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
     .sticky-period-context-empty {
       color: #e5e7eb;
     }
@@ -2568,13 +2601,9 @@
       <button type="button" class="app-nav-tab" data-screen="reports" id="appTabReports">Отчёты</button>
       <button type="button" class="app-nav-tab" data-screen="analysis" id="appTabAnalysis">Анализ</button>
     </div>
-    <div class="sticky-period-context sticky-period-context-empty" id="stickyPeriodContext" aria-live="polite">Период не выбран</div>
-    </div>
 
-    <div class="app-screen app-screen-accounting" id="appScreenAccounting">
-
-    <div class="card">
-      <h2>Период и общие данные <span class="help-toggle" data-help-id="helpPeriod">ⓘ Что это?</span></h2>
+    <div class="card app-global-period-panel" id="appGlobalPeriodPanel">
+      <h2>Период и управление данными <span class="help-toggle" data-help-id="helpPeriod">ⓘ Что это?</span></h2>
       <div class="help-panel" id="helpPeriod" hidden>
         Здесь выбирается рабочий период, статус периода и выполняется сохранение/загрузка данных. Локальное сохранение хранится в этом браузере. Google Sheets — облачная копия.
       </div>
@@ -2660,6 +2689,11 @@
       <div class="hint" id="cloudPeriodVersionInfo" hidden style="margin-top: 6px; color: #475569;"></div>
       <div class="hint" id="periodCompareInfo" hidden style="margin-top: 8px; padding: 8px 10px; border-radius: 6px;"></div>
     </div>
+
+    <div class="sticky-period-context sticky-period-context-empty" id="stickyPeriodContext" aria-live="polite">Период не выбран</div>
+    </div>
+
+    <div class="app-screen app-screen-accounting" id="appScreenAccounting">
 
     <div class="card" id="actionLogCard">
       <h2>Журнал действий</h2>
@@ -3113,7 +3147,7 @@
     <div class="app-screen app-screen-reports" id="appScreenReports" hidden>
 
     <p class="hint reports-data-sources-hint">
-      Отчёты по текущему периоду строятся по текущему экрану (месяц выбирается в разделе Учёт).
+      Отчёты за текущий период строятся по периоду, выбранному в верхнем блоке.
       Годовые отчёты и годовая сводка по умолчанию — из Google Sheets / period_data; доступен проверочный вариант по localStorage.
     </p>
 
@@ -3196,7 +3230,7 @@
 
       <div id="mgmtReportsPanelPeriod" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabPeriod">
         <p class="hint" style="margin-bottom: 10px;">
-          Отчёт за текущий период строится по месяцу, открытому на экране Учёт.
+          Отчёт за текущий период строится по периоду, выбранному в верхнем блоке.
         </p>
         <div id="mgmtReportsPeriodContextNote" class="mgmt-reports-period-context"></div>
         <div class="mgmt-reports-controls">
@@ -3300,6 +3334,10 @@
     </div> <!-- /appScreenReports -->
 
     <div class="app-screen app-screen-analysis" id="appScreenAnalysis" hidden>
+
+    <p class="hint analysis-period-context-hint" id="analysisPeriodContextHint">
+      Анализ строится по текущему выбранному периоду.
+    </p>
 
     <div class="card" id="aiAnalysisCard" style="margin-top:20px;">
       <div class="period-summary-head">
@@ -7269,7 +7307,7 @@
         display.classList.toggle('period-status-final', isFinal);
       }
       if (closeBtn) closeBtn.hidden = isFinal;
-      updateStickyPeriodContext();
+      refreshAppPeriodDependentUi();
     }
 
     let loadedPeriodOnScreen = '';
@@ -7279,16 +7317,15 @@
       screenPeriodDataOrigin =
         origin === 'local' || origin === 'cloud' ? origin : '';
       if (screenPeriodDataOrigin) uiScreenCleared = false;
-      updateStickyPeriodContext();
+      refreshAppPeriodDependentUi();
     }
 
     function markLoadedPeriodOnScreen(period) {
       loadedPeriodOnScreen = normalizePeriodStr(period) || '';
       hidePeriodDataMismatchHint();
-      updateMgmtReportsCurrentPeriodLabel();
       if (typeof refreshOrderCardContextNotesOnly === 'function') refreshOrderCardContextNotesOnly();
       updateCloudPeriodVersionUi();
-      updateStickyPeriodContext();
+      refreshAppPeriodDependentUi();
     }
 
     function hidePeriodDataMismatchHint() {
@@ -14636,7 +14673,7 @@
       if (!hasPeriod) {
         noteEl.innerHTML =
           '<div class="mgmt-reports-source-note" style="border-color:#fca5a5;background:#fee2e2;color:#b91c1c;">' +
-          '<strong>Сначала выберите и загрузите период в разделе Учёт.</strong>' +
+          '<strong>Сначала выберите и загрузите период в верхнем блоке.</strong>' +
           '</div>';
         return;
       }
@@ -14649,7 +14686,7 @@
         '<div>Источник: текущий экран</div>';
       if (!hasScreenData) {
         html +=
-          '<div style="margin-top:6px;color:#b45309;">На экране нет загруженных данных за этот период. Сначала загрузите период в разделе Учёт.</div>';
+          '<div style="margin-top:6px;color:#b45309;">На экране нет загруженных данных за этот период. Загрузите период в верхнем блоке.</div>';
       }
       html += '</div>';
       noteEl.innerHTML = html;
@@ -15317,7 +15354,7 @@
           if (statusEl) {
             statusEl.innerHTML =
               '<div class="mgmt-reports-source-note" style="border-color:#fca5a5;background:#fee2e2;color:#b91c1c;">' +
-              '<strong>Сначала выберите и загрузите период в разделе Учёт.</strong>' +
+              '<strong>Сначала выберите и загрузите период в верхнем блоке.</strong>' +
               '</div>';
           }
           if (contentEl) contentEl.hidden = true;
@@ -20813,26 +20850,22 @@
         if (val) {
           loadPeriod(false);
         }
-        refreshOrderCardContextNotesOnly();
-        updateStickyPeriodContext();
+        refreshAppPeriodDependentUi();
       });
     }
     if (periodInputEl) {
       periodInputEl.addEventListener('input', () => {
         hidePeriodCompareInfo();
         updatePeriodList();
-        refreshOrderCardContextNotesOnly();
-        updateStickyPeriodContext();
+        refreshAppPeriodDependentUi();
       });
       periodInputEl.addEventListener('change', () => {
         handlePeriodFieldCommitted();
-        refreshOrderCardContextNotesOnly();
-        updateStickyPeriodContext();
+        refreshAppPeriodDependentUi();
       });
       periodInputEl.addEventListener('blur', () => {
         handlePeriodFieldCommitted();
-        refreshOrderCardContextNotesOnly();
-        updateStickyPeriodContext();
+        refreshAppPeriodDependentUi();
       });
     }
 
@@ -20867,7 +20900,7 @@
       refreshAllOrderNameTitles();
       setupOrdersTableScrollSync();
       refreshOrderCardContextNotesOnly();
-      updateStickyPeriodContext();
+      refreshAppPeriodDependentUi();
       initAccountingOrderCardUi();
     })();
 
@@ -20918,10 +20951,9 @@
       });
 
       if (uiActiveScreen === 'reports') {
-        updateMgmtReportsPeriodContextUi();
         refreshOrderCardReportsUi();
       }
-      updateStickyPeriodContext();
+      refreshAppPeriodDependentUi();
     }
 
     function setupMainNavigationUi() {
@@ -21048,6 +21080,25 @@
         .join('<span class="sticky-period-sep"> · </span>');
     }
 
+    function updateAnalysisPeriodContextUi() {
+      const el = document.getElementById('analysisPeriodContextHint');
+      if (!el) return;
+      const period = normalizePeriodStr(getCurrentPeriod());
+      const base = 'Анализ строится по текущему выбранному периоду.';
+      if (period && /^\d{4}-\d{2}$/.test(period)) {
+        el.textContent = base + ' Текущий период: ' + period + '.';
+      } else {
+        el.textContent = base + ' Период не выбран.';
+      }
+    }
+
+    function refreshAppPeriodDependentUi() {
+      updateStickyPeriodContext();
+      updateMgmtReportsPeriodContextUi();
+      populateAccountingOrderCardSelect();
+      updateAnalysisPeriodContextUi();
+    }
+
     function updateStickyPeriodContext() {
       const el = document.getElementById('stickyPeriodContext');
       if (!el) return;
@@ -21095,6 +21146,7 @@
       if (uiPeriodDirty && uiWipCheckedAt) uiWipNeedsRecheck = true;
       updateQuickSaveUi();
       updateWipChainUiStatus();
+      updateStickyPeriodContext();
     }
 
     function updateWipChainUiStatus() {
@@ -21244,7 +21296,7 @@
     updateQuickSaveUi();
     updateWipChainUiStatus();
     setupCloudLoadUi();
-    updateStickyPeriodContext();
+    refreshAppPeriodDependentUi();
     console.log(
       '[v2 cloud load] handlers ready, loadPeriodFromCloudV2=',
       typeof window.loadPeriodFromCloudV2

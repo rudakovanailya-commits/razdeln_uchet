@@ -2338,6 +2338,70 @@
       background: #fffbeb !important;
     }
 
+    #mgmtReportsCard .mgmt-period-report-table-wrap {
+      max-height: none;
+      overflow-x: auto;
+      overflow-y: visible;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-table th,
+    #mgmtReportsCard .mgmt-period-report-table td {
+      padding: 5px 6px;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-table .mgmt-num-col {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-table .mgmt-text-col {
+      text-align: left;
+      white-space: normal;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-table thead th {
+      background: #e8f5ef;
+      color: #14532d;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-table tr.mgmt-period-totals-row td {
+      font-weight: 600;
+      background: #dff3e8 !important;
+      border-top: 2px solid #a7d7bc;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-table tr.mgmt-period-totals-row td.mgmt-reports-col-order {
+      background: #dff3e8 !important;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-meta {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border: 1px solid #d1e7df;
+      border-radius: 8px;
+      background: #f8fdfb;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #334155;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-meta strong {
+      color: #14532d;
+    }
+
+    #mgmtReportsCard .mgmt-period-report-section-title {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #14532d;
+    }
+
     #mgmtReportsCard .mgmt-reports-empty-note {
       padding: 16px;
       border-radius: 10px;
@@ -3332,29 +3396,12 @@
         <div id="mgmtReportsPeriodContextNote" class="mgmt-reports-period-context"></div>
         <div class="mgmt-reports-controls">
           <button type="button" id="buildMgmtReportPeriodBtn" class="mgmt-reports-build-btn">Сформировать отчёт за период</button>
+          <button type="button" id="hideMgmtReportPeriodBtn" class="secondary mgmt-reports-export-btn" hidden>Скрыть отчёт</button>
+          <button type="button" id="exportMgmtPeriodExcelBtn" class="secondary mgmt-reports-export-btn" hidden>Выгрузить отчёт в Excel</button>
+          <button type="button" id="exportMgmtPeriodPdfBtn" class="secondary mgmt-reports-pdf-btn mgmt-reports-export-btn" hidden>Выгрузить отчёт в PDF</button>
         </div>
         <p class="mgmt-reports-status" id="mgmtReportsPeriodStatus"></p>
-        <div id="mgmtReportsPeriodContent" hidden>
-          <div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi"></div>
-          <div class="mgmt-reports-two-col">
-            <div class="mgmt-reports-section">
-              <h3 class="mgmt-reports-section-title">Крупные заказы по отгрузке</h3>
-              <div id="mgmtReportsPeriodTopRevenue"></div>
-            </div>
-            <div class="mgmt-reports-section">
-              <h3 class="mgmt-reports-section-title">Заказы с наибольшей прибылью</h3>
-              <div id="mgmtReportsPeriodTopProfit"></div>
-            </div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Заказы, требующие внимания</h3>
-            <div id="mgmtReportsPeriodProblems"></div>
-          </div>
-          <div class="mgmt-reports-section">
-            <h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>
-            <div id="mgmtReportsPeriodFullTable"></div>
-          </div>
-        </div>
+        <div id="mgmtReportsPeriodContent" hidden></div>
       </div>
 
       <div id="mgmtReportsPanelYear" class="mgmt-reports-panel" role="tabpanel" aria-labelledby="mgmtReportsTabYear" hidden>
@@ -15069,6 +15116,87 @@
       buildMgmtPeriodReport();
     }
 
+    function buildMgmtPeriodExpenseRows(data) {
+      if (!data || !Array.isArray(data.rows) || !data.rows.length) return [];
+      const globals = data.globals || {};
+      const periodTotals = computePeriodTotals(data);
+      const groups = buildCalculationGroupsFromPeriodData(data);
+      const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+
+      return groups
+        .map(group => {
+          const breakdown = sumGroupExpenseBreakdownForAi(group.memberRows, globals, periodTotals);
+          const sums = sumGroupMetricsFromPeriodData(
+            group.memberRows,
+            globals,
+            periodTotals,
+            group.groupName,
+            transfers
+          );
+          const wipStart20 = sums.wipStart;
+          const total20 =
+            wipStart20 +
+            breakdown.materials +
+            breakdown.processing +
+            breakdown.otherDirect +
+            breakdown.salary +
+            breakdown.insurance +
+            breakdown.sick +
+            breakdown.acc25;
+          const totalAll = total20 + breakdown.acc26 + breakdown.acc44;
+          return {
+            groupName: group.groupName,
+            isMultiMember: group.memberRows.length > 1,
+            memberCount: group.memberRows.length,
+            wipStart20,
+            materials: breakdown.materials,
+            processing: breakdown.processing,
+            other: breakdown.otherDirect,
+            salary: breakdown.salary,
+            insurance: breakdown.insurance,
+            sick: breakdown.sick,
+            acc25: breakdown.acc25,
+            total20,
+            acc26: breakdown.acc26,
+            acc44: breakdown.acc44,
+            totalAll
+          };
+        })
+        .sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+    }
+
+    function sumMgmtPeriodExpenseTotals(expenseRows) {
+      const t = {
+        wipStart20: 0,
+        materials: 0,
+        processing: 0,
+        other: 0,
+        salary: 0,
+        insurance: 0,
+        sick: 0,
+        acc25: 0,
+        total20: 0,
+        acc26: 0,
+        acc44: 0,
+        totalAll: 0
+      };
+      (expenseRows || []).forEach(r => {
+        t.wipStart20 += r.wipStart20;
+        t.materials += r.materials;
+        t.processing += r.processing;
+        t.other += r.other;
+        t.salary += r.salary;
+        t.insurance += r.insurance;
+        t.sick += r.sick;
+        t.acc25 += r.acc25;
+        t.total20 += r.total20;
+        t.acc26 += r.acc26;
+        t.acc44 += r.acc44;
+        t.totalAll += r.totalAll;
+      });
+      return t;
+    }
+
     function collectMgmtPeriodReportData(period) {
       const p = normalizePeriodStr(period || getCurrentPeriod());
       const current = normalizePeriodStr(getCurrentPeriod());
@@ -15109,6 +15237,7 @@
       }
 
       const totals = {
+        wipStart20: 0,
         shipmentVat: 0,
         shipmentNoVat: 0,
         writeoffTotal: 0,
@@ -15116,24 +15245,30 @@
         writeoff26: 0,
         profit: 0,
         wipEnd20: 0,
-        wipEnd26: 0,
         marginPct: 0
       };
       built.rows.forEach(r => {
+        totals.wipStart20 += r.wipStart20;
         totals.shipmentVat += r.shipmentVat;
         totals.shipmentNoVat += r.shipmentNoVat;
         totals.writeoffTotal += r.writeoffTotal;
         totals.writeoff20 += r.writeoff20;
         totals.writeoff26 += r.writeoff26;
         totals.wipEnd20 += r.wipEnd20;
-        totals.wipEnd26 += r.wipEnd26;
+        totals.profit += r.profit;
       });
-      totals.profit = totals.shipmentNoVat - totals.writeoffTotal;
       totals.marginPct = computeAnnualMarginPct(totals.profit, totals.shipmentNoVat);
+      const expenseRows = buildMgmtPeriodExpenseRows(data);
+      const expenseTotals = sumMgmtPeriodExpenseTotals(expenseRows);
       return {
         period: p,
+        periodLabel: formatMgmtPeriodMonthLabel(p),
+        generatedAt: new Date().toISOString(),
+        hasUnsavedChanges: !!uiPeriodDirty,
         rows: built.rows,
         totals,
+        expenseRows,
+        expenseTotals,
         sourceMeta: buildPeriodReportSourceMeta()
       };
     }
@@ -15655,43 +15790,568 @@
       );
     }
 
-    function renderMgmtPeriodReportFull(report) {
-      const emptyMsg = 'Нет данных за выбранный период.';
-      const hasData = !report.error && report.rows && report.rows.length && report.totals;
-
-      const kpiHtml = hasData ? renderMgmtPeriodKpiHtml(report.totals) : '';
-      const topRevHtml = hasData ? renderMgmtYearTopRevenue(report.rows) : mgmtRenderEmptyNote(emptyMsg);
-      const topProfitHtml = hasData ? renderMgmtYearTopProfit(report.rows) : mgmtRenderEmptyNote(emptyMsg);
-      const problemsHtml = hasData ? renderMgmtPeriodProblems(report.rows) : mgmtRenderEmptyNote(emptyMsg);
-      const fullTableHtml = hasData ? renderMgmtYearFullTable(report.rows) : mgmtRenderEmptyNote(emptyMsg);
-
+    function mgmtPeriodNumCell(value) {
+      const n = num(value);
       return (
-        '<div class="mgmt-reports-kpi-grid" id="mgmtReportsPeriodKpi">' +
-        kpiHtml +
+        '<td class="mgmt-num-col" data-export-value="' +
+        n +
+        '">' +
+        escapeHtmlForReport(formatMoney(value)) +
+        '</td>'
+      );
+    }
+
+    function mgmtPeriodPctCell(val) {
+      const n = Number.isFinite(num(val)) ? num(val) : 0;
+      return (
+        '<td class="mgmt-num-col" data-export-value="' +
+        n +
+        '">' +
+        n.toFixed(1).replace('.', ',') +
+        '%</td>'
+      );
+    }
+
+    function mgmtPeriodTextCell(text) {
+      return '<td class="mgmt-text-col">' + escapeHtmlForReport(text || '') + '</td>';
+    }
+
+    function mgmtRenderPeriodReportTable(headers, rowsHtml, tableId, extraClass) {
+      let html =
+        '<div class="mgmt-reports-data-table-wrap mgmt-period-report-table-wrap"><table';
+      if (tableId) html += ' id="' + tableId + '"';
+      html += ' class="mgmt-reports-data-table mgmt-period-report-table';
+      if (extraClass) html += ' ' + extraClass;
+      html += '"><thead><tr>';
+      headers.forEach((title, i) => {
+        let cls = 'mgmt-num-col';
+        if (i === 0) cls = 'mgmt-reports-col-order mgmt-text-col';
+        else if (title === 'Комментарий') cls = 'mgmt-text-col';
+        html += '<th class="' + cls + '">' + escapeHtmlForReport(title) + '</th>';
+      });
+      html += '</tr></thead><tbody>' + (rowsHtml || '') + '</tbody></table></div>';
+      return html;
+    }
+
+    function renderMgmtPeriodReportMeta(report) {
+      const dirtyLabel = report.hasUnsavedChanges
+        ? 'есть несохранённые изменения'
+        : 'без изменений';
+      const genDate = formatMgmtPdfDateTime(new Date(report.generatedAt || Date.now()));
+      return (
+        '<div class="mgmt-period-report-meta" id="mgmtReportsPeriodMeta">' +
+        '<div><strong>Период:</strong> ' +
+        escapeHtmlForReport(report.period) +
+        ' (' +
+        escapeHtmlForReport(report.periodLabel || formatMgmtPeriodMonthLabel(report.period)) +
+        ')</div>' +
+        '<div><strong>Источник:</strong> текущий экран</div>' +
+        '<div><strong>Дата формирования:</strong> ' +
+        escapeHtmlForReport(genDate) +
         '</div>' +
-        '<div class="mgmt-reports-two-col">' +
-        '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по выручке</h3>' +
-        '<div id="mgmtReportsPeriodTopRevenue">' +
-        topRevHtml +
-        '</div></div>' +
-        '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Топ-5 заказов по прибыли</h3>' +
-        '<div id="mgmtReportsPeriodTopProfit">' +
-        topProfitHtml +
-        '</div></div></div>' +
-        '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Проблемные заказы</h3>' +
-        '<div id="mgmtReportsPeriodProblems">' +
-        problemsHtml +
-        '</div></div>' +
-        '<div class="mgmt-reports-section">' +
-        '<h3 class="mgmt-reports-section-title">Полная таблица заказов за период</h3>' +
-        '<div id="mgmtReportsPeriodFullTable">' +
-        fullTableHtml +
+        '<div><strong>Состояние:</strong> ' +
+        escapeHtmlForReport(dirtyLabel) +
         '</div></div>'
       );
     }
+
+    const MGMT_PERIOD_MAIN_HEADERS = [
+      'Заказ / расчётная группа',
+      'НЗП нач. 20',
+      'Отгрузка с НДС',
+      'Отгрузка без НДС',
+      'Списано всего',
+      'Списано с 26',
+      'Списано с 20',
+      'НЗП конец 20',
+      'Прибыль',
+      'Маржа %',
+      'Комментарий'
+    ];
+
+    const MGMT_PERIOD_EXPENSE_HEADERS = [
+      'Заказ / расчётная группа',
+      'НЗП нач. 20',
+      'Материалы',
+      'Обработка',
+      'Прочие',
+      'ЗП',
+      'Взносы',
+      'Больничные',
+      '25 сч.',
+      'Итого по 20 сч.',
+      '26 сч.',
+      '44 сч.',
+      'Итого всего'
+    ];
+
+    function renderMgmtPeriodMainTable(report) {
+      const rows = report.rows || [];
+      if (!rows.length) return mgmtRenderEmptyNote('Нет данных.');
+      const sorted = [...rows].sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+      const body = sorted
+        .map(r => {
+          const comment = r.controlComments && r.controlComments !== '—' ? r.controlComments : '';
+          return (
+            '<tr>' +
+            mgmtRenderOrderCell(r) +
+            mgmtPeriodNumCell(r.wipStart20) +
+            mgmtPeriodNumCell(r.shipmentVat) +
+            mgmtPeriodNumCell(r.shipmentNoVat) +
+            mgmtPeriodNumCell(r.writeoffTotal) +
+            mgmtPeriodNumCell(r.writeoff26) +
+            mgmtPeriodNumCell(r.writeoff20) +
+            mgmtPeriodNumCell(r.wipEnd20) +
+            mgmtPeriodNumCell(r.profit) +
+            mgmtPeriodPctCell(r.marginPct) +
+            mgmtPeriodTextCell(comment) +
+            '</tr>'
+          );
+        })
+        .join('');
+      const t = report.totals;
+      const totalsRow =
+        '<tr class="mgmt-period-totals-row">' +
+        '<td class="mgmt-reports-col-order"><strong>Итого</strong></td>' +
+        mgmtPeriodNumCell(t.wipStart20) +
+        mgmtPeriodNumCell(t.shipmentVat) +
+        mgmtPeriodNumCell(t.shipmentNoVat) +
+        mgmtPeriodNumCell(t.writeoffTotal) +
+        mgmtPeriodNumCell(t.writeoff26) +
+        mgmtPeriodNumCell(t.writeoff20) +
+        mgmtPeriodNumCell(t.wipEnd20) +
+        mgmtPeriodNumCell(t.profit) +
+        mgmtPeriodPctCell(t.marginPct) +
+        mgmtPeriodTextCell('') +
+        '</tr>';
+      return mgmtRenderPeriodReportTable(
+        MGMT_PERIOD_MAIN_HEADERS,
+        body + totalsRow,
+        'mgmtReportsPeriodMainTable',
+        'mgmt-period-main-table'
+      );
+    }
+
+    function renderMgmtPeriodExpenseTable(report) {
+      const rows = report.expenseRows || [];
+      if (!rows.length) return mgmtRenderEmptyNote('Нет данных.');
+      const body = rows
+        .map(r => {
+          return (
+            '<tr>' +
+            mgmtRenderOrderCell(r) +
+            mgmtPeriodNumCell(r.wipStart20) +
+            mgmtPeriodNumCell(r.materials) +
+            mgmtPeriodNumCell(r.processing) +
+            mgmtPeriodNumCell(r.other) +
+            mgmtPeriodNumCell(r.salary) +
+            mgmtPeriodNumCell(r.insurance) +
+            mgmtPeriodNumCell(r.sick) +
+            mgmtPeriodNumCell(r.acc25) +
+            mgmtPeriodNumCell(r.total20) +
+            mgmtPeriodNumCell(r.acc26) +
+            mgmtPeriodNumCell(r.acc44) +
+            mgmtPeriodNumCell(r.totalAll) +
+            '</tr>'
+          );
+        })
+        .join('');
+      const et = report.expenseTotals || sumMgmtPeriodExpenseTotals(rows);
+      const totalsRow =
+        '<tr class="mgmt-period-totals-row">' +
+        '<td class="mgmt-reports-col-order"><strong>Итого</strong></td>' +
+        mgmtPeriodNumCell(et.wipStart20) +
+        mgmtPeriodNumCell(et.materials) +
+        mgmtPeriodNumCell(et.processing) +
+        mgmtPeriodNumCell(et.other) +
+        mgmtPeriodNumCell(et.salary) +
+        mgmtPeriodNumCell(et.insurance) +
+        mgmtPeriodNumCell(et.sick) +
+        mgmtPeriodNumCell(et.acc25) +
+        mgmtPeriodNumCell(et.total20) +
+        mgmtPeriodNumCell(et.acc26) +
+        mgmtPeriodNumCell(et.acc44) +
+        mgmtPeriodNumCell(et.totalAll) +
+        '</tr>';
+      return mgmtRenderPeriodReportTable(
+        MGMT_PERIOD_EXPENSE_HEADERS,
+        body + totalsRow,
+        'mgmtReportsPeriodExpenseTable',
+        'mgmt-period-expense-table'
+      );
+    }
+
+    function renderMgmtPeriodReportFull(report) {
+      const emptyMsg = 'Нет данных за выбранный период.';
+      const hasData = !report.error && report.rows && report.rows.length && report.totals;
+      if (!hasData) {
+        return mgmtRenderEmptyNote(report.error || emptyMsg);
+      }
+      return (
+        renderMgmtPeriodReportMeta(report) +
+        '<div class="mgmt-reports-section">' +
+        '<h3 class="mgmt-period-report-section-title">Основная таблица</h3>' +
+        renderMgmtPeriodMainTable(report) +
+        '</div>' +
+        '<div class="mgmt-reports-section" style="margin-top:18px;">' +
+        '<h3 class="mgmt-period-report-section-title">Справочно: расходы периода</h3>' +
+        renderMgmtPeriodExpenseTable(report) +
+        '</div>'
+      );
+    }
+
+    function updateMgmtPeriodReportExportButtonsUi(hasReport) {
+      const show = !!hasReport;
+      ['hideMgmtReportPeriodBtn', 'exportMgmtPeriodExcelBtn', 'exportMgmtPeriodPdfBtn'].forEach(
+        id => {
+          const el = document.getElementById(id);
+          if (el) el.hidden = !show;
+        }
+      );
+    }
+
+    function hideMgmtPeriodReport() {
+      const contentEl = document.getElementById('mgmtReportsPeriodContent');
+      if (contentEl) {
+        contentEl.innerHTML = '';
+        contentEl.hidden = true;
+      }
+      updateMgmtPeriodReportExportButtonsUi(false);
+    }
+
+    function mgmtPeriodGroupExportLabel(row) {
+      let name = String(row.groupName || '—');
+      if (row.isMultiMember && row.memberCount > 1) {
+        name += ' (' + row.memberCount + ')';
+      }
+      return name;
+    }
+
+    function setExcelCellPercent(ws, addr) {
+      const cell = ws[addr];
+      if (!cell || typeof cell.v !== 'number') return;
+      cell.t = 'n';
+      cell.z = '0.0"%"';
+    }
+
+    function exportMgmtPeriodReportToExcel() {
+      const report = lastMgmtPeriodReport;
+      if (!report || !report.rows || !report.rows.length) {
+        alert('Сначала сформируйте отчёт за период.');
+        return;
+      }
+      if (typeof XLSX === 'undefined') {
+        alert('Не подключена библиотека Excel (XLSX). Проверьте интернет и обновите страницу.');
+        return;
+      }
+
+      const aoa = [];
+      aoa.push(['Период', report.period]);
+      aoa.push(['Месяц', report.periodLabel || formatMgmtPeriodMonthLabel(report.period)]);
+      aoa.push(['Источник', 'текущий экран']);
+      aoa.push(['Дата формирования', formatMgmtPdfDateTime(new Date(report.generatedAt || Date.now()))]);
+      aoa.push([
+        'Состояние',
+        report.hasUnsavedChanges ? 'есть несохранённые изменения' : 'без изменений'
+      ]);
+      aoa.push([]);
+
+      const mainHeaderRow = aoa.length;
+      aoa.push(MGMT_PERIOD_MAIN_HEADERS.slice());
+      const mainDataStart = aoa.length;
+      const sorted = [...report.rows].sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+      sorted.forEach(r => {
+        const comment = r.controlComments && r.controlComments !== '—' ? r.controlComments : '';
+        aoa.push([
+          mgmtPeriodGroupExportLabel(r),
+          num(r.wipStart20),
+          num(r.shipmentVat),
+          num(r.shipmentNoVat),
+          num(r.writeoffTotal),
+          num(r.writeoff26),
+          num(r.writeoff20),
+          num(r.wipEnd20),
+          num(r.profit),
+          num(r.marginPct),
+          comment
+        ]);
+      });
+      const t = report.totals;
+      const mainTotalsRow = aoa.length;
+      aoa.push([
+        'Итого',
+        num(t.wipStart20),
+        num(t.shipmentVat),
+        num(t.shipmentNoVat),
+        num(t.writeoffTotal),
+        num(t.writeoff26),
+        num(t.writeoff20),
+        num(t.wipEnd20),
+        num(t.profit),
+        num(t.marginPct),
+        ''
+      ]);
+
+      aoa.push([]);
+      const expenseTitleRow = aoa.length;
+      aoa.push(['Справочно: расходы периода']);
+      const expenseHeaderRow = aoa.length;
+      aoa.push(MGMT_PERIOD_EXPENSE_HEADERS.slice());
+      const expenseDataStart = aoa.length;
+      (report.expenseRows || []).forEach(r => {
+        aoa.push([
+          mgmtPeriodGroupExportLabel(r),
+          num(r.wipStart20),
+          num(r.materials),
+          num(r.processing),
+          num(r.other),
+          num(r.salary),
+          num(r.insurance),
+          num(r.sick),
+          num(r.acc25),
+          num(r.total20),
+          num(r.acc26),
+          num(r.acc44),
+          num(r.totalAll)
+        ]);
+      });
+      const et = report.expenseTotals || sumMgmtPeriodExpenseTotals(report.expenseRows);
+      const expenseTotalsRow = aoa.length;
+      aoa.push([
+        'Итого',
+        num(et.wipStart20),
+        num(et.materials),
+        num(et.processing),
+        num(et.other),
+        num(et.salary),
+        num(et.insurance),
+        num(et.sick),
+        num(et.acc25),
+        num(et.total20),
+        num(et.acc26),
+        num(et.acc44),
+        num(et.totalAll)
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const mainColCount = MGMT_PERIOD_MAIN_HEADERS.length;
+      const expenseColCount = MGMT_PERIOD_EXPENSE_HEADERS.length;
+
+      for (let r = mainDataStart; r <= mainTotalsRow; r++) {
+        for (let c = 1; c < mainColCount - 1; c++) {
+          setExcelCellNumber(ws, XLSX.utils.encode_cell({ r, c }));
+        }
+        setExcelCellPercent(ws, XLSX.utils.encode_cell({ r, c: mainColCount - 1 }));
+      }
+
+      for (let r = expenseDataStart; r <= expenseTotalsRow; r++) {
+        for (let c = 1; c < expenseColCount; c++) {
+          setExcelCellNumber(ws, XLSX.utils.encode_cell({ r, c }));
+        }
+      }
+
+      setExcelRowBold(ws, mainHeaderRow, mainColCount);
+      setExcelRowBold(ws, mainTotalsRow, mainColCount);
+      setExcelRowBold(ws, expenseTitleRow, 1);
+      setExcelRowBold(ws, expenseHeaderRow, expenseColCount);
+      setExcelRowBold(ws, expenseTotalsRow, expenseColCount);
+
+      ws['!cols'] = Array.from({ length: expenseColCount }, (_, c) => ({
+        wch: c === 0 ? 34 : 14
+      }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Отчёт за период');
+      XLSX.writeFile(wb, 'otchet_period_' + report.period + '.xlsx', { cellStyles: true });
+    }
+    window.exportMgmtPeriodReportToExcel = exportMgmtPeriodReportToExcel;
+
+    function mgmtPdfPeriodMainColWidths(layout) {
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [
+        0.17, 0.07, 0.08, 0.08, 0.07, 0.07, 0.07, 0.07, 0.07, 0.06, 0.12
+      ]);
+    }
+
+    function mgmtPdfPeriodExpenseColWidths(layout) {
+      return mgmtPdfWidthsFromWeights(layout.contentWidth, [
+        0.14, 0.06, 0.07, 0.07, 0.06, 0.06, 0.06, 0.06, 0.06, 0.08, 0.06, 0.06, 0.08
+      ]);
+    }
+
+    function mgmtPdfPeriodTableOptions(layout, widths, fontSize) {
+      return mgmtPdfMakeTableOptions(layout, widths, {
+        styles: {
+          font: 'DejaVuSans',
+          fontSize: fontSize || 7,
+          cellPadding: 1.5,
+          overflow: 'linebreak',
+          valign: 'middle'
+        },
+        columnStylesPerCol: widths.reduce((acc, _w, i) => {
+          acc[i] = i === 0 ? { overflow: 'linebreak', valign: 'top', halign: 'left' } : { halign: 'right' };
+          return acc;
+        }, {})
+      });
+    }
+
+    async function buildMgmtPeriodPdfDocument(report) {
+      const JsPDF = await loadMgmtPdfLibraries();
+      const generatedAt = new Date(report.generatedAt || Date.now());
+      const doc = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      await ensureMgmtPdfFont(doc);
+
+      const layout = mgmtPdfGetLayout(doc);
+      let y = layout.marginTop + 4;
+
+      doc.setFont('DejaVuSans', 'normal');
+      doc.setFontSize(18);
+      doc.setTextColor(15, 118, 110);
+      doc.text('Управленческий отчёт за период ' + report.period, layout.marginLeft, y);
+      y += 8;
+
+      doc.setFontSize(10);
+      doc.setTextColor(51, 65, 85);
+      doc.text('Источник: текущий экран', layout.marginLeft, y);
+      y += 5;
+      doc.text('Дата формирования: ' + formatMgmtPdfDateTime(generatedAt), layout.marginLeft, y);
+      y += 5;
+      doc.text(
+        'Состояние: ' +
+          (report.hasUnsavedChanges ? 'есть несохранённые изменения' : 'без изменений'),
+        layout.marginLeft,
+        y
+      );
+      y += 8;
+
+      const sorted = [...report.rows].sort((a, b) => a.groupName.localeCompare(b.groupName, 'ru'));
+      const mainBody = sorted.map(r => [
+        mgmtPdfGroupLabel(r),
+        formatMoney(r.wipStart20),
+        formatMoney(r.shipmentVat),
+        formatMoney(r.shipmentNoVat),
+        formatMoney(r.writeoffTotal),
+        formatMoney(r.writeoff26),
+        formatMoney(r.writeoff20),
+        formatMoney(r.wipEnd20),
+        formatMoney(r.profit),
+        mgmtFmtPdfPct(r.marginPct),
+        r.controlComments && r.controlComments !== '—' ? r.controlComments : ''
+      ]);
+      const t = report.totals;
+      mainBody.push([
+        'Итого',
+        formatMoney(t.wipStart20),
+        formatMoney(t.shipmentVat),
+        formatMoney(t.shipmentNoVat),
+        formatMoney(t.writeoffTotal),
+        formatMoney(t.writeoff26),
+        formatMoney(t.writeoff20),
+        formatMoney(t.wipEnd20),
+        formatMoney(t.profit),
+        mgmtFmtPdfPct(t.marginPct),
+        ''
+      ]);
+
+      const mainWidths = mgmtPdfPeriodMainColWidths(layout);
+      y = mgmtPdfAddSectionTable(
+        doc,
+        layout,
+        y,
+        'Основная таблица',
+        MGMT_PERIOD_MAIN_HEADERS,
+        mainBody,
+        {
+          ...mgmtPdfPeriodTableOptions(layout, mainWidths, 6.5),
+          tableWidth: layout.contentWidth,
+          didParseCell: data => {
+            if (data.row.index === mainBody.length - 1) {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor = [223, 243, 232];
+            }
+          }
+        }
+      );
+
+      const expenseBody = (report.expenseRows || []).map(r => [
+        mgmtPdfGroupLabel(r),
+        formatMoney(r.wipStart20),
+        formatMoney(r.materials),
+        formatMoney(r.processing),
+        formatMoney(r.other),
+        formatMoney(r.salary),
+        formatMoney(r.insurance),
+        formatMoney(r.sick),
+        formatMoney(r.acc25),
+        formatMoney(r.total20),
+        formatMoney(r.acc26),
+        formatMoney(r.acc44),
+        formatMoney(r.totalAll)
+      ]);
+      const et = report.expenseTotals || sumMgmtPeriodExpenseTotals(report.expenseRows);
+      expenseBody.push([
+        'Итого',
+        formatMoney(et.wipStart20),
+        formatMoney(et.materials),
+        formatMoney(et.processing),
+        formatMoney(et.other),
+        formatMoney(et.salary),
+        formatMoney(et.insurance),
+        formatMoney(et.sick),
+        formatMoney(et.acc25),
+        formatMoney(et.total20),
+        formatMoney(et.acc26),
+        formatMoney(et.acc44),
+        formatMoney(et.totalAll)
+      ]);
+
+      const expenseWidths = mgmtPdfPeriodExpenseColWidths(layout);
+      mgmtPdfAddSectionTable(
+        doc,
+        layout,
+        y,
+        'Справочно: расходы периода',
+        MGMT_PERIOD_EXPENSE_HEADERS,
+        expenseBody,
+        {
+          ...mgmtPdfPeriodTableOptions(layout, expenseWidths, 6),
+          tableWidth: layout.contentWidth,
+          didParseCell: data => {
+            if (data.row.index === expenseBody.length - 1) {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor = [223, 243, 232];
+            }
+          }
+        }
+      );
+
+      return doc;
+    }
+
+    async function exportMgmtPeriodReportToPdf() {
+      const report = lastMgmtPeriodReport;
+      if (!report || !report.rows || !report.rows.length) {
+        alert('Сначала сформируйте отчёт за период.');
+        return;
+      }
+      const btn = document.getElementById('exportMgmtPeriodPdfBtn');
+      if (btn) btn.disabled = true;
+      showAppStatus('Готовим PDF отчёта за период…', 'loading');
+      try {
+        const doc = await buildMgmtPeriodPdfDocument(report);
+        doc.save('otchet_period_' + report.period + '.pdf');
+        showAppStatus('PDF отчёта за период сохранён', 'success');
+      } catch (err) {
+        console.error('[mgmt period pdf]', err);
+        const msg =
+          (err && err.mgmtPdfMessage) ||
+          (err && err.message ? err.message : String(err));
+        alert('Не удалось сформировать PDF: ' + msg);
+        showAppStatus('Ошибка формирования PDF', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    window.exportMgmtPeriodReportToPdf = exportMgmtPeriodReportToPdf;
 
     let lastMgmtPeriodReport = null;
 
@@ -15715,6 +16375,7 @@
               '</div>';
           }
           if (contentEl) contentEl.hidden = true;
+          updateMgmtPeriodReportExportButtonsUi(false);
           clearAppStatus({ onlyIfType: 'loading' });
           return null;
         }
@@ -15725,8 +16386,12 @@
 
         if (contentEl) {
           contentEl.innerHTML = renderMgmtPeriodReportFull(report);
-          contentEl.hidden = false;
+          contentEl.hidden = !report.rows.length && !report.error;
         }
+
+        updateMgmtPeriodReportExportButtonsUi(
+          !report.error && report.rows && report.rows.length > 0
+        );
 
         if (statusEl) {
           let statusHtml = '';
@@ -15762,6 +16427,7 @@
           statusEl.textContent =
             'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
         }
+        updateMgmtPeriodReportExportButtonsUi(false);
         showAppStatus('Ошибка формирования отчёта', 'error');
         return null;
       } finally {
@@ -17588,6 +18254,15 @@
           } else if (target.id === 'buildMgmtReportPeriodBtn') {
             e.preventDefault();
             buildMgmtPeriodReport();
+          } else if (target.id === 'hideMgmtReportPeriodBtn') {
+            e.preventDefault();
+            hideMgmtPeriodReport();
+          } else if (target.id === 'exportMgmtPeriodExcelBtn') {
+            e.preventDefault();
+            exportMgmtPeriodReportToExcel();
+          } else if (target.id === 'exportMgmtPeriodPdfBtn') {
+            e.preventDefault();
+            exportMgmtPeriodReportToPdf();
           } else if (target.id === 'buildMgmtOrdersReportBtn') {
             e.preventDefault();
             buildMgmtOrdersReport();

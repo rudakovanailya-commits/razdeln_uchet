@@ -92,6 +92,97 @@
       line-height: 1.45;
     }
 
+    .app-global-status {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.45;
+      border-top: 1px solid rgba(203, 213, 225, 0.55);
+    }
+
+    .app-global-status[hidden] {
+      display: none !important;
+    }
+
+    .app-global-status--loading {
+      background: #eff6ff;
+      color: #1e3a8a;
+      border-left: 4px solid #3b82f6;
+    }
+
+    .app-global-status--warning {
+      background: #fffbeb;
+      color: #92400e;
+      border-left: 4px solid #f59e0b;
+    }
+
+    .app-global-status--success {
+      background: #ecfdf5;
+      color: #166534;
+      border-left: 4px solid #22c55e;
+    }
+
+    .app-global-status--error {
+      background: #fef2f2;
+      color: #991b1b;
+      border-left: 4px solid #ef4444;
+    }
+
+    .app-global-status-spinner {
+      width: 20px;
+      height: 20px;
+      margin-top: 1px;
+      border: 2.5px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: app-status-spin 0.75s linear infinite;
+      flex-shrink: 0;
+      opacity: 0.9;
+    }
+
+    .app-global-status--success .app-global-status-spinner,
+    .app-global-status--error .app-global-status-spinner {
+      display: none;
+    }
+
+    .app-global-status-icon {
+      width: 20px;
+      height: 20px;
+      margin-top: 1px;
+      flex-shrink: 0;
+      font-size: 18px;
+      line-height: 20px;
+      text-align: center;
+    }
+
+    .app-global-status--loading .app-global-status-icon {
+      display: none;
+    }
+
+    .app-global-status-text {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    @keyframes app-status-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    button .app-btn-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-right: 2px;
+      vertical-align: -2px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: app-status-spin 0.75s linear infinite;
+    }
+
     .sticky-period-context-empty {
       color: #e5e7eb;
     }
@@ -2691,6 +2782,12 @@
     </div>
 
     <div class="sticky-period-context sticky-period-context-empty" id="stickyPeriodContext" aria-live="polite">Период не выбран</div>
+
+    <div id="appGlobalStatus" class="app-global-status app-global-status--loading" hidden role="status" aria-live="polite" aria-atomic="true">
+      <span class="app-global-status-spinner" id="appGlobalStatusSpinner" aria-hidden="true"></span>
+      <span class="app-global-status-icon" id="appGlobalStatusIcon" aria-hidden="true"></span>
+      <span class="app-global-status-text" id="appGlobalStatusText"></span>
+    </div>
     </div>
 
     <div class="app-screen app-screen-accounting" id="appScreenAccounting">
@@ -8370,6 +8467,13 @@
       }
       if (!requireValidWorkingPeriod(pn, true)) return;
 
+      setActionButtonLoading('comparePeriodBtn', true, 'Сравнение…');
+      showAppStatus(
+        'Сравниваем локальную и облачную версии периода ' + pn + '…',
+        'loading',
+        { mirrorPeriodAction: true }
+      );
+
       if (infoEl) {
         infoEl.hidden = false;
         setPeriodCompareInfoStyle(infoEl, 'pending');
@@ -8377,6 +8481,7 @@
         updateHidePeriodCompareBtnUi();
       }
 
+      try {
       const localRaw = readLocalPeriodDataForCompare(pn);
       let localSummary = { exists: false };
       let localParseError = false;
@@ -8439,6 +8544,23 @@
             : '',
         details: diffDetails
       });
+
+      if (localParseError || (!localSummary.exists && !cloudSummary.exists)) {
+        showAppStatus('Ошибка сравнения периода ' + pn, 'error', { mirrorPeriodAction: true });
+      } else if (diffs.length) {
+        showAppStatus(
+          'Сравнение периода ' + pn + ' завершено: найдены отличия (' + diffs.length + ')',
+          'warning',
+          { mirrorPeriodAction: true }
+        );
+      } else {
+        showAppStatus('Сравнение периода ' + pn + ' завершено', 'success', {
+          mirrorPeriodAction: true
+        });
+      }
+      } finally {
+        setActionButtonLoading('comparePeriodBtn', false);
+      }
     }
 
     function applyPeriodDataFromCloud(data, source) {
@@ -8558,7 +8680,12 @@
       if (!confirmIfUnsyncedCloudLoad()) return;
 
       const statusEl = document.getElementById('periodActionStatus');
-      if (statusEl) statusEl.textContent = 'Загрузка из облака…';
+      setActionButtonLoading('loadCloudBtn', true, 'Загрузка…');
+      showAppStatus(
+        'Загружаем период ' + period + ' из Google Sheets…',
+        'loading',
+        { mirrorPeriodAction: true }
+      );
 
       try {
         const result = await fetchPeriodDataFromCloud(period);
@@ -8569,6 +8696,11 @@
           if (!data) {
             console.error('[v2 cloud load] parsePeriodDataFromCloud failed');
             if (statusEl) statusEl.textContent = '';
+            showAppStatus(
+              'Ошибка загрузки периода ' + period + ' из Google Sheets',
+              'error',
+              { mirrorPeriodAction: true }
+            );
             alert(
               'В period_data найден JSON, но его не удалось разобрать. Проверьте Console.'
             );
@@ -8593,6 +8725,11 @@
               normalizePeriodStr(period) +
               ' из Google Sheets';
           }
+          showAppStatus(
+            'Период ' + normalizePeriodStr(period) + ' успешно загружен из Google Sheets',
+            'success',
+            { mirrorPeriodAction: true }
+          );
           alert('Загружена полная копия периода из Google Sheets.');
           recordUserAction({
             action: 'load_google',
@@ -8610,6 +8747,11 @@
 
         const legacyLoaded = await loadPeriodFromCloudLegacyFlat(period, statusEl);
         if (legacyLoaded) {
+          showAppStatus(
+            'Период ' + normalizePeriodStr(period) + ' успешно загружен из Google Sheets',
+            'success',
+            { mirrorPeriodAction: true }
+          );
           recordUserAction({
             action: 'load_google',
             status: 'ok',
@@ -8618,6 +8760,11 @@
             details: 'legacy flat Лист1'
           });
         } else {
+          showAppStatus(
+            'Ошибка загрузки периода ' + period + ' из Google Sheets',
+            'error',
+            { mirrorPeriodAction: true }
+          );
           recordUserAction({
             action: 'load_google',
             status: 'error',
@@ -8628,6 +8775,14 @@
       } catch (err) {
         console.error('[v2 cloud load] failed', err);
         if (statusEl) statusEl.textContent = '';
+        showAppStatus(
+          'Ошибка загрузки периода ' +
+            period +
+            ' из Google Sheets: ' +
+            (err && err.message ? err.message : String(err)),
+          'error',
+          { mirrorPeriodAction: true }
+        );
         alert(
           'Не удалось загрузить из облака: ' + (err && err.message ? err.message : String(err))
         );
@@ -8637,6 +8792,8 @@
           period,
           details: err && err.message ? err.message : String(err)
         });
+      } finally {
+        setActionButtonLoading('loadCloudBtn', false);
       }
     }
 
@@ -10181,6 +10338,163 @@
         .replace(/"/g, '&quot;');
     }
 
+    let appStatusHideTimer = null;
+    const appButtonLoadingState = new WeakMap();
+
+    function mirrorPeriodActionStatus(message, type) {
+      const ps = document.getElementById('periodActionStatus');
+      if (!ps) return;
+      ps.textContent = String(message || '');
+      if (type === 'error') {
+        ps.style.color = '#b91c1c';
+        ps.style.fontWeight = '600';
+      } else if (type === 'success') {
+        ps.style.color = '#15803d';
+        ps.style.fontWeight = '';
+      } else {
+        ps.style.color = '';
+        ps.style.fontWeight = '';
+      }
+    }
+
+    function clearAppStatus(options) {
+      options = options || {};
+      const el = document.getElementById('appGlobalStatus');
+      if (!el) return;
+      if (options.onlyIfType && !el.classList.contains('app-global-status--' + options.onlyIfType)) {
+        return;
+      }
+      if (appStatusHideTimer) {
+        clearTimeout(appStatusHideTimer);
+        appStatusHideTimer = null;
+      }
+      el.hidden = true;
+      el.className = 'app-global-status';
+      const iconEl = document.getElementById('appGlobalStatusIcon');
+      if (iconEl) iconEl.textContent = '';
+    }
+
+    function showAppStatus(message, type, options) {
+      options = options || {};
+      const el = document.getElementById('appGlobalStatus');
+      const textEl = document.getElementById('appGlobalStatusText');
+      const spinnerEl = document.getElementById('appGlobalStatusSpinner');
+      const iconEl = document.getElementById('appGlobalStatusIcon');
+      if (!el || !textEl) return;
+
+      if (appStatusHideTimer) {
+        clearTimeout(appStatusHideTimer);
+        appStatusHideTimer = null;
+      }
+
+      const t = ['loading', 'success', 'warning', 'error'].includes(type) ? type : 'loading';
+      el.hidden = false;
+      el.className = 'app-global-status app-global-status--' + t;
+      textEl.textContent = String(message || '');
+
+      if (spinnerEl) spinnerEl.hidden = t !== 'loading';
+      if (iconEl) {
+        iconEl.textContent = t === 'success' ? '✓' : t === 'error' ? '✕' : t === 'warning' ? '!' : '';
+      }
+
+      if (options.mirrorPeriodAction) {
+        mirrorPeriodActionStatus(message, t);
+      }
+
+      if (t === 'success' || (t === 'warning' && options.autoHideMs > 0)) {
+        const ms =
+          options.autoHideMs !== undefined
+            ? options.autoHideMs
+            : t === 'success'
+              ? 3000
+              : 0;
+        if (ms > 0) {
+          appStatusHideTimer = setTimeout(() => clearAppStatus(), ms);
+        }
+      }
+    }
+
+    function setActionButtonLoading(buttonOrId, isLoading, loadingText) {
+      const btn =
+        typeof buttonOrId === 'string' ? document.getElementById(buttonOrId) : buttonOrId;
+      if (!btn) return;
+
+      if (isLoading) {
+        if (!appButtonLoadingState.has(btn)) {
+          appButtonLoadingState.set(btn, {
+            html: btn.innerHTML,
+            disabled: btn.disabled
+          });
+        }
+        btn.disabled = true;
+        const label = loadingText || 'Загрузка…';
+        btn.innerHTML =
+          '<span class="app-btn-spinner" aria-hidden="true"></span> ' +
+          escapeHtmlForReport(label);
+      } else {
+        const prev = appButtonLoadingState.get(btn);
+        if (prev) {
+          btn.innerHTML = prev.html;
+          btn.disabled = prev.disabled;
+          appButtonLoadingState.delete(btn);
+        } else {
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function runAsyncAppAction(options, asyncFn) {
+      const opts = options || {};
+      const btn = opts.button
+        ? typeof opts.button === 'string'
+          ? document.getElementById(opts.button)
+          : opts.button
+        : null;
+      const loadingMessage =
+        typeof opts.loadingMessage === 'function' ? opts.loadingMessage() : opts.loadingMessage;
+
+      if (loadingMessage) {
+        showAppStatus(loadingMessage, opts.loadingType || 'loading', {
+          mirrorPeriodAction: !!opts.mirrorPeriodAction
+        });
+      }
+      setActionButtonLoading(btn, true, opts.loadingText);
+
+      try {
+        const result = await asyncFn();
+        if (opts.successWhen && !opts.successWhen(result)) {
+          if (opts.clearOnCancel !== false) clearAppStatus({ onlyIfType: 'loading' });
+          return result;
+        }
+        const successText =
+          typeof opts.successMessage === 'function'
+            ? opts.successMessage(result)
+            : opts.successMessage;
+        if (successText) {
+          showAppStatus(successText, 'success', {
+            autoHideMs: opts.autoHideMs !== undefined ? opts.autoHideMs : 3000,
+            mirrorPeriodAction: !!opts.mirrorPeriodAction
+          });
+        }
+        if (opts.onSuccess) opts.onSuccess(result);
+        return result;
+      } catch (err) {
+        const errMsg =
+          typeof opts.errorMessage === 'function'
+            ? opts.errorMessage(err)
+            : opts.errorMessage ||
+              'Ошибка: ' + (err && err.message ? err.message : String(err));
+        showAppStatus(errMsg, 'error', {
+          mirrorPeriodAction: !!opts.mirrorPeriodAction
+        });
+        if (opts.onError) opts.onError(err);
+        if (!opts.suppressThrow) throw err;
+        return null;
+      } finally {
+        setActionButtonLoading(btn, false);
+      }
+    }
+
     function clearReport() {
       const wrap = document.getElementById('periodReportTableWrap');
       if (wrap) {
@@ -10267,6 +10581,8 @@
       const box = document.getElementById('periodReportBox');
       const wrap = document.getElementById('periodReportTableWrap');
       setPeriodReportPanelOpen(true);
+      setActionButtonLoading('buildPeriodReportBtn', true, 'Формирование…');
+      showAppStatus('Загружаем данные для сводки за период…', 'loading');
       if (statusEl) statusEl.textContent = 'Загрузка из Google Таблицы…';
       if (wrap) wrap.innerHTML = '';
 
@@ -10351,13 +10667,22 @@
               list.length
             : 'Нет данных за выбранный диапазон в Google Таблице. Сохраните период в облако или проверьте диапазон дат.';
         }
+        showAppStatus(
+          list.length
+            ? 'Сводка за период ' + from + ' — ' + to + ' сформирована'
+            : 'Сводка за период ' + from + ' — ' + to + ': данных не найдено',
+          list.length ? 'success' : 'warning'
+        );
       } catch (err) {
         if (statusEl) statusEl.textContent = '';
+        showAppStatus('Ошибка формирования сводки за период', 'error');
         alert(
           'Не удалось получить данные из Google Таблицы: ' +
             (err && err.message ? err.message : String(err)) +
             '\n\nВ веб-приложении Google Apps Script нужен doGet: при action=getRows вернуть JSON-массив строк (period, order, shipment, materials, processing, other, salary, account25, account26, account44, total_cost, writeoff, profit, profit_percent, status).'
         );
+      } finally {
+        setActionButtonLoading('buildPeriodReportBtn', false);
       }
     }
 
@@ -10399,6 +10724,12 @@
         resetPeriodActionStatusStyle();
         statusEl.textContent = 'Отправка в облако…';
       }
+      setActionButtonLoading('saveCloudBtn', true, 'Сохранение…');
+      showAppStatus(
+        'Сохраняем период ' + period + ' в Google Sheets…',
+        'loading',
+        { mirrorPeriodAction: true }
+      );
 
       try {
         flushPeriodStateFromDomBeforeSave();
@@ -10409,6 +10740,7 @@
         const check = validateCloudPayloadRowsForSave(period, rows);
         if (!check.ok) {
           if (statusEl) statusEl.textContent = '';
+          clearAppStatus({ onlyIfType: 'loading' });
           alertCloudSaveCancelledNoRows(period);
           return;
         }
@@ -10476,6 +10808,9 @@
           const errMsg =
             'Ошибка: Лист1 обновлён, но полная копия period_data не сохранилась. Облачная версия v2 не обновлена.';
           setPeriodActionStatusError(errMsg);
+          showAppStatus('Ошибка сохранения периода ' + period + ' в Google Sheets', 'error', {
+            mirrorPeriodAction: true
+          });
           alert(errMsg);
           recordUserAction({
             action: 'google_error',
@@ -10494,6 +10829,11 @@
         const successMsg =
           'Сохранено в Google Sheets: Лист1 и period_data обновлены. Локальная копия не изменена.';
         setPeriodActionStatusSuccess(successMsg);
+        showAppStatus(
+          'Период ' + period + ' успешно сохранён в Google Sheets',
+          'success',
+          { mirrorPeriodAction: true }
+        );
         alert(successMsg);
         if (savedMeta && savedMeta.updated_at) {
           setCloudPeriodVersionMeta(savedMeta);
@@ -10515,6 +10855,14 @@
         console.error('[v2 cloud] saveToCloud error:', err);
         resetPeriodActionStatusStyle();
         if (statusEl) statusEl.textContent = '';
+        showAppStatus(
+          'Ошибка сохранения периода ' +
+            period +
+            ' в Google Sheets: ' +
+            (err && err.message ? err.message : String(err)),
+          'error',
+          { mirrorPeriodAction: true }
+        );
         alert(
           'Не удалось сохранить в Google Sheets: ' +
             (err && err.message ? err.message : String(err))
@@ -10525,6 +10873,8 @@
           period,
           details: 'save_google: ' + (err && err.message ? err.message : String(err))
         });
+      } finally {
+        setActionButtonLoading('saveCloudBtn', false);
       }
     }
 
@@ -11086,24 +11436,29 @@
       const orderName = sel ? String(sel.value || '').trim() : '';
       if (!orderName) return;
 
-      const prevBtnText = btn ? btn.textContent : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Загрузка…';
-      }
+      setActionButtonLoading(btn, true, 'Загрузка карточки…');
+      showAppStatus('Строим карточку заказа…', 'loading');
 
       try {
-        await buildOrderCardReport(orderName, {
+        const report = await buildOrderCardReport(orderName, {
           sourceMode: readAccountingOrderCardSourceMode()
         });
+        if (report && report.rows && report.rows.length) {
+          showAppStatus('Карточка заказа построена', 'success');
+        } else if (report) {
+          showAppStatus('Карточка заказа: данных по заказу не найдено', 'warning', {
+            autoHideMs: 4000
+          });
+        }
       } catch (e) {
         console.error('[accounting order card]', e);
+        showAppStatus('Ошибка построения карточки заказа', 'error');
         alert(
           'Не удалось построить карточку заказа: ' + (e && e.message ? e.message : String(e))
         );
       } finally {
         populateAccountingOrderCardSelect();
-        if (btn) btn.textContent = prevBtnText || 'Открыть карточку заказа';
+        setActionButtonLoading(btn, false);
       }
     }
 
@@ -15344,6 +15699,8 @@
       try {
         switchMgmtReportsTab('period');
         updateMgmtReportsCurrentPeriodLabel();
+        setActionButtonLoading('buildMgmtReportPeriodBtn', true, 'Формирование…');
+        showAppStatus('Готовим отчёт за текущий период…', 'loading');
 
         const period = normalizePeriodStr(getCurrentPeriod());
         const statusEl = document.getElementById('mgmtReportsPeriodStatus');
@@ -15358,6 +15715,7 @@
               '</div>';
           }
           if (contentEl) contentEl.hidden = true;
+          clearAppStatus({ onlyIfType: 'loading' });
           return null;
         }
 
@@ -15387,6 +15745,15 @@
           }
           statusEl.innerHTML = statusHtml;
         }
+        if (report.error || !report.rows.length) {
+          showAppStatus(
+            report.error || 'Нет данных за выбранный период',
+            'warning',
+            { autoHideMs: 4000 }
+          );
+        } else {
+          showAppStatus('Отчёт за период ' + period + ' сформирован', 'success');
+        }
         return report;
       } catch (err) {
         console.error('[mgmt period report]', err);
@@ -15395,7 +15762,10 @@
           statusEl.textContent =
             'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
         }
+        showAppStatus('Ошибка формирования отчёта', 'error');
         return null;
+      } finally {
+        setActionButtonLoading('buildMgmtReportPeriodBtn', false);
       }
     }
     window.buildMgmtPeriodReport = buildMgmtPeriodReport;
@@ -16177,6 +16547,8 @@
     window.exportMgmtSingleOrderToPdf = exportMgmtSingleOrderToPdf;
 
     async function buildMgmtOrdersReport() {
+      setActionButtonLoading('buildMgmtOrdersReportBtn', true, 'Формирование…');
+      showAppStatus('Строим карточку заказа…', 'loading');
       try {
         switchMgmtReportsTab('orders');
         const config = readOrderCardUiConfig('mgmt');
@@ -16197,6 +16569,7 @@
             contentEl.hidden = false;
             contentEl.innerHTML = mgmtRenderEmptyNote('Выберите заказ для формирования отчёта.');
           }
+          clearAppStatus({ onlyIfType: 'loading' });
           return null;
         }
 
@@ -16210,6 +16583,7 @@
           if (!periodOrYear) {
             if (statusEl) statusEl.textContent = 'Период не выбран';
             if (contentEl) contentEl.hidden = true;
+            clearAppStatus({ onlyIfType: 'loading' });
             return null;
           }
           fetchResult = await fetchOrderCardPeriodSources(config);
@@ -16267,6 +16641,7 @@
               escapeHtmlForReport(emptyMsg) +
               (sourceMeta ? formatReportSourceMetaHtml(sourceMeta) : '');
           }
+          showAppStatus('Карточка заказа: данных не найдено', 'warning', { autoHideMs: 4000 });
           return report;
         }
 
@@ -16288,6 +16663,7 @@
           }
           statusEl.innerHTML = statusHtml;
         }
+        showAppStatus('Карточка заказа построена', 'success');
         return report;
       } catch (err) {
         console.error('[mgmt single order report]', err);
@@ -16296,7 +16672,10 @@
           statusEl.textContent =
             'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
         }
+        showAppStatus('Ошибка построения карточки заказа', 'error');
         return null;
+      } finally {
+        setActionButtonLoading('buildMgmtOrdersReportBtn', false);
       }
     }
     window.buildMgmtOrdersReport = buildMgmtOrdersReport;
@@ -16348,6 +16727,7 @@
     let lastMgmtYearReport = null;
 
     async function buildMgmtYearReport() {
+      setActionButtonLoading('buildMgmtReportYearBtn', true, 'Формирование…');
       try {
         switchMgmtReportsTab('year');
 
@@ -16362,9 +16742,11 @@
         if (!year || !/^\d{4}$/.test(year)) {
           if (statusEl) statusEl.textContent = 'Укажите год.';
           if (contentEl) contentEl.hidden = true;
+          clearAppStatus({ onlyIfType: 'loading' });
           return null;
         }
 
+        showAppStatus('Формируем годовой отчёт за ' + year + ' год…', 'loading');
         if (statusEl) {
           statusEl.textContent = 'Загрузка period_data из Google для ' + year + '…';
         }
@@ -16407,6 +16789,15 @@
           }
           statusEl.innerHTML = statusHtml;
         }
+        if (report.error || !report.rows.length) {
+          showAppStatus(
+            report.error || 'Нет данных за выбранный год',
+            'warning',
+            { autoHideMs: 4000 }
+          );
+        } else {
+          showAppStatus('Годовой отчёт за ' + year + ' год сформирован', 'success');
+        }
         return report;
       } catch (err) {
         console.error('[mgmt year report] ошибка формирования', err);
@@ -16415,7 +16806,10 @@
           statusEl.textContent =
             'Ошибка формирования отчёта: ' + (err && err.message ? err.message : String(err));
         }
+        showAppStatus('Ошибка формирования годового отчёта', 'error');
         return null;
+      } finally {
+        setActionButtonLoading('buildMgmtReportYearBtn', false);
       }
     }
     window.buildMgmtYearReport = buildMgmtYearReport;
@@ -17218,6 +17612,10 @@
         return null;
       }
 
+      setActionButtonLoading('buildAnnualSummaryBtn', true, 'Формирование…');
+      showAppStatus('Формируем годовую сводку за ' + year + ' год…', 'loading');
+
+      try {
       let report;
       if (sourceMode === 'local') {
         if (statusEl) {
@@ -17263,7 +17661,30 @@
         statusEl.innerHTML = statusHtml;
       }
       populateOrderSelectFromAnnualSummary();
+      if (report.rows.length) {
+        showAppStatus('Годовая сводка за ' + year + ' год сформирована', 'success');
+      } else {
+        showAppStatus(
+          'Годовая сводка за ' + year + ' год: данных не найдено',
+          'warning',
+          { autoHideMs: 4000 }
+        );
+      }
       return report;
+      } catch (err) {
+        console.error('[annual summary]', err);
+        showAppStatus(
+          'Ошибка формирования годовой сводки за ' + year + ' год',
+          'error'
+        );
+        if (statusEl) {
+          statusEl.textContent =
+            'Ошибка: ' + (err && err.message ? err.message : String(err));
+        }
+        return null;
+      } finally {
+        setActionButtonLoading('buildAnnualSummaryBtn', false);
+      }
     }
 
     function readAnnualSummaryTableForExport() {
@@ -17843,6 +18264,10 @@
       const outputEl = document.getElementById('aiAnalysisOutput');
       const copyBtn = document.getElementById('copyAiAnalysisBtn');
 
+      setActionButtonLoading('prepareAiAnalysisBtn', true, 'Подготовка…');
+      showAppStatus('Готовим данные для ИИ-анализа…', 'loading');
+
+      try {
       const scope = scopeEl ? scopeEl.value : 'month';
       let periodOrYear = '';
       if (scope === 'year') {
@@ -17859,6 +18284,7 @@
         if (outputEl) outputEl.value = '';
         if (copyBtn) copyBtn.disabled = true;
         if (statusEl) statusEl.textContent = report.error;
+        showAppStatus(report.error, 'error');
         return null;
       }
 
@@ -17877,7 +18303,11 @@
             : '') +
           '. Скопируйте текст в ChatGPT.';
       }
+      showAppStatus('Данные для ИИ-анализа подготовлены', 'success');
       return report;
+      } finally {
+        setActionButtonLoading('prepareAiAnalysisBtn', false);
+      }
     }
 
     async function copyAiAnalysisDataToClipboard() {
@@ -19994,27 +20424,29 @@
       }
 
       const btn = document.getElementById('orderReportBtn');
-      const prevBtnText = btn ? btn.textContent : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Загрузка…';
-      }
+      setActionButtonLoading(btn, true, 'Загрузка карточки…');
+      showAppStatus('Строим карточку заказа…', 'loading');
 
       try {
-        await buildOrderCardReport(String(orderName).trim(), {
+        const report = await buildOrderCardReport(String(orderName).trim(), {
           fromAnnualSummary: true,
           skipScreenOverlay: true
         });
+        if (report && report.rows && report.rows.length) {
+          showAppStatus('Карточка заказа построена', 'success');
+        } else if (report) {
+          showAppStatus('Карточка заказа: данных по заказу не найдено', 'warning', {
+            autoHideMs: 4000
+          });
+        }
       } catch (e) {
         console.error('[reports order card]', e);
+        showAppStatus('Ошибка построения карточки заказа', 'error');
         alert(
           'Не удалось построить карточку заказа: ' + (e && e.message ? e.message : String(e))
         );
       } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = prevBtnText || 'Открыть карточку заказа';
-        }
+        setActionButtonLoading(btn, false);
       }
     }
 
@@ -20111,11 +20543,36 @@
     }
     const loadSalaryScenarioBtn = document.getElementById('loadSalaryScenarioBtn');
     if (loadSalaryScenarioBtn) {
-      loadSalaryScenarioBtn.addEventListener('click', () => loadSalaryScenarioFact(true));
+      loadSalaryScenarioBtn.addEventListener('click', () => {
+        runAsyncAppAction(
+          {
+            button: 'loadSalaryScenarioBtn',
+            loadingText: 'Загрузка…',
+            loadingMessage: 'Загружаем фактические данные для сценария…',
+            successWhen: result => !!result,
+            successMessage: 'Фактические данные для сценария загружены',
+            suppressThrow: true
+          },
+          () => loadSalaryScenarioFact(true)
+        );
+      });
     }
     const calcSalaryScenarioBtn = document.getElementById('calcSalaryScenarioBtn');
     if (calcSalaryScenarioBtn) {
-      calcSalaryScenarioBtn.addEventListener('click', () => calculateSalaryScenario());
+      calcSalaryScenarioBtn.addEventListener('click', () => {
+        runAsyncAppAction(
+          {
+            button: 'calcSalaryScenarioBtn',
+            loadingText: 'Расчёт…',
+            loadingMessage: 'Рассчитываем сценарий перераспределения ЗП…',
+            successWhen: result => result !== false,
+            successMessage: 'Сценарий рассчитан',
+            suppressThrow: true,
+            clearOnCancel: false
+          },
+          () => calculateSalaryScenario()
+        );
+      });
     }
     const salaryScenarioCopyFactBtn = document.getElementById('salaryScenarioCopyFactBtn');
     if (salaryScenarioCopyFactBtn) {
@@ -20681,8 +21138,28 @@
         inp.blur();
       }
       requestAnimationFrame(() => {
-        const ok = savePeriod(true, { logAction: true });
-        if (ok) setUiPeriodDirty(false);
+        runAsyncAppAction(
+          {
+            button: 'saveBtn',
+            loadingText: 'Сохранение…',
+            loadingMessage: () => {
+              const p = getCurrentPeriod();
+              return p
+                ? 'Сохраняем локальную копию периода ' + p + '…'
+                : 'Сохраняем локальную копию…';
+            },
+            mirrorPeriodAction: true,
+            successWhen: result => result === true,
+            successMessage: () =>
+              'Период ' + getCurrentPeriod() + ' успешно сохранён локально',
+            suppressThrow: true
+          },
+          () => {
+            const ok = savePeriod(true, { logAction: true });
+            if (ok) setUiPeriodDirty(false);
+            return ok;
+          }
+        );
       });
     });
 
@@ -20707,7 +21184,32 @@
       if (inp && document.activeElement === inp) {
         inp.blur();
       }
-      requestAnimationFrame(() => loadPeriod(true));
+      requestAnimationFrame(() => {
+        runAsyncAppAction(
+          {
+            button: 'loadBtn',
+            loadingText: 'Загрузка…',
+            loadingMessage: () => {
+              const p = getCurrentPeriod();
+              return p
+                ? 'Загружаем локальные данные периода ' + p + '…'
+                : 'Загружаем локальные данные…';
+            },
+            mirrorPeriodAction: true,
+            successWhen: () => {
+              const p = getCurrentPeriod();
+              return !!(p && loadedPeriodOnScreen === p && localStorage.getItem(getStorageKey(p)));
+            },
+            successMessage: () =>
+              'Период ' + getCurrentPeriod() + ' успешно загружен локально',
+            suppressThrow: true
+          },
+          () => {
+            loadPeriod(true);
+            return true;
+          }
+        );
+      });
     });
 
     const comparePeriodBtn = document.getElementById('comparePeriodBtn');
@@ -20884,6 +21386,7 @@
     setupPeriodSummaryToggle();
     updateHidePeriodCompareBtnUi();
     (async function initFromCloud() {
+      showAppStatus('Получаем список периодов…', 'loading');
       updatePeriodList();
       try {
         allData = await loadData();
@@ -20902,6 +21405,7 @@
       refreshOrderCardContextNotesOnly();
       refreshAppPeriodDependentUi();
       initAccountingOrderCardUi();
+      clearAppStatus({ onlyIfType: 'loading' });
     })();
 
     // =====================

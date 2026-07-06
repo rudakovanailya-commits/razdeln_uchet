@@ -3360,7 +3360,7 @@
       </div>
       <div id="techOrderCardContextNote" class="mgmt-reports-period-context" style="margin-top:8px;"></div>
       <p class="hint" style="margin-top:10px;">
-        Красивый «Отчёт по заказу» с PDF находится ниже в «Красивые управленческие отчёты».
+        Карточка заказа с PDF находится ниже в блоке «Раздельный учёт по заказам».
       </p>
     </div>
 
@@ -3377,13 +3377,12 @@
 
     <div class="card mgmt-reports-card" id="mgmtReportsCard">
       <div class="mgmt-reports-head">
-        <h2>Красивые управленческие отчёты</h2>
+        <h2>Раздельный учёт по заказам</h2>
         <p class="mgmt-reports-subtitle">
-          Управленческая витрина для руководителя: KPI, рейтинги заказов и сводные таблицы.
-          Отчёт за период — по экрану; годовой — по Google Sheets / period_data. Данные не изменяют учёт.
+          Отчёты по раздельному учёту: данные за период, годовая сводка и карточка заказа. Отчёт за период строится по текущему экрану, годовые отчёты — по выбранному источнику.
         </p>
       </div>
-      <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип управленческого отчёта">
+      <div class="mgmt-reports-tabs" role="tablist" aria-label="Тип отчёта по раздельному учёту">
         <button type="button" class="mgmt-reports-tab active" data-mgmt-tab="period" role="tab" aria-selected="true" aria-controls="mgmtReportsPanelPeriod" id="mgmtReportsTabPeriod">Отчёт за период</button>
         <button type="button" class="mgmt-reports-tab" data-mgmt-tab="year" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelYear" id="mgmtReportsTabYear">Годовой отчёт</button>
         <button type="button" class="mgmt-reports-tab" data-mgmt-tab="orders" role="tab" aria-selected="false" aria-controls="mgmtReportsPanelOrders" id="mgmtReportsTabOrders">Карточка по заказу</button>
@@ -15839,6 +15838,9 @@
         : 'без изменений';
       const genDate = formatMgmtPdfDateTime(new Date(report.generatedAt || Date.now()));
       return (
+        '<h3 class="mgmt-period-report-section-title" style="margin-bottom:10px;">Раздельный учёт по заказам за период ' +
+        escapeHtmlForReport(report.period) +
+        '</h3>' +
         '<div class="mgmt-period-report-meta" id="mgmtReportsPeriodMeta">' +
         '<div><strong>Период:</strong> ' +
         escapeHtmlForReport(report.period) +
@@ -16161,7 +16163,7 @@
       }));
 
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Отчёт за период');
+      XLSX.utils.book_append_sheet(wb, ws, 'Раздельный учёт по заказам');
       XLSX.writeFile(wb, 'otchet_period_' + report.period + '.xlsx', { cellStyles: true });
     }
     window.exportMgmtPeriodReportToExcel = exportMgmtPeriodReportToExcel;
@@ -16206,7 +16208,7 @@
       doc.setFont('DejaVuSans', 'normal');
       doc.setFontSize(18);
       doc.setTextColor(15, 118, 110);
-      doc.text('Управленческий отчёт за период ' + report.period, layout.marginLeft, y);
+      doc.text('Раздельный учёт по заказам за период ' + report.period, layout.marginLeft, y);
       y += 8;
 
       doc.setFontSize(10);
@@ -16998,7 +17000,7 @@
       doc.setFont('DejaVuSans', 'normal');
       doc.setFontSize(20);
       doc.setTextColor(15, 118, 110);
-      doc.text('Управленческий отчёт по заказу', layout.marginLeft, y);
+      doc.text('Раздельный учёт по заказам', layout.marginLeft, y);
       y += 9;
 
       doc.setFontSize(11);

@@ -9,6 +9,8 @@
  * doGet:
  *   ?action=getRows
  *   ?action=getPeriodData&period=YYYY-MM
+ *   ?action=getPeriodDataList
+ *   ?action=getActionLog&limit=100&period=YYYY-MM&user_name=...&action=...
  *   ?action=debugLastError
  *   ?action=getLog&limit=50
  *
@@ -293,6 +295,77 @@ function appendActionLogEntry(logEntry) {
   ];
   sheet.appendRow(row);
   return jsonOut({ ok: true });
+}
+
+/**
+ * Читает лист _action_log (без создания, если листа нет).
+ * Параметры: limit (по умолчанию 100), period, user_name, action.
+ * Новые записи первыми.
+ */
+function getActionLog(params) {
+  params = params || {};
+  var limit = Number(params.limit);
+  if (!isFinite(limit) || limit <= 0) limit = 100;
+  if (limit > 500) limit = 500;
+
+  var filterPeriod = String(params.period || '').trim();
+  var filterUser = String(params.user_name || '').trim().toLowerCase();
+  var filterAction = String(params.action || '').trim().toLowerCase();
+
+  var ss = getDataSpreadsheet();
+  var sheet = ss.getSheetByName(ACTION_LOG_SHEET_NAME);
+  if (!sheet) {
+    return { ok: true, logs: [] };
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return { ok: true, logs: [] };
+  }
+
+  var n = ACTION_LOG_HEADERS.length;
+  var lastCol = Math.max(sheet.getLastColumn(), n);
+  var values = sheet.getRange(2, 1, lastRow, Math.min(lastCol, n)).getValues();
+  var logs = [];
+
+  function cellStr(v) {
+    if (v == null || v === '') return '';
+    if (Object.prototype.toString.call(v) === '[object Date]') {
+      try {
+        return v.toISOString();
+      } catch (dateErr) {
+        return String(v);
+      }
+    }
+    return String(v);
+  }
+
+  for (var i = values.length - 1; i >= 0; i--) {
+    var row = values[i];
+    var entry = {
+      timestamp: cellStr(row[0]),
+      period: cellStr(row[1]),
+      action: cellStr(row[2]),
+      status: cellStr(row[3]),
+      user_name: cellStr(row[4]),
+      device_id: cellStr(row[5]),
+      source: cellStr(row[6]),
+      details: cellStr(row[7]),
+      rows_count: cellStr(row[8]),
+      browser: cellStr(row[9]),
+      timezone: cellStr(row[10]),
+      app_version: cellStr(row[11])
+    };
+
+    if (filterPeriod && entry.period !== filterPeriod) continue;
+    if (filterUser && String(entry.user_name).toLowerCase() !== filterUser) continue;
+    if (filterAction && String(entry.action).toLowerCase() !== filterAction) continue;
+
+    logs.push(entry);
+    if (logs.length >= limit) break;
+  }
+
+  return { ok: true, logs: logs };
 }
 
 /** Извлекает json и метаданные из periodData (полный объект v2 или legacy-обёртка). */
@@ -724,11 +797,34 @@ function doGet(e) {
     }
   }
 
+  if (action === 'getActionLog') {
+    try {
+      return jsonOut(
+        getActionLog({
+          limit: e.parameter.limit,
+          period: e.parameter.period,
+          user_name: e.parameter.user_name,
+          action: e.parameter.actionFilter || e.parameter.log_action || e.parameter.filter_action
+        })
+      );
+    } catch (err) {
+      var alMsg = String(err.message || err);
+      var alStack = String(err.stack || '');
+      Logger.log(alStack || alMsg);
+      writeDebugLog('doGet getActionLog failed', {
+        action: 'doGet',
+        error: alMsg,
+        stack: alStack
+      });
+      return jsonOut({ ok: false, error: alMsg, stack: alStack, logs: [] });
+    }
+  }
+
   if (action !== 'getRows') {
     return jsonOut({
       ok: true,
       hint:
-        'Supported actions: getRows, getPeriodData, getPeriodDataList, debugLastError, getLog'
+        'Supported actions: getRows, getPeriodData, getPeriodDataList, getActionLog, debugLastError, getLog'
     });
   }
 

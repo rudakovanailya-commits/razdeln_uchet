@@ -2859,25 +2859,89 @@
     <div class="card" id="actionLogCard">
       <h2>Журнал действий</h2>
       <div id="actionLogUserPanel" style="margin-bottom: 10px;"></div>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
-        <button id="toggleActionLogBtn" type="button" class="secondary">Показать журнал</button>
-        <button id="clearActionLogBtn" type="button" class="secondary">Очистить локальный журнал</button>
+
+      <div class="action-log-section" style="margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+        <h3 style="margin: 0 0 6px; font-size: 15px; color: #14532d;">Локальный журнал</h3>
+        <p class="hint" style="margin: 0 0 8px;">Хранится только в этом браузере.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+          <button id="toggleActionLogBtn" type="button" class="secondary">Показать журнал</button>
+          <button id="clearActionLogBtn" type="button" class="secondary">Очистить локальный журнал</button>
+        </div>
+        <div id="actionLogListPanel" hidden style="max-height: 280px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+          <table id="actionLogTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+              <tr style="background: #f8fafc; text-align: left;">
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Время</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Период</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Действие</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Статус</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Пользователь</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Устройство</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Детали</th>
+              </tr>
+            </thead>
+            <tbody id="actionLogTableBody"></tbody>
+          </table>
+        </div>
       </div>
-      <div id="actionLogListPanel" hidden style="max-height: 280px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
-        <table id="actionLogTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
-          <thead>
-            <tr style="background: #f8fafc; text-align: left;">
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Время</th>
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Период</th>
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Действие</th>
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Статус</th>
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Пользователь</th>
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Устройство</th>
-              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Детали</th>
-            </tr>
-          </thead>
-          <tbody id="actionLogTableBody"></tbody>
-        </table>
+
+      <div class="action-log-section" id="cloudActionLogSection">
+        <h3 style="margin: 0 0 6px; font-size: 15px; color: #14532d;">Облачный журнал действий</h3>
+        <p class="hint" style="margin: 0 0 8px;">
+          Общий журнал действий из Google Sheets. Показывает действия пользователей, которые были отправлены в облако.
+        </p>
+        <div class="cloud-action-log-filters" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px;">
+          <div class="field" style="margin: 0; min-width: 110px;">
+            <label for="cloudActionLogPeriod">Период</label>
+            <input id="cloudActionLogPeriod" type="text" placeholder="YYYY-MM" autocomplete="off" style="width: 110px;">
+          </div>
+          <div class="field" style="margin: 0; min-width: 140px;">
+            <label for="cloudActionLogUser">Пользователь</label>
+            <input id="cloudActionLogUser" type="text" placeholder="Имя" autocomplete="off" style="width: 140px;">
+          </div>
+          <div class="field" style="margin: 0; min-width: 140px;">
+            <label for="cloudActionLogAction">Действие</label>
+            <input id="cloudActionLogAction" type="text" placeholder="save_google…" list="cloudActionLogActionList" autocomplete="off" style="width: 150px;">
+            <datalist id="cloudActionLogActionList">
+              <option value="load_google"></option>
+              <option value="save_google"></option>
+              <option value="compare_local_google"></option>
+              <option value="delete_cloud"></option>
+              <option value="google_error"></option>
+            </datalist>
+          </div>
+          <div class="field" style="margin: 0; min-width: 90px;">
+            <label for="cloudActionLogLimit">Лимит</label>
+            <select id="cloudActionLogLimit" style="width: 90px;">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="200">200</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+          <button id="loadCloudActionLogBtn" type="button">Загрузить облачный журнал</button>
+          <button id="refreshCloudActionLogBtn" type="button" class="secondary" hidden>Обновить</button>
+          <button id="hideCloudActionLogBtn" type="button" class="secondary" hidden>Скрыть облачный журнал</button>
+        </div>
+        <p class="hint" id="cloudActionLogStatus" style="min-height: 1.2em; margin: 0 0 8px;"></p>
+        <div id="cloudActionLogPanel" hidden style="max-height: 360px; overflow: auto; border: 1px solid #d1e7df; border-radius: 6px; background: #f8fdfb;">
+          <table id="cloudActionLogTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+              <tr style="background: #e8f5ef; text-align: left;">
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Время</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Период</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Действие</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Статус</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Пользователь</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Устройство</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df;">Источник</th>
+                <th style="padding: 6px 8px; border-bottom: 1px solid #d1e7df; min-width: 160px;">Детали</th>
+              </tr>
+            </thead>
+            <tbody id="cloudActionLogTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -7277,6 +7341,184 @@
           if (!ok) return;
           clearLocalActionLog();
         });
+      }
+
+      setupCloudActionLogUi();
+    }
+
+    let lastCloudActionLogEntries = [];
+
+    function setCloudActionLogStatus(message, type) {
+      const el = document.getElementById('cloudActionLogStatus');
+      if (!el) return;
+      el.textContent = message || '';
+      if (type === 'error') el.style.color = '#b91c1c';
+      else if (type === 'success') el.style.color = '#15803d';
+      else if (type === 'loading') el.style.color = '#0f766e';
+      else el.style.color = '#64748b';
+    }
+
+    function getCloudActionLogFilterParams() {
+      const periodEl = document.getElementById('cloudActionLogPeriod');
+      const userEl = document.getElementById('cloudActionLogUser');
+      const actionEl = document.getElementById('cloudActionLogAction');
+      const limitEl = document.getElementById('cloudActionLogLimit');
+      const params = {};
+      const period = periodEl ? String(periodEl.value || '').trim() : '';
+      const user = userEl ? String(userEl.value || '').trim() : '';
+      const actionFilter = actionEl ? String(actionEl.value || '').trim() : '';
+      const limit = limitEl ? String(limitEl.value || '100').trim() : '100';
+      if (period) params.period = period;
+      if (user) params.user_name = user;
+      if (actionFilter) params.filter_action = actionFilter;
+      params.limit = limit || '100';
+      return params;
+    }
+
+    function renderCloudActionLogTable(entries) {
+      const body = document.getElementById('cloudActionLogTableBody');
+      if (!body) return;
+      const list = Array.isArray(entries) ? entries : [];
+      if (!list.length) {
+        body.innerHTML =
+          '<tr><td colspan="8" style="padding:10px; color:#64748b;">В облачном журнале пока нет записей.</td></tr>';
+        return;
+      }
+      body.innerHTML = list
+        .map(entry => {
+          const details = String(entry.details || '—');
+          return (
+            '<tr>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef; white-space:nowrap;">' +
+            escapeHtmlForReport(formatActionLogTimestamp(entry.timestamp)) +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
+            escapeHtmlForReport(entry.period || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
+            escapeHtmlForReport(entry.action || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
+            escapeHtmlForReport(entry.status || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
+            escapeHtmlForReport(entry.user_name || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef; word-break:break-all;">' +
+            escapeHtmlForReport(entry.device_id || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
+            escapeHtmlForReport(entry.source || '—') +
+            '</td>' +
+            '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef; max-width:280px; white-space:normal; word-break:break-word;" title="' +
+            escapeHtmlForReport(details) +
+            '">' +
+            escapeHtmlForReport(details) +
+            '</td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+    }
+
+    function updateCloudActionLogButtonsUi(visible) {
+      const refreshBtn = document.getElementById('refreshCloudActionLogBtn');
+      const hideBtn = document.getElementById('hideCloudActionLogBtn');
+      if (refreshBtn) refreshBtn.hidden = !visible;
+      if (hideBtn) hideBtn.hidden = !visible;
+    }
+
+    function hideCloudActionLogPanel() {
+      const panel = document.getElementById('cloudActionLogPanel');
+      if (panel) panel.hidden = true;
+      updateCloudActionLogButtonsUi(false);
+      setCloudActionLogStatus('');
+    }
+
+    async function loadCloudActionLog() {
+      const panel = document.getElementById('cloudActionLogPanel');
+      const loadBtn = document.getElementById('loadCloudActionLogBtn');
+      const refreshBtn = document.getElementById('refreshCloudActionLogBtn');
+      setCloudActionLogStatus('Загружаем облачный журнал действий...', 'loading');
+      showAppStatus('Загружаем облачный журнал действий...', 'loading');
+      if (loadBtn) loadBtn.disabled = true;
+      if (refreshBtn) refreshBtn.disabled = true;
+
+      try {
+        const params = getCloudActionLogFilterParams();
+        const url = getCloudApiUrl('getActionLog', params);
+        console.log('[cloud action log] GET', url);
+        const res = await fetch(url, { method: 'GET' });
+        const text = await res.text();
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error('Ответ getActionLog не JSON (HTTP ' + res.status + ')');
+        }
+        if (!res.ok || !result || result.ok !== true) {
+          throw new Error(
+            (result && result.error) || 'HTTP ' + res.status + ': не удалось загрузить журнал'
+          );
+        }
+        lastCloudActionLogEntries = Array.isArray(result.logs) ? result.logs : [];
+        renderCloudActionLogTable(lastCloudActionLogEntries);
+        if (panel) panel.hidden = false;
+        updateCloudActionLogButtonsUi(true);
+        const count = lastCloudActionLogEntries.length;
+        const statusText = count
+          ? 'Загружено записей: ' + count
+          : 'В облачном журнале пока нет записей.';
+        setCloudActionLogStatus(statusText, count ? 'success' : '');
+        showAppStatus(
+          count ? 'Облачный журнал загружен (' + count + ')' : 'Облачный журнал пуст',
+          count ? 'success' : 'warning',
+          { autoHideMs: 4000 }
+        );
+        return lastCloudActionLogEntries;
+      } catch (err) {
+        console.error('[cloud action log]', err);
+        setCloudActionLogStatus('Не удалось загрузить облачный журнал.', 'error');
+        showAppStatus('Не удалось загрузить облачный журнал', 'error');
+        if (panel) {
+          panel.hidden = false;
+          renderCloudActionLogTable([]);
+          const body = document.getElementById('cloudActionLogTableBody');
+          if (body) {
+            body.innerHTML =
+              '<tr><td colspan="8" style="padding:10px; color:#b91c1c;">Не удалось загрузить облачный журнал.</td></tr>';
+          }
+          updateCloudActionLogButtonsUi(true);
+        }
+        return null;
+      } finally {
+        if (loadBtn) loadBtn.disabled = false;
+        if (refreshBtn) refreshBtn.disabled = false;
+      }
+    }
+
+    function setupCloudActionLogUi() {
+      const loadBtn = document.getElementById('loadCloudActionLogBtn');
+      if (loadBtn && !loadBtn.dataset.bound) {
+        loadBtn.dataset.bound = '1';
+        loadBtn.addEventListener('click', () => loadCloudActionLog());
+      }
+      const refreshBtn = document.getElementById('refreshCloudActionLogBtn');
+      if (refreshBtn && !refreshBtn.dataset.bound) {
+        refreshBtn.dataset.bound = '1';
+        refreshBtn.addEventListener('click', () => loadCloudActionLog());
+      }
+      const hideBtn = document.getElementById('hideCloudActionLogBtn');
+      if (hideBtn && !hideBtn.dataset.bound) {
+        hideBtn.dataset.bound = '1';
+        hideBtn.addEventListener('click', () => hideCloudActionLogPanel());
+      }
+      const periodEl = document.getElementById('cloudActionLogPeriod');
+      if (periodEl && !periodEl.value) {
+        const current = normalizePeriodStr(getCurrentPeriod());
+        if (current && /^\d{4}-\d{2}$/.test(current)) {
+          periodEl.placeholder = current;
+        }
       }
     }
 

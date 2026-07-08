@@ -5388,6 +5388,7 @@
       setOrdersTab(table.getAttribute('data-active-tab') || 'expenses');
     }
 
+    if (ordersBody) {
     ordersBody.addEventListener('input', (e) => {
       const t = e.target;
       if (t.matches && t.matches('input.order-name')) {
@@ -5473,6 +5474,10 @@
       calculateAll();
       autoSave();
     });
+
+    } else {
+      console.warn('[init] ordersBody not found — обработчики таблицы заказов не подключены');
+    }
 
     setupChangedOrdersTracking();
 
@@ -5576,6 +5581,7 @@
       });
     }
 
+    if (topGridEl) {
     topGridEl.addEventListener('input', (e) => {
       const t = e.target;
       if (t.matches && t.matches('input.global-num')) {
@@ -5615,6 +5621,10 @@
       calculateAll();
       autoSave();
     });
+
+    } else {
+      console.warn('[init] top-grid not found — обработчики общих сумм не подключены');
+    }
 
     function createRow(data = {}) {
       const tr = document.createElement('tr');
@@ -5710,9 +5720,45 @@
         setupOrdersTableScrollSync();
       });
 
+      if (!ordersBody) {
+        console.warn('[add row] ordersBody not found');
+        return null;
+      }
       ordersBody.appendChild(tr);
       setupOrdersTableScrollSync();
       return tr;
+    }
+
+    function setupAddRowButtonUi() {
+      const btn = document.getElementById('addRowBtn');
+      if (!btn) {
+        console.warn('[add row] addRowBtn not found');
+        return;
+      }
+      if (btn.dataset.addRowBound === '1') return;
+      btn.dataset.addRowBound = '1';
+      console.log('[add row] button ready');
+      btn.addEventListener('click', () => {
+        console.log('[add row] clicked');
+        if (isPeriodFinal()) return;
+        if (!ordersBody) {
+          console.warn('[add row] ordersBody not found');
+          return;
+        }
+        createRow();
+        calculateAll();
+        setUiPeriodDirty(true);
+        updateStickyPeriodContext();
+        autoSave();
+        populateOrderSelect();
+        populateAccountingOrderCardSelect();
+        const groupingPanel = document.getElementById('ordersGroupingPanel');
+        if (groupingPanel && !groupingPanel.hidden) renderGroupingPanel();
+        console.log(
+          '[add row] row added, rows count:',
+          document.querySelectorAll('#ordersBody tr').length
+        );
+      });
     }
 
     function is1cCsvHeaderRow(parts) {
@@ -21139,20 +21185,21 @@
     // СОБЫТИЯ
     // =====================
 
-    addRowBtn.addEventListener('click', () => {
-      if (isPeriodFinal()) return;
-      createRow();
-      calculateAll();
-      autoSave();
-      populateOrderSelect();
-      const groupingPanel = document.getElementById('ordersGroupingPanel');
-      if (groupingPanel && !groupingPanel.hidden) renderGroupingPanel();
-    });
+    setupAddRowButtonUi();
 
-    document.getElementById('checkDataBtn').addEventListener('click', () => checkData());
+    const checkDataBtn = document.getElementById('checkDataBtn');
+    if (checkDataBtn) {
+      checkDataBtn.addEventListener('click', () => checkData());
+    } else {
+      console.warn('[init] checkDataBtn not found');
+    }
 
-    document.getElementById('orderReportBtn')
-      .addEventListener('click', buildOrderReport);
+    const orderReportBtn = document.getElementById('orderReportBtn');
+    if (orderReportBtn) {
+      orderReportBtn.addEventListener('click', buildOrderReport);
+    } else {
+      console.warn('[init] orderReportBtn not found');
+    }
 
     const exportOrderCardBtn = document.getElementById('exportOrderCardBtn');
     if (exportOrderCardBtn) {
@@ -22477,6 +22524,7 @@
     updateQuickSaveUi();
     updateWipChainUiStatus();
     setupCloudLoadUi();
+    setupAddRowButtonUi();
     refreshAppPeriodDependentUi();
     console.log(
       '[v2 cloud load] handlers ready, loadPeriodFromCloudV2=',

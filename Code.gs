@@ -155,12 +155,101 @@ function ensurePeriodDataHeaders(sheet) {
   if (needsHeader) {
     sheet.getRange(1, 1, 1, n).setValues([PERIOD_DATA_HEADERS]);
   }
+  ensurePeriodColumnPlainText(sheet, 1);
+}
+
+/**
+ * period всегда текст YYYY-MM (не дата Sheets).
+ * Date/ISO → через Session.getScriptTimeZone(), чтобы не сдвигать месяц.
+ */
+function normalizePeriodText(value) {
+  if (value == null || value === '') return '';
+
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    try {
+      return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  var s = String(value)
+    .replace(/\u00a0/g, ' ')
+    .replace(/^\uFEFF/, '')
+    .trim();
+  if (!s) return '';
+  if (s.charAt(0) === "'") s = s.substring(1).trim();
+  if (!s) return '';
+
+  // Уже чистый период
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+
+  // ISO / datetime от Sheets (напр. 2025-11-30T21:00:00.000Z = 01.12.2025 локально)
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) || /Z$/i.test(s) || /\+\d{2}:?\d{2}$/.test(s)) {
+    var dIso = new Date(s);
+    if (!isNaN(dIso.getTime())) {
+      try {
+        return Utilities.formatDate(dIso, Session.getScriptTimeZone(), 'yyyy-MM');
+      } catch (e2) {
+        /* fall through */
+      }
+    }
+  }
+
+  // YYYY-MM-DD без времени — берём год-месяц как в дате таблицы
+  var ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return ymd[1] + '-' + ymd[2];
+
+  // YYYY-MM... prefix (не datetime)
+  var ym = s.match(/^(\d{4})-(\d{2})(?!\d)/);
+  if (ym) return ym[1] + '-' + ym[2];
+
+  // DD.MM.YYYY или DD/MM/YYYY
+  var dmy = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+  if (dmy) {
+    return dmy[3] + '-' + ('0' + dmy[2]).slice(-2);
+  }
+
+  // MM.YYYY
+  var my = s.match(/^(\d{1,2})[./](\d{4})$/);
+  if (my) {
+    return my[2] + '-' + ('0' + my[1]).slice(-2);
+  }
+
+  return '';
+}
+
+/** Алиас: все вызовы нормализации периода идут через normalizePeriodText. */
+function normalizePeriodCell(p) {
+  return normalizePeriodText(p);
+}
+
+function normalizeLogPeriod(value) {
+  return normalizePeriodText(value);
 }
 
 function normalizePeriodDataKey(periodParam) {
-  var p = String(periodParam || '').trim();
+  var p = normalizePeriodText(periodParam);
   if (!/^\d{4}-\d{2}$/.test(p)) return '';
   return p;
+}
+
+/** Колонка period — plain text (@), чтобы Sheets не превращал 2025-12 в дату. */
+function ensurePeriodColumnPlainText(sheet, columnIndex) {
+  if (!sheet || !columnIndex || columnIndex < 1) return;
+  try {
+    sheet.getRange(1, columnIndex, sheet.getMaxRows(), 1).setNumberFormat('@');
+  } catch (e) {
+    try {
+      sheet.getRange(1, columnIndex, Math.max(sheet.getLastRow(), 1), 1).setNumberFormat('@');
+    } catch (e2) {
+      /* ignore */
+    }
+  }
+}
+
+function periodTextForSheetWrite(value) {
+  return normalizePeriodText(value);
 }
 
 /** Возвращает объект строки period_data или null, если период не найден. */
@@ -178,7 +267,7 @@ function getPeriodDataRow(periodParam) {
   var latestAt = '';
 
   for (var r = 0; r < values.length; r++) {
-    var rowPeriod = String(values[r][0] || '').trim();
+    var rowPeriod = normalizePeriodText(values[r][0]);
     if (rowPeriod !== period) continue;
     var json = values[r][1] != null ? String(values[r][1]) : '';
     if (!json) continue;
@@ -213,7 +302,7 @@ function getPeriodDataList() {
   var byPeriod = {};
 
   for (var r = 0; r < values.length; r++) {
-    var rowPeriod = normalizePeriodCell(values[r][0]);
+    var rowPeriod = normalizePeriodText(values[r][0]);
     if (!/^\d{4}-\d{2}$/.test(rowPeriod)) continue;
     var json = values[r][1] != null ? String(values[r][1]) : '';
     if (!json) continue;
@@ -274,14 +363,17 @@ function ensureActionLogHeaders(sheet) {
   if (needsHeader) {
     sheet.getRange(1, 1, 1, n).setValues([ACTION_LOG_HEADERS]);
   }
+  // period — колонка B (индекс 2)
+  ensurePeriodColumnPlainText(sheet, 2);
 }
 
 function appendActionLogEntry(logEntry) {
   var e = logEntry || {};
   var sheet = getActionLogSheet();
+  var periodText = periodTextForSheetWrite(e.period);
   var row = [
     e.timestamp != null ? String(e.timestamp) : new Date().toISOString(),
-    e.period != null ? String(e.period) : '',
+    periodText,
     e.action != null ? String(e.action) : '',
     e.status != null ? String(e.status) : '',
     e.user_name != null ? String(e.user_name) : '',
@@ -293,70 +385,13 @@ function appendActionLogEntry(logEntry) {
     e.timezone != null ? String(e.timezone) : '',
     e.app_version != null ? String(e.app_version) : ''
   ];
+  ensurePeriodColumnPlainText(sheet, 2);
   sheet.appendRow(row);
+  var last = sheet.getLastRow();
+  if (last >= 1) {
+    sheet.getRange(last, 2).setNumberFormat('@').setValue(periodText);
+  }
   return jsonOut({ ok: true });
-}
-
-/**
- * Нормализует период из журнала (_action_log): YYYY-MM.
- * Sheets часто хранит/читает period как Date → ISO; превращаем в YYYY-MM.
- */
-function normalizeLogPeriod(value) {
-  if (value == null || value === '') return '';
-
-  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
-    try {
-      return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM');
-    } catch (e) {
-      return '';
-    }
-  }
-
-  var s = String(value)
-    .replace(/\u00a0/g, ' ')
-    .trim();
-  if (!s) return '';
-
-  // YYYY-MM или YYYY-MM-... / ISO
-  var ym = s.match(/^(\d{4})-(\d{2})/);
-  if (ym) return ym[1] + '-' + ym[2];
-
-  // DD.MM.YYYY или DD/MM/YYYY
-  var dmy = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
-  if (dmy) {
-    var mm = ('0' + dmy[2]).slice(-2);
-    return dmy[3] + '-' + mm;
-  }
-
-  // MM.YYYY
-  var my = s.match(/^(\d{1,2})[./](\d{4})$/);
-  if (my) {
-    return my[2] + '-' + ('0' + my[1]).slice(-2);
-  }
-
-  return normalizePeriodCell(value);
-}
-
-function actionLogCellToString(v) {
-  if (v == null || v === '') return '';
-  if (Object.prototype.toString.call(v) === '[object Date]') {
-    try {
-      return v.toISOString();
-    } catch (dateErr) {
-      return String(v);
-    }
-  }
-  return String(v);
-}
-
-function isEmptyActionLogEntry(entry) {
-  if (!entry) return true;
-  var keys = ['timestamp', 'period', 'action', 'status', 'user_name', 'details'];
-  for (var i = 0; i < keys.length; i++) {
-    var v = String(entry[keys[i]] == null ? '' : entry[keys[i]]).trim();
-    if (v && v !== '—' && v !== '-') return false;
-  }
-  return true;
 }
 
 /**
@@ -370,7 +405,7 @@ function getActionLog(params) {
   if (!isFinite(limit) || limit <= 0) limit = 100;
   if (limit > 500) limit = 500;
 
-  var filterPeriod = normalizeLogPeriod(params.period);
+  var filterPeriod = normalizePeriodText(params.period);
   var filterUser = String(params.user_name || '').trim().toLowerCase();
   var filterAction = String(params.action || '').trim().toLowerCase();
 
@@ -390,11 +425,33 @@ function getActionLog(params) {
   var values = sheet.getRange(2, 1, lastRow, Math.min(lastCol, n)).getValues();
   var logs = [];
 
+  function actionLogCellToString(v) {
+    if (v == null || v === '') return '';
+    if (Object.prototype.toString.call(v) === '[object Date]') {
+      try {
+        return v.toISOString();
+      } catch (dateErr) {
+        return String(v);
+      }
+    }
+    return String(v);
+  }
+
+  function isEmptyActionLogEntry(entry) {
+    if (!entry) return true;
+    var keys = ['timestamp', 'period', 'action', 'status', 'user_name', 'details'];
+    for (var i = 0; i < keys.length; i++) {
+      var v = String(entry[keys[i]] == null ? '' : entry[keys[i]]).trim();
+      if (v && v !== '—' && v !== '-') return false;
+    }
+    return true;
+  }
+
   for (var i = values.length - 1; i >= 0; i--) {
     var row = values[i];
     var entry = {
       timestamp: actionLogCellToString(row[0]),
-      period: normalizeLogPeriod(row[1]),
+      period: normalizePeriodText(row[1]),
       action: actionLogCellToString(row[2]),
       status: actionLogCellToString(row[3]),
       user_name: actionLogCellToString(row[4]),
@@ -505,20 +562,26 @@ function upsertPeriodData(periodParam, jsonStr, updatedBy, formatVersion) {
   if (lastRow >= 2) {
     var periodCol = sheet.getRange(2, 1, lastRow, 1).getValues();
     for (var r = 0; r < periodCol.length; r++) {
-      if (String(periodCol[r][0] || '').trim() === period) {
+      if (normalizePeriodText(periodCol[r][0]) === period) {
         targetRow = r + 2;
         break;
       }
     }
   }
 
+  ensurePeriodColumnPlainText(sheet, 1);
   var rowValues = [period, json, updatedAt, by, fv];
   if (targetRow > 0) {
     sheet
       .getRange(targetRow, 1, 1, rowValues.length)
       .setValues([rowValues]);
+    sheet.getRange(targetRow, 1).setNumberFormat('@').setValue(period);
   } else {
     sheet.appendRow(rowValues);
+    var appendedRow = sheet.getLastRow();
+    if (appendedRow >= 1) {
+      sheet.getRange(appendedRow, 1).setNumberFormat('@').setValue(period);
+    }
   }
 
   writeDebugLog('savePeriodData: upserted', {
@@ -673,6 +736,7 @@ function ensureHeaders(sheet) {
   ensureSheetColumnCount(sheet, n);
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, n).setValues([SHEET_COLUMNS]);
+    ensurePeriodColumnPlainText(sheet, 1);
     return;
   }
   var first = sheet.getRange(1, 1, 1, n).getValues()[0];
@@ -689,6 +753,7 @@ function ensureHeaders(sheet) {
     sheet.insertRowBefore(1);
     sheet.getRange(1, 1, 1, n).setValues([SHEET_COLUMNS]);
   }
+  ensurePeriodColumnPlainText(sheet, 1);
 }
 
 function headerIndex(sheet) {
@@ -709,21 +774,10 @@ function rowToObject(values, idx) {
   for (var k = 0; k < SHEET_COLUMNS.length; k++) {
     var name = SHEET_COLUMNS[k];
     var col = idx[name];
-    o[name] = col === undefined ? '' : values[col];
+    var raw = col === undefined ? '' : values[col];
+    o[name] = name === 'period' ? normalizePeriodText(raw) : raw;
   }
   return o;
-}
-
-function normalizePeriodCell(p) {
-  if (Object.prototype.toString.call(p) === '[object Date]' && !isNaN(p.getTime())) {
-    return Utilities.formatDate(p, Session.getScriptTimeZone(), 'yyyy-MM');
-  }
-  var s = String(p == null ? '' : p)
-    .replace(/\u00a0/g, ' ')
-    .trim();
-  var m = s.match(/^(\d{4})-(\d{2})/);
-  if (m) return m[1] + '-' + m[2];
-  return s;
 }
 
 function periodHasFinalStatusInSheet(data, idx, pCol, sCol, period) {
@@ -909,7 +963,9 @@ function sheetRowArrayFromPayload(row) {
   var arr = [];
   for (var k = 0; k < SHEET_COLUMNS.length; k++) {
     var name = SHEET_COLUMNS[k];
-    arr.push(row[name] != null && row[name] !== '' ? row[name] : '');
+    var v = row[name] != null && row[name] !== '' ? row[name] : '';
+    if (name === 'period') v = periodTextForSheetWrite(v);
+    arr.push(v);
   }
   return arr;
 }
@@ -935,7 +991,11 @@ function buildValuesMatrixFromValidRows(validRows) {
     for (var c = 0; c < n; c++) {
       var colName = SHEET_COLUMNS[c];
       var v = row[colName];
-      line.push(v != null && v !== '' ? v : '');
+      if (colName === 'period') {
+        line.push(periodTextForSheetWrite(v));
+      } else {
+        line.push(v != null && v !== '' ? v : '');
+      }
     }
     if (line.length !== n) {
       throw new Error('values row width ' + line.length + ' !== ' + n);
@@ -1130,7 +1190,9 @@ function replacePeriodRows(sheet, periodParam, rows) {
 
     try {
       startRow = sheet.getLastRow() + 1;
+      ensurePeriodColumnPlainText(sheet, 1);
       sheet.getRange(startRow, 1, valuesRows, n).setValues(values);
+      sheet.getRange(startRow, 1, valuesRows, 1).setNumberFormat('@');
       inserted = valuesRows;
     } catch (insertErr) {
       var insertMsg = String(insertErr.message || insertErr);
@@ -1240,6 +1302,7 @@ function replacePeriodRows(sheet, periodParam, rows) {
 
 function upsertRows(sheet, rows) {
   ensureHeaders(sheet);
+  ensurePeriodColumnPlainText(sheet, 1);
   var data = sheet.getDataRange().getValues();
   var idx = headerIndex(sheet);
   var pCol = idx['period'];
@@ -1251,13 +1314,14 @@ function upsertRows(sheet, rows) {
   var updated = 0;
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i] || {};
-    var period = normalizePeriodCell(row.period);
+    var period = normalizePeriodText(row.period);
     var order = String(row.order == null ? '' : row.order).trim();
     if (!order) continue;
+    row.period = period;
     var rowArr = sheetRowArrayFromPayload(row);
     var found = -1;
     for (var r = 1; r < data.length; r++) {
-      var pv = normalizePeriodCell(data[r][pCol]);
+      var pv = normalizePeriodText(data[r][pCol]);
       var ov = String(data[r][oCol] == null ? '' : data[r][oCol]).trim();
       if (pv === period && ov === order) {
         found = r + 1;
@@ -1266,12 +1330,17 @@ function upsertRows(sheet, rows) {
     }
     if (found > 0) {
       sheet.getRange(found, 1, found, n).setValues([rowArr]);
+      sheet.getRange(found, 1).setNumberFormat('@').setValue(period);
       for (var c = 0; c < n; c++) {
         data[found - 1][c] = rowArr[c];
       }
       updated++;
     } else {
       sheet.appendRow(rowArr);
+      var appended = sheet.getLastRow();
+      if (appended >= 1) {
+        sheet.getRange(appended, 1).setNumberFormat('@').setValue(period);
+      }
       var newRow = [];
       for (var z = 0; z < n; z++) newRow.push(rowArr[z]);
       data.push(newRow);

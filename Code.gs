@@ -298,6 +298,68 @@ function appendActionLogEntry(logEntry) {
 }
 
 /**
+ * Нормализует период из журнала (_action_log): YYYY-MM.
+ * Sheets часто хранит/читает period как Date → ISO; превращаем в YYYY-MM.
+ */
+function normalizeLogPeriod(value) {
+  if (value == null || value === '') return '';
+
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    try {
+      return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  var s = String(value)
+    .replace(/\u00a0/g, ' ')
+    .trim();
+  if (!s) return '';
+
+  // YYYY-MM или YYYY-MM-... / ISO
+  var ym = s.match(/^(\d{4})-(\d{2})/);
+  if (ym) return ym[1] + '-' + ym[2];
+
+  // DD.MM.YYYY или DD/MM/YYYY
+  var dmy = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+  if (dmy) {
+    var mm = ('0' + dmy[2]).slice(-2);
+    return dmy[3] + '-' + mm;
+  }
+
+  // MM.YYYY
+  var my = s.match(/^(\d{1,2})[./](\d{4})$/);
+  if (my) {
+    return my[2] + '-' + ('0' + my[1]).slice(-2);
+  }
+
+  return normalizePeriodCell(value);
+}
+
+function actionLogCellToString(v) {
+  if (v == null || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    try {
+      return v.toISOString();
+    } catch (dateErr) {
+      return String(v);
+    }
+  }
+  return String(v);
+}
+
+function isEmptyActionLogEntry(entry) {
+  if (!entry) return true;
+  var keys = ['timestamp', 'period', 'action', 'status', 'user_name', 'details'];
+  for (var i = 0; i < keys.length; i++) {
+    var v = String(entry[keys[i]] == null ? '' : entry[keys[i]]).trim();
+    if (v && v !== '—' && v !== '-') return false;
+  }
+  return true;
+}
+
+/**
  * Читает лист _action_log (без создания, если листа нет).
  * Параметры: limit (по умолчанию 100), period, user_name, action.
  * Новые записи первыми.
@@ -308,7 +370,7 @@ function getActionLog(params) {
   if (!isFinite(limit) || limit <= 0) limit = 100;
   if (limit > 500) limit = 500;
 
-  var filterPeriod = String(params.period || '').trim();
+  var filterPeriod = normalizeLogPeriod(params.period);
   var filterUser = String(params.user_name || '').trim().toLowerCase();
   var filterAction = String(params.action || '').trim().toLowerCase();
 
@@ -328,35 +390,24 @@ function getActionLog(params) {
   var values = sheet.getRange(2, 1, lastRow, Math.min(lastCol, n)).getValues();
   var logs = [];
 
-  function cellStr(v) {
-    if (v == null || v === '') return '';
-    if (Object.prototype.toString.call(v) === '[object Date]') {
-      try {
-        return v.toISOString();
-      } catch (dateErr) {
-        return String(v);
-      }
-    }
-    return String(v);
-  }
-
   for (var i = values.length - 1; i >= 0; i--) {
     var row = values[i];
     var entry = {
-      timestamp: cellStr(row[0]),
-      period: cellStr(row[1]),
-      action: cellStr(row[2]),
-      status: cellStr(row[3]),
-      user_name: cellStr(row[4]),
-      device_id: cellStr(row[5]),
-      source: cellStr(row[6]),
-      details: cellStr(row[7]),
-      rows_count: cellStr(row[8]),
-      browser: cellStr(row[9]),
-      timezone: cellStr(row[10]),
-      app_version: cellStr(row[11])
+      timestamp: actionLogCellToString(row[0]),
+      period: normalizeLogPeriod(row[1]),
+      action: actionLogCellToString(row[2]),
+      status: actionLogCellToString(row[3]),
+      user_name: actionLogCellToString(row[4]),
+      device_id: actionLogCellToString(row[5]),
+      source: actionLogCellToString(row[6]),
+      details: actionLogCellToString(row[7]),
+      rows_count: actionLogCellToString(row[8]),
+      browser: actionLogCellToString(row[9]),
+      timezone: actionLogCellToString(row[10]),
+      app_version: actionLogCellToString(row[11])
     };
 
+    if (isEmptyActionLogEntry(entry)) continue;
     if (filterPeriod && entry.period !== filterPeriod) continue;
     if (filterUser && String(entry.user_name).toLowerCase() !== filterUser) continue;
     if (filterAction && String(entry.action).toLowerCase() !== filterAction) continue;

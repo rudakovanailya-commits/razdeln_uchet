@@ -7375,10 +7375,35 @@
       return params;
     }
 
+    function normalizeLogPeriodForDisplay(value) {
+      if (value == null || value === '') return '';
+      const s = normalizePeriodStr(value);
+      if (!s || s === '—' || s === '-') return '';
+      // YYYY-MM или ISO / YYYY-MM-DD — брать префикс, не Date UTC
+      const ym = s.match(/^(\d{4})-(\d{2})/);
+      if (ym) return ym[1] + '-' + ym[2];
+      const dmy = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+      if (dmy) return dmy[3] + '-' + String(dmy[2]).padStart(2, '0');
+      const my = s.match(/^(\d{1,2})[./](\d{4})$/);
+      if (my) return my[2] + '-' + String(my[1]).padStart(2, '0');
+      return s;
+    }
+
+    function isEmptyCloudActionLogEntry(entry) {
+      if (!entry) return true;
+      const keys = ['timestamp', 'period', 'action', 'status', 'user_name', 'details'];
+      return keys.every(k => {
+        const v = String(entry[k] == null ? '' : entry[k]).trim();
+        return !v || v === '—' || v === '-';
+      });
+    }
+
     function renderCloudActionLogTable(entries) {
       const body = document.getElementById('cloudActionLogTableBody');
       if (!body) return;
-      const list = Array.isArray(entries) ? entries : [];
+      const list = (Array.isArray(entries) ? entries : []).filter(
+        e => !isEmptyCloudActionLogEntry(e)
+      );
       if (!list.length) {
         body.innerHTML =
           '<tr><td colspan="8" style="padding:10px; color:#64748b;">В облачном журнале пока нет записей.</td></tr>';
@@ -7387,13 +7412,14 @@
       body.innerHTML = list
         .map(entry => {
           const details = String(entry.details || '—');
+          const periodLabel = normalizeLogPeriodForDisplay(entry.period) || '—';
           return (
             '<tr>' +
             '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef; white-space:nowrap;">' +
             escapeHtmlForReport(formatActionLogTimestamp(entry.timestamp)) +
             '</td>' +
             '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
-            escapeHtmlForReport(entry.period || '—') +
+            escapeHtmlForReport(periodLabel) +
             '</td>' +
             '<td style="padding:6px 8px; border-bottom:1px solid #e8f5ef;">' +
             escapeHtmlForReport(entry.action || '—') +
